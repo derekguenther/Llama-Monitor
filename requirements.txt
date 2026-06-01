@@ -1,0 +1,20 @@
+# Core dependencies
+requests>=2.31.0
+psutil>=5.9.0
+nvidia-ml-py>=12.535.108
+wmi>=1.5.1
+pyyaml>=6.0.1
+
+# TUI options (choose one)
+urwid>=2.1.2
+# or
+# rich>=13.0.0
+
+# Web dashboard
+flask>=3.0.0
+
+# Testing
+pytest>=7.4.0
+
+# Optional: nvml-wrapper (alternative NVML interface if needed)
+# nvml-wrapper>=1.0.0
