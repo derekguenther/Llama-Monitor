@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 
-from database import Database
+from db import Database
 
 
 class TestDatabaseInit(unittest.TestCase):

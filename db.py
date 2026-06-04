@@ -1,6 +1,7 @@
 """SQLite database initialization and management for llama-monitor."""
 
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -88,6 +89,9 @@ class Database:
         # Create per-process GPU metrics tables
         self._create_process_gpu_metrics_tables(cursor)
 
+        # Create per-process CPU metrics tables (from Public Documents schema)
+        self._create_process_cpu_metrics_tables(cursor)
+
         # Create auxiliary tables
         self._create_auxiliary_tables(cursor)
 
@@ -110,32 +114,40 @@ class Database:
             """
         )
 
-        # 1-minute compressed server metrics
+        # 1-minute compressed server metrics with bucket-based aggregation
         cursor.execute(
             """
             CREATE TABLE server_metrics_1m (
-                timestamp TEXT PRIMARY KEY,
-                prompt_tokens_total INTEGER,
-                prompt_tokens_seconds REAL,
-                tokens_predicted_total INTEGER,
-                predicted_tokens_seconds REAL,
-                requests_processing INTEGER,
-                requests_deferred INTEGER
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                prompt_tokens_total INTEGER DEFAULT 0,
+                prompt_tokens_seconds REAL DEFAULT 0,
+                tokens_predicted_total INTEGER DEFAULT 0,
+                predicted_tokens_seconds REAL DEFAULT 0,
+                requests_processing_avg REAL DEFAULT 0,
+                requests_deferred_avg REAL DEFAULT 0,
+                slots_active_avg REAL DEFAULT 0,
+                slots_processing_avg REAL DEFAULT 0
             )
             """
         )
 
-        # 1-hour compressed server metrics
+        # 1-hour compressed server metrics with bucket-based aggregation
         cursor.execute(
             """
             CREATE TABLE server_metrics_1h (
-                timestamp TEXT PRIMARY KEY,
-                prompt_tokens_total INTEGER,
-                prompt_tokens_seconds REAL,
-                tokens_predicted_total INTEGER,
-                predicted_tokens_seconds REAL,
-                requests_processing INTEGER,
-                requests_deferred INTEGER
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                prompt_tokens_total INTEGER DEFAULT 0,
+                prompt_tokens_seconds REAL DEFAULT 0,
+                tokens_predicted_total INTEGER DEFAULT 0,
+                predicted_tokens_seconds REAL DEFAULT 0,
+                requests_processing_avg REAL DEFAULT 0,
+                requests_deferred_avg REAL DEFAULT 0,
+                slots_active_avg REAL DEFAULT 0,
+                slots_processing_avg REAL DEFAULT 0
             )
             """
         )
@@ -165,40 +177,46 @@ class Database:
             """
         )
 
-        # 1-minute compressed system metrics
+        # 1-minute compressed system metrics with bucket-based aggregation
         cursor.execute(
             """
             CREATE TABLE system_metrics_1m (
-                timestamp TEXT PRIMARY KEY,
-                cpu_percent REAL,
-                cpu_temperature_c REAL,
-                cpu_power_w REAL,
-                gpu_usage REAL,
-                gpu_memory_used INTEGER,
-                gpu_temperature_c REAL,
-                gpu_fan_speed_rpm INTEGER,
-                gpu_power_w REAL,
-                memory_percent REAL,
-                system_power_w REAL
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                cpu_percent_avg REAL DEFAULT 0,
+                cpu_temperature_c_avg REAL DEFAULT 0,
+                cpu_power_w_avg REAL DEFAULT 0,
+                gpu_usage_avg INTEGER DEFAULT 0,
+                gpu_memory_used_mb_avg INTEGER DEFAULT 0,
+                gpu_temperature_c_avg INTEGER DEFAULT 0,
+                gpu_fan_speed_rpm_avg INTEGER DEFAULT 0,
+                gpu_power_w_avg REAL DEFAULT 0,
+                memory_used_mb_avg INTEGER DEFAULT 0,
+                memory_percent_avg REAL DEFAULT 0,
+                system_power_w_avg REAL DEFAULT 0
             )
             """
         )
 
-        # 1-hour compressed system metrics
+        # 1-hour compressed system metrics with bucket-based aggregation
         cursor.execute(
             """
             CREATE TABLE system_metrics_1h (
-                timestamp TEXT PRIMARY KEY,
-                cpu_percent REAL,
-                cpu_temperature_c REAL,
-                cpu_power_w REAL,
-                gpu_usage REAL,
-                gpu_memory_used INTEGER,
-                gpu_temperature_c REAL,
-                gpu_fan_speed_rpm INTEGER,
-                gpu_power_w REAL,
-                memory_percent REAL,
-                system_power_w REAL
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                cpu_percent_avg REAL DEFAULT 0,
+                cpu_temperature_c_avg REAL DEFAULT 0,
+                cpu_power_w_avg REAL DEFAULT 0,
+                gpu_usage_avg INTEGER DEFAULT 0,
+                gpu_memory_used_mb_avg INTEGER DEFAULT 0,
+                gpu_temperature_c_avg INTEGER DEFAULT 0,
+                gpu_fan_speed_rpm_avg INTEGER DEFAULT 0,
+                gpu_power_w_avg REAL DEFAULT 0,
+                memory_used_mb_avg INTEGER DEFAULT 0,
+                memory_percent_avg REAL DEFAULT 0,
+                system_power_w_avg REAL DEFAULT 0
             )
             """
         )
@@ -209,38 +227,88 @@ class Database:
         cursor.execute(
             """
             CREATE TABLE process_gpu_metrics_raw (
-                timestamp TEXT,
-                process_name TEXT,
-                pid INTEGER,
-                gpu_utilization REAL,
-                gpu_memory_mb INTEGER,
-                PRIMARY KEY (timestamp, process_name, pid)
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                process_name TEXT NOT NULL,
+                pid INTEGER NOT NULL,
+                gpu_utilization INTEGER DEFAULT 0,
+                gpu_memory_mb INTEGER DEFAULT 0
             )
             """
         )
 
-        # 1-minute compressed per-process GPU metrics
+        # 1-minute compressed per-process GPU metrics with bucket-based aggregation
         cursor.execute(
             """
             CREATE TABLE process_gpu_metrics_1m (
-                timestamp TEXT,
-                process_name TEXT,
-                avg_gpu_utilization REAL,
-                avg_gpu_memory_mb REAL,
-                PRIMARY KEY (timestamp, process_name)
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                process_name TEXT NOT NULL,
+                pid INTEGER NOT NULL,
+                gpu_utilization_avg INTEGER DEFAULT 0,
+                gpu_memory_mb_avg INTEGER DEFAULT 0
             )
             """
         )
 
-        # 1-hour compressed per-process GPU metrics
+        # 1-hour compressed per-process GPU metrics with bucket-based aggregation
         cursor.execute(
             """
             CREATE TABLE process_gpu_metrics_1h (
-                timestamp TEXT,
-                process_name TEXT,
-                avg_gpu_utilization REAL,
-                avg_gpu_memory_mb REAL,
-                PRIMARY KEY (timestamp, process_name)
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                process_name TEXT NOT NULL,
+                pid INTEGER NOT NULL,
+                gpu_utilization_avg INTEGER DEFAULT 0,
+                gpu_memory_mb_avg INTEGER DEFAULT 0
+            )
+            """
+        )
+
+    def _create_process_cpu_metrics_tables(self, cursor: sqlite3.Cursor) -> None:
+        """Create per-process CPU metrics tables (from Public Documents schema)."""
+        # Raw per-process CPU metrics
+        cursor.execute(
+            """
+            CREATE TABLE process_cpu_metrics_raw (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                process_name TEXT NOT NULL,
+                pid INTEGER NOT NULL,
+                cpu_percent REAL DEFAULT 0,
+                cpu_power_w REAL DEFAULT 0
+            )
+            """
+        )
+
+        # 1-minute compressed per-process CPU metrics
+        cursor.execute(
+            """
+            CREATE TABLE process_cpu_metrics_1m (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                process_name TEXT NOT NULL,
+                pid INTEGER NOT NULL,
+                cpu_percent_avg REAL DEFAULT 0,
+                cpu_power_w_avg REAL DEFAULT 0
+            )
+            """
+        )
+
+        # 1-hour compressed per-process CPU metrics
+        cursor.execute(
+            """
+            CREATE TABLE process_cpu_metrics_1h (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                process_name TEXT NOT NULL,
+                pid INTEGER NOT NULL,
+                cpu_percent_avg REAL DEFAULT 0,
+                cpu_power_w_avg REAL DEFAULT 0
             )
             """
         )
@@ -705,3 +773,275 @@ class Database:
             rate: Cost rate in USD per kWh
         """
         self.set_setting("cost_rate_usd_per_kwh", str(rate))
+
+    def compress_to_1m(self) -> int:
+        """Compress raw metrics to 1-minute buckets.
+
+        Compresses data from raw tables into 1-minute aggregated tables
+        using bucket_start/bucket_end for proper time-windowed aggregation.
+
+        Returns:
+            Number of rows compressed.
+        """
+        cursor = self.conn.cursor()
+        compressed = 0
+
+        # Find the latest timestamp in 1m tables
+        cursor.execute(
+            """
+            SELECT COALESCE(MAX(bucket_end), 0) as last_bucket
+            FROM system_metrics_1m
+            """
+        )
+        result = cursor.fetchone()
+        last_bucket = result["last_bucket"] if result else 0
+
+        # Current minute bucket
+        current_time = int(time.time())
+        current_bucket = (current_time // 60) * 60
+
+        # Only compress if we have data from a previous minute
+        if current_bucket > last_bucket:
+            # Compress system metrics
+            cursor.execute(
+                """
+                INSERT INTO system_metrics_1m (
+                    bucket_start, bucket_end,
+                    cpu_percent_avg, cpu_temperature_c_avg,
+                    cpu_power_w_avg, gpu_usage_avg,
+                    gpu_memory_used_mb_avg, gpu_temperature_c_avg,
+                    gpu_fan_speed_rpm_avg, gpu_power_w_avg,
+                    memory_used_mb_avg, memory_percent_avg,
+                    system_power_w_avg
+                )
+                SELECT
+                    (timestamp / 60) * 60 as bucket_start,
+                    (timestamp / 60) * 60 + 60 as bucket_end,
+                    AVG(cpu_percent) as cpu_percent_avg,
+                    AVG(cpu_temperature_c) as cpu_temperature_c_avg,
+                    AVG(cpu_power_w) as cpu_power_w_avg,
+                    AVG(gpu_usage) as gpu_usage_avg,
+                    AVG(gpu_memory_used) as gpu_memory_used_mb_avg,
+                    AVG(gpu_temperature_c) as gpu_temperature_c_avg,
+                    AVG(gpu_fan_speed_rpm) as gpu_fan_speed_rpm_avg,
+                    AVG(gpu_power_w) as gpu_power_w_avg,
+                    AVG(memory_used) as memory_used_mb_avg,
+                    AVG(memory_percent) as memory_percent_avg,
+                    AVG(system_power_w) as system_power_w_avg
+                FROM system_metrics_raw
+                WHERE timestamp >= ? AND timestamp < ?
+                GROUP BY (timestamp / 60)
+                """,
+                (last_bucket, current_bucket),
+            )
+            compressed += cursor.rowcount
+
+            # Compress server metrics
+            cursor.execute(
+                """
+                INSERT INTO server_metrics_1m (
+                    bucket_start, bucket_end,
+                    prompt_tokens_total, prompt_tokens_seconds,
+                    tokens_predicted_total, predicted_tokens_seconds,
+                    requests_processing_avg, requests_deferred_avg
+                )
+                SELECT
+                    (timestamp / 60) * 60 as bucket_start,
+                    (timestamp / 60) * 60 + 60 as bucket_end,
+                    SUM(prompt_tokens_total) as prompt_tokens_total,
+                    SUM(prompt_tokens_seconds) as prompt_tokens_seconds,
+                    SUM(tokens_predicted_total) as tokens_predicted_total,
+                    SUM(predicted_tokens_seconds) as predicted_tokens_seconds,
+                    AVG(requests_processing) as requests_processing_avg,
+                    AVG(requests_deferred) as requests_deferred_avg
+                FROM server_metrics_raw
+                WHERE timestamp >= ? AND timestamp < ?
+                GROUP BY (timestamp / 60)
+                """,
+                (last_bucket, current_bucket),
+            )
+            compressed += cursor.rowcount
+
+            # Compress process GPU metrics
+            cursor.execute(
+                """
+                INSERT INTO process_gpu_metrics_1m (
+                    bucket_start, bucket_end,
+                    process_name, pid,
+                    gpu_utilization_avg, gpu_memory_mb_avg
+                )
+                SELECT
+                    (timestamp / 60) * 60 as bucket_start,
+                    (timestamp / 60) * 60 + 60 as bucket_end,
+                    process_name, pid,
+                    AVG(gpu_utilization) as gpu_utilization_avg,
+                    AVG(gpu_memory_mb) as gpu_memory_mb_avg
+                FROM process_gpu_metrics_raw
+                WHERE timestamp >= ? AND timestamp < ?
+                GROUP BY (timestamp / 60), process_name, pid
+                """,
+                (last_bucket, current_bucket),
+            )
+            compressed += cursor.rowcount
+
+            # Compress process CPU metrics
+            cursor.execute(
+                """
+                INSERT INTO process_cpu_metrics_1m (
+                    bucket_start, bucket_end,
+                    process_name, pid,
+                    cpu_percent_avg, cpu_power_w_avg
+                )
+                SELECT
+                    (timestamp / 60) * 60 as bucket_start,
+                    (timestamp / 60) * 60 + 60 as bucket_end,
+                    process_name, pid,
+                    AVG(cpu_percent) as cpu_percent_avg,
+                    AVG(cpu_power_w) as cpu_power_w_avg
+                FROM process_cpu_metrics_raw
+                WHERE timestamp >= ? AND timestamp < ?
+                GROUP BY (timestamp / 60), process_name, pid
+                """,
+                (last_bucket, current_bucket),
+            )
+            compressed += cursor.rowcount
+
+            self.conn.commit()
+
+        return compressed
+
+    def compress_to_1h(self) -> int:
+        """Compress 1-minute metrics to 1-hour buckets.
+
+        Compresses data from 1-minute tables into 1-hour aggregated tables
+        using bucket_start/bucket_end for proper time-windowed aggregation.
+
+        Returns:
+            Number of rows compressed.
+        """
+        cursor = self.conn.cursor()
+        compressed = 0
+
+        # Find the latest timestamp in 1h tables
+        cursor.execute(
+            """
+            SELECT COALESCE(MAX(bucket_end), 0) as last_bucket
+            FROM system_metrics_1h
+            """
+        )
+        result = cursor.fetchone()
+        last_bucket = result["last_bucket"] if result else 0
+
+        # Current hour bucket
+        current_time = int(time.time())
+        current_bucket = (current_time // 3600) * 3600
+
+        # Only compress if we have data from a previous hour
+        if current_bucket > last_bucket:
+            # Compress system metrics
+            cursor.execute(
+                """
+                INSERT INTO system_metrics_1h (
+                    bucket_start, bucket_end,
+                    cpu_percent_avg, cpu_temperature_c_avg,
+                    cpu_power_w_avg, gpu_usage_avg,
+                    gpu_memory_used_mb_avg, gpu_temperature_c_avg,
+                    gpu_fan_speed_rpm_avg, gpu_power_w_avg,
+                    memory_used_mb_avg, memory_percent_avg,
+                    system_power_w_avg
+                )
+                SELECT
+                    bucket_start,
+                    bucket_end,
+                    AVG(cpu_percent_avg) as cpu_percent_avg,
+                    AVG(cpu_temperature_c_avg) as cpu_temperature_c_avg,
+                    AVG(cpu_power_w_avg) as cpu_power_w_avg,
+                    AVG(gpu_usage_avg) as gpu_usage_avg,
+                    AVG(gpu_memory_used_mb_avg) as gpu_memory_used_mb_avg,
+                    AVG(gpu_temperature_c_avg) as gpu_temperature_c_avg,
+                    AVG(gpu_fan_speed_rpm_avg) as gpu_fan_speed_rpm_avg,
+                    AVG(gpu_power_w_avg) as gpu_power_w_avg,
+                    AVG(memory_used_mb_avg) as memory_used_mb_avg,
+                    AVG(memory_percent_avg) as memory_percent_avg,
+                    AVG(system_power_w_avg) as system_power_w_avg
+                FROM system_metrics_1m
+                WHERE bucket_start >= ? AND bucket_start < ?
+                GROUP BY bucket_start
+                """,
+                (last_bucket, current_bucket),
+            )
+            compressed += cursor.rowcount
+
+            # Compress server metrics
+            cursor.execute(
+                """
+                INSERT INTO server_metrics_1h (
+                    bucket_start, bucket_end,
+                    prompt_tokens_total, prompt_tokens_seconds,
+                    tokens_predicted_total, predicted_tokens_seconds,
+                    requests_processing_avg, requests_deferred_avg
+                )
+                SELECT
+                    bucket_start,
+                    bucket_end,
+                    SUM(prompt_tokens_total) as prompt_tokens_total,
+                    SUM(prompt_tokens_seconds) as prompt_tokens_seconds,
+                    SUM(tokens_predicted_total) as tokens_predicted_total,
+                    SUM(predicted_tokens_seconds) as predicted_tokens_seconds,
+                    AVG(requests_processing_avg) as requests_processing_avg,
+                    AVG(requests_deferred_avg) as requests_deferred_avg
+                FROM server_metrics_1m
+                WHERE bucket_start >= ? AND bucket_start < ?
+                GROUP BY bucket_start
+                """,
+                (last_bucket, current_bucket),
+            )
+            compressed += cursor.rowcount
+
+            # Compress process GPU metrics
+            cursor.execute(
+                """
+                INSERT INTO process_gpu_metrics_1h (
+                    bucket_start, bucket_end,
+                    process_name, pid,
+                    gpu_utilization_avg, gpu_memory_mb_avg
+                )
+                SELECT
+                    bucket_start,
+                    bucket_end,
+                    process_name, pid,
+                    AVG(gpu_utilization_avg) as gpu_utilization_avg,
+                    AVG(gpu_memory_mb_avg) as gpu_memory_mb_avg
+                FROM process_gpu_metrics_1m
+                WHERE bucket_start >= ? AND bucket_start < ?
+                GROUP BY bucket_start, process_name, pid
+                """,
+                (last_bucket, current_bucket),
+            )
+            compressed += cursor.rowcount
+
+            # Compress process CPU metrics
+            cursor.execute(
+                """
+                INSERT INTO process_cpu_metrics_1h (
+                    bucket_start, bucket_end,
+                    process_name, pid,
+                    cpu_percent_avg, cpu_power_w_avg
+                )
+                SELECT
+                    bucket_start,
+                    bucket_end,
+                    process_name, pid,
+                    AVG(cpu_percent_avg) as cpu_percent_avg,
+                    AVG(cpu_power_w_avg) as cpu_power_w_avg
+                FROM process_cpu_metrics_1m
+                WHERE bucket_start >= ? AND bucket_start < ?
+                GROUP BY bucket_start, process_name, pid
+                """,
+                (last_bucket, current_bucket),
+            )
+            compressed += cursor.rowcount
+
+            self.conn.commit()
+
+        return compressed

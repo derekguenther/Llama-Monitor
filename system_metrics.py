@@ -260,16 +260,18 @@ class SystemMetricsCollector:
         Returns:
             Dictionary with memory metrics
         """
-        if psutil is None:
+        try:
+            import psutil
+        except ImportError:
             return {"error": "psutil not installed"}
 
-        memory = psutil.virtual_memory()
+        mem = psutil.virtual_memory()
 
         return {
-            "used": memory.used // (1024 * 1024),  # MB
-            "total": memory.total // (1024 * 1024),  # MB
-            "percent": memory.percent,
-            "available": memory.available // (1024 * 1024),  # MB
+            "used": mem.used // (1024 * 1024),  # MB
+            "total": mem.total // (1024 * 1024),  # MB
+            "percent": mem.percent,
+            "available": mem.available // (1024 * 1024),  # MB
         }
 
     def _collect_process_gpu(self) -> Dict[str, Any]:
