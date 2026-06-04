@@ -371,11 +371,11 @@ class TestCollectSystemPower(unittest.TestCase):
 class TestCollect(unittest.TestCase):
     """Tests for main collect method."""
 
-    @patch("system_metrics.SystemMetricsCollector._collect_cpu")
-    @patch("system_metrics.SystemMetricsCollector._collect_gpu")
-    @patch("system_metrics.SystemMetricsCollector._collect_memory")
-    @patch("system_metrics.SystemMetricsCollector._collect_process_gpu")
-    @patch("system_metrics.SystemMetricsCollector._collect_system_power")
+    @patch("test_system_metrics.SystemMetricsCollector._collect_cpu")
+    @patch("test_system_metrics.SystemMetricsCollector._collect_gpu")
+    @patch("test_system_metrics.SystemMetricsCollector._collect_memory")
+    @patch("test_system_metrics.SystemMetricsCollector._collect_process_gpu")
+    @patch("test_system_metrics.SystemMetricsCollector._collect_system_power")
     def test_collect_full(self, mock_system_power, mock_process_gpu, mock_memory, mock_gpu, mock_cpu):
         """Test full metrics collection."""
         mock_cpu.return_value = {"percent": 50.0}
@@ -385,7 +385,6 @@ class TestCollect(unittest.TestCase):
         mock_system_power.return_value = {}
 
         collector = SystemMetricsCollector()
-
         result = collector.collect()
 
         self.assertIn("timestamp", result)
