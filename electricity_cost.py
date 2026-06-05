@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from database import Database
+from db import Database
 
 
 class ElectricityCostCalculator:

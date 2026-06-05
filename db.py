@@ -568,6 +568,177 @@ class Database:
             (timestamp, cpu_percent, gpu_percent, system_power_w, 1 if is_valid else 0),
         )
 
+    def insert_server_metrics_raw(
+        self,
+        timestamp: int,
+        prompt_tokens_total: int = 0,
+        prompt_tokens_seconds: float = 0,
+        tokens_predicted_total: int = 0,
+        predicted_tokens_seconds: float = 0,
+        requests_processing: int = 0,
+        requests_deferred: int = 0,
+        slots_active: int = 0,
+        slots_processing: int = 0,
+    ) -> None:
+        """Insert server metrics raw data.
+
+        Args:
+            timestamp: Unix timestamp.
+            prompt_tokens_total: Total prompt tokens processed.
+            prompt_tokens_seconds: Time spent processing prompts.
+            tokens_predicted_total: Total tokens predicted.
+            predicted_tokens_seconds: Time spent predicting tokens.
+            requests_processing: Number of processing requests.
+            requests_deferred: Number of deferred requests.
+            slots_active: Number of active slots.
+            slots_processing: Number of processing slots.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO server_metrics_raw (
+                timestamp, prompt_tokens_total, prompt_tokens_seconds,
+                tokens_predicted_total, predicted_tokens_seconds,
+                requests_processing, requests_deferred, slots_active, slots_processing
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                timestamp,
+                prompt_tokens_total,
+                prompt_tokens_seconds,
+                tokens_predicted_total,
+                predicted_tokens_seconds,
+                requests_processing,
+                requests_deferred,
+                slots_active,
+                slots_processing,
+            ),
+        )
+        self.conn.commit()
+
+    def insert_system_metrics_raw(
+        self,
+        timestamp: int,
+        cpu_percent: float = 0,
+        cpu_cores_percent: str = "[]",
+        cpu_temperature_c: str = "[]",
+        cpu_power_w: float = 0,
+        gpu_usage: int = 0,
+        gpu_memory_used_mb: int = 0,
+        gpu_memory_total_mb: int = 0,
+        gpu_temperature_c: int = 0,
+        gpu_fan_speed_rpm: int = 0,
+        gpu_power_w: float = 0,
+        memory_used_mb: int = 0,
+        memory_total_mb: int = 0,
+        memory_percent: float = 0,
+        system_power_w: float = 0,
+    ) -> None:
+        """Insert system metrics raw data.
+
+        Args:
+            timestamp: Unix timestamp.
+            cpu_percent: Total CPU usage percentage.
+            cpu_cores_percent: Per-core CPU usage as JSON string.
+            cpu_temperature_c: CPU temperatures as JSON string.
+            cpu_power_w: CPU power in watts.
+            gpu_usage: GPU usage percentage.
+            gpu_memory_used_mb: GPU memory used in MB.
+            gpu_memory_total_mb: GPU memory total in MB.
+            gpu_temperature_c: GPU temperature in Celsius.
+            gpu_fan_speed_rpm: GPU fan speed in RPM.
+            gpu_power_w: GPU power in watts.
+            memory_used_mb: System memory used in MB.
+            memory_total_mb: System memory total in MB.
+            memory_percent: System memory usage percentage.
+            system_power_w: System power in watts.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO system_metrics_raw (
+                timestamp, cpu_percent, cpu_cores_percent, cpu_temperature_c,
+                cpu_power_w, gpu_usage, gpu_memory_used_mb, gpu_memory_total_mb,
+                gpu_temperature_c, gpu_fan_speed_rpm, gpu_power_w,
+                memory_used_mb, memory_total_mb, memory_percent, system_power_w
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                timestamp,
+                cpu_percent,
+                cpu_cores_percent,
+                cpu_temperature_c,
+                cpu_power_w,
+                gpu_usage,
+                gpu_memory_used_mb,
+                gpu_memory_total_mb,
+                gpu_temperature_c,
+                gpu_fan_speed_rpm,
+                gpu_power_w,
+                memory_used_mb,
+                memory_total_mb,
+                memory_percent,
+                system_power_w,
+            ),
+        )
+        self.conn.commit()
+
+    def insert_process_gpu_metrics_raw(
+        self,
+        timestamp: int,
+        process_name: str,
+        pid: int,
+        gpu_utilization: int = 0,
+        gpu_memory_mb: int = 0,
+    ) -> None:
+        """Insert process GPU metrics raw data.
+
+        Args:
+            timestamp: Unix timestamp.
+            process_name: Name of the process.
+            pid: Process ID.
+            gpu_utilization: GPU utilization percentage.
+            gpu_memory_mb: GPU memory used in MB.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO process_gpu_metrics_raw (
+                timestamp, process_name, pid, gpu_utilization, gpu_memory_mb
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (timestamp, process_name, pid, gpu_utilization, gpu_memory_mb),
+        )
+        self.conn.commit()
+
+    def insert_process_cpu_metrics_raw(
+        self,
+        timestamp: int,
+        process_name: str,
+        pid: int,
+        cpu_percent: float = 0,
+        cpu_power_w: float = 0,
+    ) -> None:
+        """Insert process CPU metrics raw data.
+
+        Args:
+            timestamp: Unix timestamp.
+            process_name: Name of the process.
+            pid: Process ID.
+            cpu_percent: CPU utilization percentage.
+            cpu_power_w: CPU power in watts.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO process_cpu_metrics_raw (
+                timestamp, process_name, pid, cpu_percent, cpu_power_w
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (timestamp, process_name, pid, cpu_percent, cpu_power_w),
+        )
+        self.conn.commit()
+
     def update_cumulative_energy(
         self,
         session_start: str,

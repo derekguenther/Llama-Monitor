@@ -1,345 +1,163 @@
-"""Data aggregator for llama-monitor.
-
-This module merges server and system metrics, stores to SQLite,
-and handles data compression with configurable retention.
-"""
+#!/usr/bin/env python3
+"""Aggregator module for llama-monitor."""
 
 import time
-from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from database import Database
+from db import Database
 from electricity_cost import ElectricityCostCalculator
 from server_metrics import ServerMetricsCollector
 from system_metrics import SystemMetricsCollector
 
 
-class DataAggregator:
-    """Aggregates server and system metrics, stores to SQLite."""
+class Aggregator:
+    """Orchestrate all metrics collection and storage."""
 
     def __init__(
         self,
-        database: Database,
-        server_url: str,
-        tracked_processes: Optional[List[str]] = None,
+        server_url: str = "http://localhost:8000",
+        db_path: str = "llama-monitor.db",
+        idle_baseline_w: float = 150.0,
         cost_rate: float = 0.12,
     ):
         """Initialize the aggregator.
 
         Args:
-            database: Database instance
-            server_url: URL of the llama.cpp server
-            tracked_processes: List of process names to track
-            cost_rate: Electricity cost in USD per kWh
+            server_url: URL of the llama.cpp server.
+            db_path: Path to the SQLite database.
+            idle_baseline_w: Idle power baseline in watts.
+            cost_rate: Cost rate in USD per kWh.
         """
-        self.database = database
+        self.server_url = server_url
+        self.db_path = db_path
+
+        # Initialize components
+        self.db = Database(db_path)
+        self.db.connect()
+
+        # Set cost rate in database
+        self.db.set_cost_rate(cost_rate)
+
         self.server_collector = ServerMetricsCollector(server_url)
-        self.system_collector = SystemMetricsCollector(tracked_processes)
-        self.cost_calculator = ElectricityCostCalculator(database, cost_rate)
+        self.system_collector = SystemMetricsCollector()
+        self.cost_calculator = ElectricityCostCalculator(self.db, idle_baseline_w)
 
-        # Session tracking
-        self.session_start = None
-        self.last_poll_time = None
-
-        # Metrics storage
-        self.last_raw_server_metrics = None
-        self.last_raw_system_metrics = None
-
-    def start_session(self) -> None:
-        """Start a new aggregation session."""
-        self.session_start = datetime.now().isoformat()
-        self.last_poll_time = time.time()
-        self.cost_calculator.start_session()
-
-    def stop_session(self) -> Dict[str, Any]:
-        """Stop current session and return final stats."""
-        return self.cost_calculator.stop_session()
-
-    def poll(self) -> Dict[str, Any]:
-        """Poll all metrics and store to database.
+    def collect_all_metrics(self) -> Dict[str, Any]:
+        """Collect all metrics from all sources.
 
         Returns:
-            Dictionary with collected metrics
+            Dictionary with all metrics.
         """
-        current_time = time.time()
-
-        # Calculate time since last poll
-        if self.last_poll_time:
-            poll_interval = current_time - self.last_poll_time
-        else:
-            poll_interval = 0
-
-        self.last_poll_time = current_time
-
-        # Collect server metrics
-        server_data = self.server_collector.collect()
-        self.last_raw_server_metrics = server_data
-
-        # Collect system metrics
-        system_data = self.system_collector.collect()
-        self.last_raw_system_metrics = system_data
-
-        # Calculate costs
-        gpu_power = system_data.get("gpu", {}).get("power_w", 0)
-        cpu_power = system_data.get("cpu", {}).get("power_w", 0)
-
-        cost_data = self.cost_calculator.update_power_readings(
-            gpu_power_w=gpu_power,
-            cpu_power_w=cpu_power,
-            duration_seconds=poll_interval,
-        )
-
-        # Store to database
-        self._store_metrics(
-            timestamp=server_data["timestamp"],
-            server_data=server_data,
-            system_data=system_data,
-            cost_data=cost_data,
-        )
+        server_metrics = self.server_collector.collect()
+        system_metrics = self.system_collector.collect()
 
         return {
-            "timestamp": server_data["timestamp"],
-            "server": server_data,
-            "system": system_data,
-            "cost": cost_data,
+            "timestamp": int(time.time()),
+            "server": server_metrics,
+            "system": system_metrics,
         }
 
-    def _store_metrics(
-        self,
-        timestamp: str,
-        server_data: Dict[str, Any],
-        system_data: Dict[str, Any],
-        cost_data: Dict[str, Any],
-    ) -> None:
-        """Store metrics to database.
+    def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:
+        """Store raw metrics in the database.
 
         Args:
-            timestamp: Measurement timestamp
-            server_data: Server metrics
-            system_data: System metrics
-            cost_data: Cost data
+            metrics: Metrics dictionary from collect_all_metrics().
         """
-        cursor = self.database.conn.cursor()
+        timestamp = metrics.get("timestamp", int(time.time()))
 
         # Store server metrics
-        server_metrics = server_data.get("server", {})
-        self.database.insert_server_metrics(timestamp, server_metrics)
+        server = metrics.get("server", {}).get("server", {})
+        self.db.insert_server_metrics_raw(
+            timestamp=timestamp,
+            prompt_tokens_total=server.get("prompt_tokens_total", 0),
+            prompt_tokens_seconds=server.get("prompt_tokens_seconds", 0),
+            tokens_predicted_total=server.get("tokens_predicted_total", 0),
+            predicted_tokens_seconds=server.get("predicted_tokens_seconds", 0),
+            requests_processing=server.get("requests_processing", 0),
+            requests_deferred=server.get("requests_deferred", 0),
+        )
 
         # Store system metrics
-        system_metrics = {
-            "cpu_percent": system_data.get("cpu", {}).get("percent"),
-            "cpu_cores_percent": system_data.get("cpu", {}).get("cores"),
-            "cpu_temperature_c": None,  # Not collected yet
-            "cpu_power_w": system_data.get("cpu", {}).get("power_w"),
-            "gpu_usage": system_data.get("gpu", {}).get("usage"),
-            "gpu_memory_used": system_data.get("gpu", {}).get("memory_used"),
-            "gpu_memory_total": system_data.get("gpu", {}).get("memory_total"),
-            "gpu_temperature_c": system_data.get("gpu", {}).get("temperature_c"),
-            "gpu_fan_speed_rpm": system_data.get("gpu", {}).get("fan_speed_rpm"),
-            "gpu_power_w": system_data.get("gpu", {}).get("power_w"),
-            "memory_used": system_data.get("memory", {}).get("used"),
-            "memory_total": system_data.get("memory", {}).get("total"),
-            "memory_percent": system_data.get("memory", {}).get("percent"),
-            "system_power_w": None,  # Not collected yet
-        }
-        self.database.insert_system_metrics(timestamp, system_metrics)
+        system = metrics.get("system", {})
+        cpu = system.get("cpu", {})
+        gpu = system.get("gpu", {})
+        memory = system.get("memory", {})
+        system_power = system.get("system", {})
 
-        # Store per-process GPU metrics
-        process_gpu = system_data.get("process_gpu", {})
-        for proc_name, proc_data in process_gpu.items():
-            if proc_name != "error":
-                self.database.insert_process_gpu_metrics(
+        self.db.insert_system_metrics_raw(
+            timestamp=timestamp,
+            cpu_percent=cpu.get("percent", 0),
+            cpu_cores_percent=str(cpu.get("cores", [])),
+            cpu_power_w=cpu.get("cpu_power_w", 0),
+            gpu_usage=gpu.get("usage", 0),
+            gpu_memory_used_mb=gpu.get("memory_used", 0),
+            gpu_memory_total_mb=gpu.get("memory_total", 0),
+            gpu_temperature_c=gpu.get("temperature_c", 0),
+            gpu_fan_speed_rpm=gpu.get("fan_speed_rpm", 0),
+            gpu_power_w=gpu.get("power_w", 0),
+            memory_used_mb=memory.get("used", 0),
+            memory_total_mb=memory.get("total", 0),
+            memory_percent=memory.get("percent", 0),
+            system_power_w=system_power.get("system_power_w", 0),
+        )
+
+        # Store process GPU metrics
+        process_gpu = system.get("process_gpu", {})
+        for process_name, data in process_gpu.items():
+            self.db.insert_process_gpu_metrics_raw(
+                timestamp=timestamp,
+                process_name=process_name,
+                pid=data.get("pid", 0),
+                gpu_utilization=data.get("gpu_utilization", 0),
+                gpu_memory_mb=data.get("gpu_memory_mb", 0),
+            )
+
+        # Store process CPU metrics with power allocation
+        process_cpu = cpu.get("process_cpu", {})
+        cpu_power_total = cpu.get("cpu_power_w", 0)
+        cpu_percent_total = cpu.get("percent", 0)
+
+        # Only calculate per-process power if total CPU percent > 0
+        if cpu_percent_total > 0:
+            for process_name, data in process_cpu.items():
+                cpu_percent_process = data.get("cpu_percent", 0)
+                pid = data.get("pid", 0)
+                # Calculate proportional CPU power allocation
+                cpu_power_process = cpu_power_total * (cpu_percent_process / cpu_percent_total)
+                self.db.insert_process_cpu_metrics_raw(
                     timestamp=timestamp,
-                    process_name=proc_name,
-                    pid=proc_data.get("pid", 0),
-                    gpu_utilization=proc_data.get("gpu_utilization", 0),
-                    gpu_memory_mb=proc_data.get("gpu_memory_mb", 0),
+                    process_name=process_name,
+                    pid=pid,
+                    cpu_percent=cpu_percent_process,
+                    cpu_power_w=cpu_power_process,
                 )
 
-        # Store combined metrics
-        combined_data = {
-            "server": server_data,
-            "system": system_data,
-            "cost": cost_data,
-        }
+    def compress_if_needed(self) -> None:
+        """Compress data if needed based on time intervals."""
+        # Check if we should compress to 1-minute
+        self.db.compress_to_1m()
 
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO combined_metrics
-            (timestamp, server_data, system_data, cost_data)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                timestamp,
-                str(server_data),
-                str(system_data),
-                str(cost_data),
-            ),
-        )
+        # Check if we should compress to 1-hour
+        self.db.compress_to_1h()
 
-        self.database.conn.commit()
-
-    def get_recent_server_metrics(
-        self, limit: int = 60
-    ) -> List[Dict[str, Any]]:
-        """Get recent server metrics.
-
-        Args:
-            limit: Maximum number of records
+    def calculate_cost(self) -> Dict[str, Any]:
+        """Calculate current session cost.
 
         Returns:
-            List of recent server metric records
+            Dictionary with cost information.
         """
-        return self.database.get_server_metrics(limit=limit)
+        return self.cost_calculator.get_session_stats()
 
-    def get_recent_system_metrics(
-        self, limit: int = 60
-    ) -> List[Dict[str, Any]]:
-        """Get recent system metrics.
+    def close(self) -> None:
+        """Clean up resources."""
+        self.db.close()
+        self.system_collector.close()
 
-        Args:
-            limit: Maximum number of records
+    def __enter__(self):
+        """Context manager enter."""
+        return self
 
-        Returns:
-            List of recent system metric records
-        """
-        return self.database.get_system_metrics(limit=limit)
-
-    def get_combined_metrics(
-        self, start_time: Optional[str] = None, end_time: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Get combined metrics with cost.
-
-        Args:
-            start_time: Start timestamp (inclusive)
-            end_time: End timestamp (inclusive)
-
-        Returns:
-            List of combined metric records
-        """
-        cursor = self.database.conn.cursor()
-        query = """
-            SELECT * FROM combined_metrics
-            WHERE 1=1
-        """
-        params = []
-
-        if start_time:
-            query += " AND timestamp >= ?"
-            params.append(start_time)
-        if end_time:
-            query += " AND timestamp <= ?"
-            params.append(end_time)
-
-        query += " ORDER BY timestamp DESC"
-        cursor.execute(query, params)
-        return [dict(row) for row in cursor.fetchall()]
-
-    def get_cumulative_energy(self) -> Optional[Dict[str, Any]]:
-        """Get cumulative energy statistics.
-
-        Returns:
-            Dictionary with energy data or None
-        """
-        return self.database.get_cumulative_energy()
-
-    def get_cost_rate(self) -> float:
-        """Get the current cost rate.
-
-        Returns:
-            Cost rate in USD per kWh
-        """
-        return self.database.get_cost_rate()
-
-    def set_cost_rate(self, rate: float) -> None:
-        """Update the cost rate.
-
-        Args:
-            rate: New cost rate in USD per kWh
-        """
-        self.database.set_cost_rate(rate)
-        self.cost_calculator.set_cost_rate(rate)
-
-
-def format_metrics_display(aggregator: DataAggregator) -> str:
-    """Format metrics for display.
-
-    Args:
-        aggregator: DataAggregator instance
-
-    Returns:
-        Formatted string for display
-    """
-    lines = []
-
-    # Get recent metrics
-    server_metrics = aggregator.get_recent_server_metrics(limit=1)
-    system_metrics = aggregator.get_recent_system_metrics(limit=1)
-    energy = aggregator.get_cumulative_energy()
-
-    # Server status
-    if server_metrics:
-        m = server_metrics[0]
-        prompt_tokens = m.get("prompt_tokens_total", 0)
-        prompt_rate = m.get("prompt_tokens_seconds", 0)
-        generated = m.get("tokens_predicted_total", 0)
-        gen_rate = m.get("predicted_tokens_seconds", 0)
-
-        lines.append(f"Prompt tokens:    {prompt_tokens:,} ({prompt_rate:,.0f}/s)")
-        lines.append(f"Generated:        {generated:,} ({gen_rate:,.0f}/s)")
-
-    # System status
-    if system_metrics:
-        m = system_metrics[0]
-        cpu = m.get("cpu_percent", 0)
-        gpu = m.get("gpu_usage", 0)
-        mem = m.get("memory_percent", 0)
-        gpu_mem = m.get("gpu_memory_used", 0)
-        gpu_total = m.get("gpu_memory_total", 0)
-
-        lines.append(f"CPU: {cpu:.1f}%    GPU: {gpu:.1f}%    Mem: {mem:.1f}%")
-        if gpu_mem and gpu_total:
-            lines.append(f"GPU Mem: {gpu_mem:,}MB / {gpu_total:,}MB")
-
-    # Cost info
-    if energy:
-        total_wh = energy.get("total_wh", 0)
-        cost = energy.get("session_cost_usd", 0)
-        lines.append(f"Session cost:     ${cost:.4f} ({total_wh:.1f} Wh)")
-
-    return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    # Test the aggregator
-    db = Database(":memory:")
-    with db:
-        aggregator = DataAggregator(
-            database=db,
-            server_url="http://localhost:8000",
-            tracked_processes=["llama-server.exe"],
-            cost_rate=0.12,
-        )
-
-        print("Starting session...")
-        aggregator.start_session()
-
-        # Simulate a few polls
-        for i in range(3):
-            print(f"\nPoll {i+1}:")
-            data = aggregator.poll()
-            print(f"Timestamp: {data['timestamp']}")
-            print(f"Cost this poll: ${data['cost']['total_cost_usd']:.6f}")
-
-        # Get cumulative stats
-        energy = aggregator.get_cumulative_energy()
-        if energy:
-            print(f"\nCumulative Energy:")
-            print(f"  Total: {energy['total_wh']:.2f} Wh")
-            print(f"  Cost:  ${energy['session_cost_usd']:.4f}")
-
-        # Stop session
-        final = aggregator.stop_session()
-        print(f"\nFinal Session:")
-        print(f"  Total: {final['total_wh']:.2f} Wh")
-        print(f"  Cost:  ${final['total_cost_usd']:.4f}")
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.close()
+        return False

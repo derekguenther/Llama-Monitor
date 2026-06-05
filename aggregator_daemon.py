@@ -31,7 +31,7 @@ except ImportError:
 
 # Local imports
 from config import load_config, find_config
-from database import Database
+from db import Database
 from server_metrics import ServerMetricsCollector
 from system_metrics import SystemMetricsCollector
 from electricity_cost import ElectricityCostCalculator
