@@ -80,6 +80,40 @@ class SystemMetricsCollector:
         """Context manager exit."""
         self.close()
 
+    def _collect_process_ram(self) -> Dict[str, Any]:
+        """Collect per-process RAM usage for tracked processes.
+
+        Returns:
+            Dictionary mapping process names to RAM metrics
+        """
+        result = {}
+
+        if psutil is None:
+            return {"error": "psutil not installed"}
+
+        try:
+            for proc in psutil.process_iter(["pid", "name"]):
+                try:
+                    name = proc.info["name"]
+                    if name and any(
+                        name.lower().endswith(proc_name.lower())
+                        for proc_name in self.tracked_processes
+                    ):
+                        pid = proc.info["pid"]
+                        process = psutil.Process(pid)
+                        mem_info = process.memory_info()
+                        result[name] = {
+                            "pid": pid,
+                            "ram_rss_mb": mem_info.rss // (1024 * 1024),
+                            "ram_vms_mb": mem_info.vms // (1024 * 1024),
+                        }
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    continue
+        except Exception as e:
+            result["error"] = str(e)
+
+        return result
+
     def collect(self) -> Dict[str, Any]:
         """Collect all system metrics.
 
@@ -94,6 +128,7 @@ class SystemMetricsCollector:
             "gpu": self._collect_gpu(),
             "memory": self._collect_memory(),
             "process_gpu": self._collect_process_gpu(),
+            "process_ram": self._collect_process_ram(),
             "system": self._collect_system_power(),
         }
 
@@ -307,12 +342,16 @@ class SystemMetricsCollector:
                         gpu_util = proc.gpuUtilization
                         mem_size = proc.memSize
 
-                        # Try to get process name
+                        # Try to get process name and RAM usage
                         try:
                             process = psutil.Process(pid)
                             process_name = process.name()
+                            # Get process memory info (RSS = resident set size = actual RAM)
+                            process_mem = process.memory_info()
+                            ram_rss_mb = process_mem.rss // (1024 * 1024)
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
                             process_name = f"pid_{pid}"
+                            ram_rss_mb = 0
 
                         # Only track our tracked processes
                         if any(
@@ -323,6 +362,7 @@ class SystemMetricsCollector:
                                 "pid": pid,
                                 "gpu_utilization": gpu_util,
                                 "gpu_memory_mb": mem_size // (1024 * 1024),
+                                "ram_rss_mb": ram_rss_mb,
                             }
                     except Exception:
                         continue

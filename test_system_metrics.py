@@ -285,6 +285,7 @@ class TestCollectProcessGPU(unittest.TestCase):
 
         mock_process = Mock()
         mock_process.name.return_value = "llama-server.exe"
+        mock_process.memory_info.return_value = Mock(rss=4294967296, vms=2147483648)  # 4GB RSS, 2GB VMS
         mock_psutil.Process.return_value = mock_process
 
         collector = SystemMetricsCollector()
@@ -297,6 +298,7 @@ class TestCollectProcessGPU(unittest.TestCase):
         self.assertEqual(result["llama-server.exe"]["pid"], 1234)
         self.assertEqual(result["llama-server.exe"]["gpu_utilization"], 85)
         self.assertEqual(result["llama-server.exe"]["gpu_memory_mb"], 8192)
+        self.assertEqual(result["llama-server.exe"]["ram_rss_mb"], 4096)
 
     @patch("system_metrics.nvml")
     def test_collect_process_gpu_no_nvml(self, mock_nvml):
