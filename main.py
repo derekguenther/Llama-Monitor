@@ -87,12 +87,14 @@ class Monitor:
         # Initialize aggregator
         cost_rate = self.config.get("electricity.cost_rate", 0.12)
         idle_baseline = self.config.get("idle_baseline.power_w", 150.0)
+        collect_metrics = self.config.get("metrics_collection.collect_metrics", True)
 
         self.aggregator = Aggregator(
             server_url=self.server_url,
             db_path=db_path,
             idle_baseline_w=idle_baseline,
             cost_rate=cost_rate,
+            collect_metrics=collect_metrics,
         )
 
         # Set polling interval from config
@@ -351,10 +353,98 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def ensure_dependencies(check_tui: bool = False):
+    """Check for and install missing dependencies from requirements.txt.
+
+    Args:
+        check_tui: If True, also check for windows-curses even if not on Windows.
+    """
+    import os
+    import sys
+    import subprocess
+
+    # Get the directory where main.py is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    requirements_path = os.path.join(script_dir, 'requirements.txt')
+
+    if not os.path.exists(requirements_path):
+        return
+
+    # Check for required dependencies
+    missing_required = []
+    try:
+        import flask
+        import flask_socketio
+        import psutil
+        import yaml
+        import requests
+    except ImportError as e:
+        missing_required = [e.name] if hasattr(e, 'name') else ['unknown']
+
+    # Check for optional windows-curses (only needed for TUI on Windows)
+    missing_optional = []
+    if os.name == 'nt' or check_tui:
+        try:
+            import curses
+        except ImportError:
+            missing_optional = ['windows-curses']
+
+    # If nothing is missing, we're done
+    if not missing_required and not missing_optional:
+        return
+
+    # Ask user if they want to install dependencies
+    print("=" * 60)
+    if missing_required:
+        print("Missing dependencies detected.")
+        print(f"Missing required: {', '.join(missing_required)}")
+    if missing_optional:
+        print(f"Missing optional (for TUI on Windows): {', '.join(missing_optional)}")
+    print("=" * 60)
+    print("")
+
+    try:
+        response = input("Install missing dependencies now? [Y/n] ").strip().lower()
+        if response in ('', 'y', 'yes'):
+            print("")
+            print("Installing dependencies...")
+            print("")
+
+            # Run pip install
+            result = subprocess.run(
+                [sys.executable, '-m', 'pip', 'install', '-r', requirements_path],
+                cwd=script_dir,
+                capture_output=False
+            )
+
+            if result.returncode == 0:
+                print("")
+                print("Dependencies installed successfully!")
+                print("Please run the command again.")
+            else:
+                print("")
+                print("ERROR: Failed to install dependencies.")
+                print("You may need to install them manually:")
+                print(f"  pip install -r {requirements_path}")
+            sys.exit(result.returncode)
+        else:
+            print("")
+            print("Please install dependencies manually:")
+            print(f"  pip install -r {requirements_path}")
+            sys.exit(1)
+    except KeyboardInterrupt:
+        print("")
+        print("Installation cancelled.")
+        sys.exit(1)
+
+
 def main():
     """Main entry point."""
     import os
     import sys
+
+    # Check and install dependencies first
+    ensure_dependencies()
 
     args = parse_args()
 
@@ -365,12 +455,14 @@ def main():
     # On Windows, disable TUI by default and warn if user tries to enable it
     if os.name == 'nt':
         if args.tui:
-            print("ERROR: TUI mode is not supported on Windows.")
+            print("ERROR: TUI mode requires windows-curses on Windows.")
             print("")
-            print("The TUI uses curses which requires a Unix-like terminal.")
+            print("The curses module is not installed by default on Windows.")
             print("")
-            print("Use the web interface instead: python main.py")
-            print("Then open http://localhost:8080 in your browser.")
+            print("Options:")
+            print("  1. Use the web interface (default): python main.py")
+            print("  2. Install windows-curses: pip install windows-curses")
+            print("  3. Use Windows Terminal, PowerShell, or MSYS2")
             print("")
             sys.exit(1)
         # On Windows, default to web-only mode (already handled by enable_web default)

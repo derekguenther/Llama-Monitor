@@ -147,13 +147,13 @@ class TestSystemMetrics(unittest.TestCase):
             "cpu_temperature_c": "45.0,46.0,47.0,48.0",
             "cpu_power_w": 65.0,
             "gpu_usage": 85.0,
-            "gpu_memory_used": 8192,
-            "gpu_memory_total": 16384,
+            "gpu_memory_used_mb": 8192,
+            "gpu_memory_total_mb": 16384,
             "gpu_temperature_c": 75.0,
             "gpu_fan_speed_rpm": 2500,
             "gpu_power_w": 220.0,
-            "memory_used": 16384,
-            "memory_total": 32768,
+            "memory_used_mb": 16384,
+            "memory_total_mb": 32768,
             "memory_percent": 50.0,
             "system_power_w": 285.0,
         }
@@ -167,7 +167,7 @@ class TestSystemMetrics(unittest.TestCase):
                 result[0]["cpu_percent"], 45.5, places=1
             )
             self.assertEqual(result[0]["gpu_usage"], 85.0)
-            self.assertEqual(result[0]["gpu_memory_used"], 8192)
+            self.assertEqual(result[0]["gpu_memory_used_mb"], 8192)
 
     def test_get_system_metrics(self):
         """Test retrieving system metrics."""

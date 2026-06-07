@@ -9,15 +9,18 @@ import requests
 class ServerMetricsCollector:
     """Collects metrics from llama.cpp server endpoints."""
 
-    def __init__(self, server_url: str, metrics_endpoint: str = "/metrics"):
+    def __init__(self, server_url: str, metrics_endpoint: str = "/metrics", collect_metrics: bool = True):
         """Initialize the collector.
 
         Args:
             server_url: Base URL of the llama.cpp server
             metrics_endpoint: Path to the metrics endpoint
+            collect_metrics: Whether to attempt collecting /metrics data
         """
         self.server_url = server_url.rstrip("/")
         self.metrics_endpoint = metrics_endpoint
+        self.collect_metrics = collect_metrics
+        self.metrics_available = True  # Will be set to False if /metrics returns error
 
     def _make_request(self, endpoint: str) -> Optional[Dict[str, Any]]:
         """Make HTTP request to server endpoint.
@@ -34,7 +37,9 @@ class ServerMetricsCollector:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching {endpoint}: {e}")
+            # Check if this is a metrics endpoint error (not supported)
+            if endpoint == self.metrics_endpoint:
+                self.metrics_available = False
             return None
 
     def get_metrics(self) -> Optional[Dict[str, Any]]:
@@ -74,12 +79,21 @@ class ServerMetricsCollector:
             "server": {},
             "slots": [],
             "props": {},
+            "metrics_available": True,
         }
 
-        # Get metrics
-        metrics = self.get_metrics()
-        if metrics:
-            result["server"] = self._parse_metrics(metrics)
+        # Check if metrics collection is enabled
+        if self.collect_metrics:
+            # Get metrics
+            metrics = self.get_metrics()
+            if metrics:
+                result["server"] = self._parse_metrics(metrics)
+            else:
+                # Metrics endpoint returned None (not supported)
+                result["metrics_available"] = False
+                result["server"] = {"error": "metrics_endpoint_not_available"}
+        else:
+            result["metrics_available"] = True  # Not collecting, so not an issue
 
         # Get slots
         slots = self.get_slots()

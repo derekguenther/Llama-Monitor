@@ -19,6 +19,7 @@ class Aggregator:
         db_path: str = "llama-monitor.db",
         idle_baseline_w: float = 150.0,
         cost_rate: float = 0.12,
+        collect_metrics: bool = True,
     ):
         """Initialize the aggregator.
 
@@ -27,9 +28,11 @@ class Aggregator:
             db_path: Path to the SQLite database.
             idle_baseline_w: Idle power baseline in watts.
             cost_rate: Cost rate in USD per kWh.
+            collect_metrics: Whether to collect /metrics data from server.
         """
         self.server_url = server_url
         self.db_path = db_path
+        self.collect_metrics = collect_metrics
 
         # Initialize components
         self.db = Database(db_path)
@@ -38,7 +41,9 @@ class Aggregator:
         # Set cost rate in database
         self.db.set_cost_rate(cost_rate)
 
-        self.server_collector = ServerMetricsCollector(server_url)
+        self.server_collector = ServerMetricsCollector(
+            server_url, collect_metrics=collect_metrics
+        )
         self.system_collector = SystemMetricsCollector()
         self.cost_calculator = ElectricityCostCalculator(self.db, idle_baseline_w)
 

@@ -12,6 +12,7 @@ class Config:
     DEFAULT_CONFIG = {
         "idle_baseline": {
             "minimum_time_seconds": 5,
+            "power_w": 150.0,
         },
         "compression": {
             "raw_to_1m_interval_seconds": 60,
@@ -21,6 +22,13 @@ class Config:
         },
         "server": {
             "port": 8000,
+        },
+        "electricity": {
+            "cost_rate": 0.12,
+        },
+        "metrics_collection": {
+            "interval_seconds": 1.0,
+            "collect_metrics": True,
         },
     }
 

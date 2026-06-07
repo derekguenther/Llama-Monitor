@@ -109,7 +109,9 @@ class Database:
                 tokens_predicted_total INTEGER,
                 predicted_tokens_seconds REAL,
                 requests_processing INTEGER,
-                requests_deferred INTEGER
+                requests_deferred INTEGER,
+                slots_active INTEGER DEFAULT 0,
+                slots_processing INTEGER DEFAULT 0
             )
             """
         )
@@ -164,13 +166,13 @@ class Database:
                 cpu_temperature_c TEXT,
                 cpu_power_w REAL,
                 gpu_usage REAL,
-                gpu_memory_used INTEGER,
-                gpu_memory_total INTEGER,
+                gpu_memory_used_mb INTEGER,
+                gpu_memory_total_mb INTEGER,
                 gpu_temperature_c REAL,
                 gpu_fan_speed_rpm INTEGER,
                 gpu_power_w REAL,
-                memory_used INTEGER,
-                memory_total INTEGER,
+                memory_used_mb INTEGER,
+                memory_total_mb INTEGER,
                 memory_percent REAL,
                 system_power_w REAL
             )
@@ -468,13 +470,13 @@ class Database:
             "cpu_temperature_c",
             "cpu_power_w",
             "gpu_usage",
-            "gpu_memory_used",
-            "gpu_memory_total",
+            "gpu_memory_used_mb",
+            "gpu_memory_total_mb",
             "gpu_temperature_c",
             "gpu_fan_speed_rpm",
             "gpu_power_w",
-            "memory_used",
-            "memory_total",
+            "memory_used_mb",
+            "memory_total_mb",
             "memory_percent",
             "system_power_w",
         ]
@@ -486,13 +488,13 @@ class Database:
             cpu_temperature_c,
             metrics.get("cpu_power_w"),
             metrics.get("gpu_usage"),
-            metrics.get("gpu_memory_used"),
-            metrics.get("gpu_memory_total"),
+            metrics.get("gpu_memory_used_mb"),
+            metrics.get("gpu_memory_total_mb"),
             metrics.get("gpu_temperature_c"),
             metrics.get("gpu_fan_speed_rpm"),
             metrics.get("gpu_power_w"),
-            metrics.get("memory_used"),
-            metrics.get("memory_total"),
+            metrics.get("memory_used_mb"),
+            metrics.get("memory_total_mb"),
             metrics.get("memory_percent"),
             metrics.get("system_power_w"),
         ]
