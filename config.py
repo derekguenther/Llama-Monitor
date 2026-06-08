@@ -22,7 +22,7 @@ class Config:
             "1m_to_1h_start_after_seconds": 120,
         },
         "server": {
-            "url": "http://localhost:8080",
+            "url": "http://localhost:8000",
             "metrics_endpoint": "/metrics",
             "port": 8000,
         },
