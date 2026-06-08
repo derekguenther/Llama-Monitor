@@ -11,7 +11,7 @@ urwid>=2.1.2
 # rich>=13.0.0
 
 # Windows TUI support (required for curses on Windows)
-windows-curses>=2.5.0; platform_system=="Windows"
+windows-curses>=2.4.2; platform_system=="Windows"
 
 # Web dashboard
 flask>=3.0.0
