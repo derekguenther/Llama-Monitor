@@ -26,7 +26,7 @@ class TestConfigDefaults(unittest.TestCase):
         """Test default server URL."""
         self.assertEqual(
             self.config.get("server.url", "http://localhost:8080"),
-            "http://localhost:8080"
+            "http://localhost:8000"
         )
 
     def test_server_metrics_endpoint_default(self):

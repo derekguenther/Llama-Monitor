@@ -137,6 +137,32 @@ class Aggregator:
                     cpu_power_w=cpu_power_process,
                 )
 
+        # Store combined metrics for web dashboard
+        import json
+        cost = self.cost_calculator.calculate_power_cost(
+            gpu_power_w=gpu.get("power_w", 0) or 0,
+            cpu_power_w=cpu.get("cpu_power_w", 0) or 0,
+            duration_seconds=1.0
+        )
+        self.db.conn.execute(
+            """
+            INSERT INTO combined_metrics (timestamp, server_data, system_data, cost_data)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                timestamp,
+                json.dumps(server),
+                json.dumps({
+                    "cpu": cpu,
+                    "gpu": gpu,
+                    "memory": memory,
+                    "system": system_power,
+                }),
+                json.dumps(cost),
+            )
+        )
+        self.db.conn.commit()
+
     def compress_if_needed(self) -> None:
         """Compress data if needed based on time intervals."""
         # Check if we should compress to 1-minute
