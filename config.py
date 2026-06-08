@@ -118,6 +118,53 @@ class Config:
         return self._config.get("server", {})
 
 
+def find_config(default_path: str = "config.yaml") -> str:
+    """Find configuration file.
+
+    Searches in this order:
+    1. Current working directory
+    2. Script directory
+    3. Parent directory
+
+    Args:
+        default_path: Default config filename.
+
+    Returns:
+        Path to config file.
+    """
+    # Check current directory
+    if os.path.exists(default_path):
+        return default_path
+
+    # Check script directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    script_config = os.path.join(script_dir, default_path)
+    if os.path.exists(script_config):
+        return script_config
+
+    # Check parent directory
+    parent_config = os.path.join(os.path.dirname(script_dir), default_path)
+    if os.path.exists(parent_config):
+        return parent_config
+
+    # Return default path (will fail later if file doesn't exist)
+    return default_path
+
+
+def load_config(config_path: Optional[str] = None) -> Config:
+    """Load configuration from file.
+
+    Args:
+        config_path: Path to config file. If None, uses default.
+
+    Returns:
+        Config instance with loaded configuration.
+    """
+    if config_path is None:
+        config_path = find_config()
+    return Config(config_path)
+
+
 # Global config instance
 _config: Optional[Config] = None
 
