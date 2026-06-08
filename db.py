@@ -996,11 +996,11 @@ class Database:
                     AVG(cpu_temperature_c) as cpu_temperature_c_avg,
                     AVG(cpu_power_w) as cpu_power_w_avg,
                     AVG(gpu_usage) as gpu_usage_avg,
-                    AVG(gpu_memory_used) as gpu_memory_used_mb_avg,
+                    AVG(gpu_memory_used_mb) as gpu_memory_used_mb_avg,
                     AVG(gpu_temperature_c) as gpu_temperature_c_avg,
                     AVG(gpu_fan_speed_rpm) as gpu_fan_speed_rpm_avg,
                     AVG(gpu_power_w) as gpu_power_w_avg,
-                    AVG(memory_used) as memory_used_mb_avg,
+                    AVG(memory_used_mb) as memory_used_mb_avg,
                     AVG(memory_percent) as memory_percent_avg,
                     AVG(system_power_w) as system_power_w_avg
                 FROM system_metrics_raw
