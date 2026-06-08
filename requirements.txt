@@ -10,6 +10,9 @@ urwid>=2.1.2
 # or
 # rich>=13.0.0
 
+# Windows TUI support (required for curses on Windows)
+windows-curses>=2.5.0; platform_system=="Windows"
+
 # Web dashboard
 flask>=3.0.0
 flask-socketio>=5.0.0
