@@ -982,6 +982,8 @@ def start_server(host="0.0.0.0", port=8080, metrics_cache=None):
 
     print(f"Starting web server on http://{host}:{port}")
 
+    import time
+
     # Create and start server thread
     def run():
         run_server(host=host, port=port, debug=False)
@@ -989,9 +991,17 @@ def start_server(host="0.0.0.0", port=8080, metrics_cache=None):
     _server_thread = threading.Thread(target=run, daemon=True)
     _server_thread.start()
 
-    # Wait for server to be ready
-    import time
-    time.sleep(0.5)
+    # Wait for server to be ready by polling the root endpoint
+    import urllib.request
+    import urllib.error
+    max_wait = 5.0  # Maximum time to wait for server
+    start_time = time.time()
+    while time.time() - start_time < max_wait:
+        try:
+            urllib.request.urlopen(f"http://{host}:{port}/", timeout=1)
+            break  # Server is ready
+        except (urllib.error.URLError, urllib.error.HTTPError, Exception):
+            time.sleep(0.1)
 
     print(f"Web server started on http://{host}:{port}")
 
