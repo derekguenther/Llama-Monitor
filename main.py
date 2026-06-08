@@ -79,8 +79,12 @@ class Monitor:
 
     def initialize(self):
         """Initialize the monitor components."""
-        # Initialize database
+        # Initialize database - use absolute path
         db_path = self.config.get("database.path", "llama-monitor.db")
+        if not os.path.isabs(db_path):
+            # Resolve relative paths relative to the script directory
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            db_path = os.path.join(script_dir, db_path)
         self.db = Database(db_path)
         self.db.connect()
 

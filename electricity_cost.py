@@ -74,8 +74,7 @@ class ElectricityCostCalculator:
         )
 
         # Close session in sessions table
-        cursor = self.database.conn.cursor()
-        cursor.execute(
+        self.database.execute(
             """
             UPDATE sessions
             SET end_time = ?, total_gpu_wh = ?, total_cpu_wh = ?, total_cost_usd = ?
@@ -83,7 +82,6 @@ class ElectricityCostCalculator:
             """,
             (end_time, self.gpu_energy_wh, self.cpu_energy_wh, session_cost, self.session_start),
         )
-        self.database.conn.commit()
 
         result = {
             "session_start": self.session_start,
@@ -262,15 +260,13 @@ class ElectricityCostCalculator:
         if not self.session_start:
             return None
 
-        cursor = self.database.conn.cursor()
-        cursor.execute(
+        row = self.database.execute_query(
             """
             SELECT session_start, last_update, total_wh, gpu_wh, cpu_wh, session_cost_usd
             FROM cumulative_energy
             WHERE id = 1
             """
         )
-        row = cursor.fetchone()
         if row:
             return {
                 "session_start": row["session_start"],

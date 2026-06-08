@@ -42,7 +42,7 @@ class Aggregator:
         self.db.set_cost_rate(cost_rate)
 
         self.server_collector = ServerMetricsCollector(
-            server_url, collect_metrics=collect_metrics
+            server_url, metrics_endpoint="/metrics", collect_metrics=collect_metrics
         )
         self.system_collector = SystemMetricsCollector()
         self.cost_calculator = ElectricityCostCalculator(self.db, idle_baseline_w)
@@ -144,7 +144,7 @@ class Aggregator:
             cpu_power_w=cpu.get("cpu_power_w", 0) or 0,
             duration_seconds=1.0
         )
-        self.db.conn.execute(
+        self.db.execute(
             """
             INSERT INTO combined_metrics (timestamp, server_data, system_data, cost_data)
             VALUES (?, ?, ?, ?)
@@ -161,7 +161,6 @@ class Aggregator:
                 json.dumps(cost),
             )
         )
-        self.db.conn.commit()
 
     def compress_if_needed(self) -> None:
         """Compress data if needed based on time intervals."""

@@ -22,19 +22,23 @@ class ServerMetricsCollector:
         self.collect_metrics = collect_metrics
         self.metrics_available = True  # Will be set to False if /metrics returns error
 
-    def _make_request(self, endpoint: str) -> Optional[Dict[str, Any]]:
+    def _make_request(self, endpoint: str) -> Optional[Any]:
         """Make HTTP request to server endpoint.
 
         Args:
             endpoint: API endpoint path
 
         Returns:
-            JSON response as dictionary, or None if request failed
+            Response data (dict or text), or None if request failed
         """
         url = f"{self.server_url}{endpoint}"
         try:
             response = requests.get(url, timeout=5)
             response.raise_for_status()
+            content_type = response.headers.get('Content-Type', '')
+            # Prometheus format returns text/plain, JSON endpoints return application/json
+            if 'text/plain' in content_type or 'text/plain' in content_type.lower():
+                return response.text
             return response.json()
         except requests.exceptions.RequestException as e:
             # Check if this is a metrics endpoint error (not supported)

@@ -49,8 +49,13 @@ class Aggregator:
         self.config_path = config_path or find_config()
         self.config = load_config(self.config_path)
 
-        # Database
-        self.db = Database(self.config.get("database.path", "llama-monitor.db"))
+        # Database - use absolute path based on config directory or script directory
+        db_path = self.config.get("database.path", "llama-monitor.db")
+        if not os.path.isabs(db_path):
+            # If relative path, resolve relative to config file location or script directory
+            config_dir = os.path.dirname(os.path.abspath(self.config_path)) if self.config_path else os.path.dirname(os.path.abspath(__file__))
+            db_path = os.path.join(config_dir, db_path)
+        self.db = Database(db_path)
 
         # Collectors
         self.server_collector = ServerMetricsCollector(
@@ -157,13 +162,13 @@ class Aggregator:
             "cpu_temperature_c": json.dumps(cpu.get("temperature_c", [])),
             "cpu_power_w": cpu.get("power_w"),
             "gpu_usage": gpu.get("usage"),
-            "gpu_memory_used": gpu.get("memory_used"),
-            "gpu_memory_total": gpu.get("memory_total"),
+            "gpu_memory_used_mb": gpu.get("memory_used"),
+            "gpu_memory_total_mb": gpu.get("memory_total"),
             "gpu_temperature_c": gpu.get("temperature_c"),
             "gpu_fan_speed_rpm": gpu.get("fan_speed_rpm"),
             "gpu_power_w": gpu.get("power_w"),
-            "memory_used": memory.get("used"),
-            "memory_total": memory.get("total"),
+            "memory_used_mb": memory.get("used"),
+            "memory_total_mb": memory.get("total"),
             "memory_percent": memory.get("percent"),
             "system_power_w": system.get("power_w"),
         }
@@ -206,8 +211,6 @@ class Aggregator:
         Args:
             metrics: Dictionary of metrics to store
         """
-        cursor = self.db.conn.cursor()
-
         # Store server metrics
         server = metrics.get("server", {})
         self.db.insert_server_metrics(
@@ -244,7 +247,7 @@ class Aggregator:
             "cost": cost,
         }
 
-        cursor.execute(
+        self.db.execute(
             """
             INSERT INTO combined_metrics (timestamp, server_data, system_data, cost_data)
             VALUES (?, ?, ?, ?)
@@ -265,8 +268,6 @@ class Aggregator:
             cpu_wh=self.cost_calculator.cpu_energy_wh,
             session_cost_usd=self.cost_calculator.calculate_cost(self.cost_calculator.total_energy_wh),
         )
-
-        self.db.conn.commit()
 
     def check_compression(self) -> None:
         """Check if data compression is needed based on retention rules."""
@@ -289,16 +290,10 @@ class Aggregator:
     def _compress_to_minute(self) -> None:
         """Compress raw data to 1-minute buckets."""
         # Get the cutoff time (1 week ago)
-        cursor = self.db.conn.cursor()
-        cursor.execute(
-            """
-            SELECT datetime('now', '-7 days')
-            """
-        )
-        cutoff = cursor.fetchone()[0]
+        cutoff = self.db.execute_query("SELECT datetime('now', '-7 days')")[0]
 
         # Get distinct minute buckets
-        cursor.execute(
+        buckets = self.db.execute_all(
             """
             SELECT DISTINCT substr(timestamp, 1, 16) as minute_bucket
             FROM server_metrics_raw
@@ -308,13 +303,12 @@ class Aggregator:
             (cutoff,)
         )
 
-        buckets = cursor.fetchall()
         if not buckets:
             return
 
         for (bucket,) in buckets:
             # Get min/max timestamp for this bucket
-            cursor.execute(
+            min_ts, max_ts = self.db.execute_query(
                 """
                 SELECT MIN(timestamp), MAX(timestamp)
                 FROM server_metrics_raw
@@ -322,10 +316,9 @@ class Aggregator:
                 """,
                 (bucket,)
             )
-            min_ts, max_ts = cursor.fetchone()
 
             # Aggregate server metrics
-            cursor.execute(
+            self.db.execute(
                 """
                 INSERT OR REPLACE INTO server_metrics_1m (
                     timestamp, prompt_tokens_total, prompt_tokens_seconds,
@@ -347,11 +340,11 @@ class Aggregator:
             )
 
             # Aggregate system metrics
-            cursor.execute(
+            self.db.execute(
                 """
                 INSERT OR REPLACE INTO system_metrics_1m (
                     timestamp, cpu_percent, cpu_temperature_c, cpu_power_w,
-                    gpu_usage, gpu_memory_used, gpu_temperature_c,
+                    gpu_usage, gpu_memory_used_mb, gpu_temperature_c,
                     gpu_fan_speed_rpm, gpu_power_w, memory_percent, system_power_w
                 )
                 SELECT
@@ -360,7 +353,7 @@ class Aggregator:
                     AVG(cpu_temperature_c),
                     AVG(cpu_power_w),
                     AVG(gpu_usage),
-                    AVG(gpu_memory_used),
+                    AVG(gpu_memory_used_mb),
                     AVG(gpu_temperature_c),
                     AVG(gpu_fan_speed_rpm),
                     AVG(gpu_power_w),
@@ -373,31 +366,22 @@ class Aggregator:
             )
 
             # Delete raw data for this bucket
-            cursor.execute(
+            self.db.execute(
                 "DELETE FROM server_metrics_raw WHERE substr(timestamp, 1, 16) = ?",
                 (bucket,)
             )
-            cursor.execute(
+            self.db.execute(
                 "DELETE FROM system_metrics_raw WHERE substr(timestamp, 1, 16) = ?",
                 (bucket,)
             )
 
-        self.db.conn.commit()
-
     def _compress_to_hour(self) -> None:
         """Compress 1-minute data to 1-hour buckets."""
-        cursor = self.db.conn.cursor()
-
         # Get the cutoff time (1 month ago)
-        cursor.execute(
-            """
-            SELECT datetime('now', '-1 month')
-            """
-        )
-        cutoff = cursor.fetchone()[0]
+        cutoff = self.db.execute_query("SELECT datetime('now', '-1 month')")[0]
 
         # Get distinct hour buckets
-        cursor.execute(
+        buckets = self.db.execute_all(
             """
             SELECT DISTINCT substr(timestamp, 1, 13) as hour_bucket
             FROM server_metrics_1m
@@ -407,13 +391,12 @@ class Aggregator:
             (cutoff,)
         )
 
-        buckets = cursor.fetchall()
         if not buckets:
             return
 
         for (bucket,) in buckets:
             # Aggregate server metrics
-            cursor.execute(
+            self.db.execute(
                 """
                 INSERT OR REPLACE INTO server_metrics_1h (
                     timestamp, prompt_tokens_total, prompt_tokens_seconds,
@@ -435,11 +418,11 @@ class Aggregator:
             )
 
             # Aggregate system metrics
-            cursor.execute(
+            self.db.execute(
                 """
                 INSERT OR REPLACE INTO system_metrics_1h (
                     timestamp, cpu_percent, cpu_temperature_c, cpu_power_w,
-                    gpu_usage, gpu_memory_used, gpu_temperature_c,
+                    gpu_usage, gpu_memory_used_mb, gpu_temperature_c,
                     gpu_fan_speed_rpm, gpu_power_w, memory_percent, system_power_w
                 )
                 SELECT
@@ -448,7 +431,7 @@ class Aggregator:
                     AVG(cpu_temperature_c),
                     AVG(cpu_power_w),
                     AVG(gpu_usage),
-                    AVG(gpu_memory_used),
+                    AVG(gpu_memory_used_mb),
                     AVG(gpu_temperature_c),
                     AVG(gpu_fan_speed_rpm),
                     AVG(gpu_power_w),
@@ -461,16 +444,14 @@ class Aggregator:
             )
 
             # Delete 1-minute data for this bucket
-            cursor.execute(
+            self.db.execute(
                 "DELETE FROM server_metrics_1m WHERE substr(timestamp, 1, 13) = ?",
                 (bucket,)
             )
-            cursor.execute(
+            self.db.execute(
                 "DELETE FROM system_metrics_1m WHERE substr(timestamp, 1, 13) = ?",
                 (bucket,)
             )
-
-        self.db.conn.commit()
 
     def start(self) -> None:
         """Start the aggregation loop."""
@@ -559,8 +540,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
             return
 
         # Get latest from database
-        cursor = self.aggregator.db.conn.cursor()
-        cursor.execute(
+        row = self.aggregator.db.execute_query(
             """
             SELECT timestamp, server_data, system_data, cost_data
             FROM combined_metrics
@@ -568,7 +548,6 @@ class MetricsHandler(BaseHTTPRequestHandler):
             LIMIT 1
             """
         )
-        row = cursor.fetchone()
 
         if row:
             self.send_json_response({
@@ -600,8 +579,6 @@ class MetricsHandler(BaseHTTPRequestHandler):
         except ValueError:
             limit = 100
 
-        cursor = self.aggregator.db.conn.cursor()
-
         # Build query
         query_str = f"SELECT * FROM {table} WHERE 1=1"
         params = []
@@ -615,8 +592,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
         query_str += " ORDER BY timestamp DESC LIMIT ?"
 
-        cursor.execute(query_str, params + [limit])
-        rows = cursor.fetchall()
+        rows = self.aggregator.db.execute_all(query_str, params + [limit])
 
         results = []
         for row in rows:
@@ -644,22 +620,18 @@ class MetricsHandler(BaseHTTPRequestHandler):
             self.send_error(503, "Aggregator not initialized")
             return
 
-        cursor = self.aggregator.db.conn.cursor()
-
         # Get available tables
-        cursor.execute(
+        tables = [row[0] for row in self.aggregator.db.execute_all(
             """
             SELECT name FROM sqlite_master
             WHERE type='table' AND name LIKE 'metrics_%'
             """
-        )
-        tables = [row[0] for row in cursor.fetchall()]
+        )]
 
         # Get columns for each table
         metrics_info = {}
         for table in tables:
-            cursor.execute(f"PRAGMA table_info({table})")
-            columns = [row[1] for row in cursor.fetchall()]
+            columns = [row[1] for row in self.aggregator.db.execute_all(f"PRAGMA table_info({table})")]
             metrics_info[table] = columns
 
         self.send_json_response({
@@ -676,26 +648,21 @@ class MetricsHandler(BaseHTTPRequestHandler):
             })
             return
 
-        cursor = self.aggregator.db.conn.cursor()
-
         # Get row counts
-        cursor.execute("SELECT COUNT(*) FROM server_metrics_raw")
-        server_raw_count = cursor.fetchone()[0]
+        server_raw_count = self.aggregator.db.execute_query("SELECT COUNT(*) FROM server_metrics_raw")[0]
 
-        cursor.execute("SELECT COUNT(*) FROM system_metrics_raw")
-        system_raw_count = cursor.fetchone()[0]
+        system_raw_count = self.aggregator.db.execute_query("SELECT COUNT(*) FROM system_metrics_raw")[0]
 
-        cursor.execute("SELECT COUNT(*) FROM combined_metrics")
-        combined_count = cursor.fetchone()[0]
+        combined_count = self.aggregator.db.execute_query("SELECT COUNT(*) FROM combined_metrics")[0]
 
         # Get last timestamp
-        cursor.execute(
+        last_row = self.aggregator.db.execute_query(
             """
             SELECT timestamp FROM combined_metrics
             ORDER BY timestamp DESC LIMIT 1
             """
         )
-        last_timestamp = cursor.fetchone()[0] if cursor.fetchone() else None
+        last_timestamp = last_row[0] if last_row else None
 
         self.send_json_response({
             "status": "running" if self.aggregator.running else "stopped",

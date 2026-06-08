@@ -1,6 +1,7 @@
 """SQLite database initialization and management for llama-monitor."""
 
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -21,6 +22,7 @@ class Database:
         """
         self.db_path = db_path
         self.conn: Optional[sqlite3.Connection] = None
+        self._lock = threading.RLock()  # Reentrant lock for thread-safe access
         self._ensure_directory()
 
     def _ensure_directory(self) -> None:
@@ -34,19 +36,21 @@ class Database:
         Returns:
             SQLite connection object
         """
-        if self.conn is None:
-            # check_same_thread=False allows using the connection from any thread
-            # This is necessary because the aggregator runs in a background thread
-            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self.conn.row_factory = sqlite3.Row
-            self._initialize_schema()
-        return self.conn
+        with self._lock:
+            if self.conn is None:
+                # check_same_thread=False allows using the connection from any thread
+                # This is necessary because the aggregator runs in a background thread
+                self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+                self.conn.row_factory = sqlite3.Row
+                self._initialize_schema()
+            return self.conn
 
     def close(self) -> None:
         """Close database connection."""
-        if self.conn is not None:
-            self.conn.close()
-            self.conn = None
+        with self._lock:
+            if self.conn is not None:
+                self.conn.close()
+                self.conn = None
 
     def __enter__(self) -> "Database":
         """Context manager entry."""
@@ -56,6 +60,68 @@ class Database:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Context manager exit."""
         self.close()
+
+    def lock(self):
+        """Context manager for acquiring database lock.
+
+        Use this to ensure thread-safe database operations.
+        """
+        return self._lock
+
+    def execute(self, sql: str, params: Optional[tuple] = None) -> sqlite3.Cursor:
+        """Execute a SQL statement with the lock.
+
+        Args:
+            sql: SQL statement to execute
+            params: Parameters for the statement
+
+        Returns:
+            Cursor object
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+            if params:
+                cursor.execute(sql, params)
+            else:
+                cursor.execute(sql)
+            self.conn.commit()
+            return cursor
+
+    def execute_query(self, sql: str, params: Optional[tuple] = None) -> Optional[sqlite3.Row]:
+        """Execute a SELECT query with the lock.
+
+        Args:
+            sql: SQL query to execute
+            params: Parameters for the query
+
+        Returns:
+            First row result or None
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+            if params:
+                cursor.execute(sql, params)
+            else:
+                cursor.execute(sql)
+            return cursor.fetchone()
+
+    def execute_all(self, sql: str, params: Optional[tuple] = None) -> list:
+        """Execute a SELECT query and return all results with the lock.
+
+        Args:
+            sql: SQL query to execute
+            params: Parameters for the query
+
+        Returns:
+            List of all row results
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+            if params:
+                cursor.execute(sql, params)
+            else:
+                cursor.execute(sql)
+            return cursor.fetchall()
 
     def _initialize_schema(self) -> None:
         """Initialize database schema if not already initialized."""
@@ -405,38 +471,40 @@ class Database:
             metrics: Dictionary of metrics
             table: Table name (raw, 1m, or 1h)
         """
-        cursor = self.conn.cursor()
+        with self._lock:
+            cursor = self.conn.cursor()
 
-        columns = [
-            "timestamp",
-            "prompt_tokens_total",
-            "prompt_tokens_seconds",
-            "tokens_predicted_total",
-            "predicted_tokens_seconds",
-            "requests_processing",
-            "requests_deferred",
-        ]
+            columns = [
+                "timestamp",
+                "prompt_tokens_total",
+                "prompt_tokens_seconds",
+                "tokens_predicted_total",
+                "predicted_tokens_seconds",
+                "requests_processing",
+                "requests_deferred",
+            ]
 
-        values = [
-            timestamp,
-            metrics.get("prompt_tokens_total"),
-            metrics.get("prompt_tokens_seconds"),
-            metrics.get("tokens_predicted_total"),
-            metrics.get("predicted_tokens_seconds"),
-            metrics.get("requests_processing"),
-            metrics.get("requests_deferred"),
-        ]
+            values = [
+                timestamp,
+                metrics.get("prompt_tokens_total"),
+                metrics.get("prompt_tokens_seconds"),
+                metrics.get("tokens_predicted_total"),
+                metrics.get("predicted_tokens_seconds"),
+                metrics.get("requests_processing"),
+                metrics.get("requests_deferred"),
+            ]
 
-        placeholders = ", ".join(["?" for _ in columns])
-        column_names = ", ".join(columns)
+            placeholders = ", ".join(["?" for _ in columns])
+            column_names = ", ".join(columns)
 
-        cursor.execute(
-            f"""
-            INSERT OR REPLACE INTO {table} ({column_names})
-            VALUES ({placeholders})
-            """,
-            values,
-        )
+            cursor.execute(
+                f"""
+                INSERT OR REPLACE INTO {table} ({column_names})
+                VALUES ({placeholders})
+                """,
+                values,
+            )
+            self.conn.commit()
 
     def insert_system_metrics(
         self,
@@ -451,66 +519,68 @@ class Database:
             metrics: Dictionary of metrics
             table: Table name (raw, 1m, or 1h)
         """
-        cursor = self.conn.cursor()
+        with self._lock:
+            cursor = self.conn.cursor()
 
-        # Convert JSON fields
-        cpu_cores_percent = (
-            metrics.get("cpu_cores_percent")
-            if metrics.get("cpu_cores_percent") is None
-            else str(metrics.get("cpu_cores_percent"))
-        )
-        cpu_temperature_c = (
-            metrics.get("cpu_temperature_c")
-            if metrics.get("cpu_temperature_c") is None
-            else str(metrics.get("cpu_temperature_c"))
-        )
+            # Convert JSON fields
+            cpu_cores_percent = (
+                metrics.get("cpu_cores_percent")
+                if metrics.get("cpu_cores_percent") is None
+                else str(metrics.get("cpu_cores_percent"))
+            )
+            cpu_temperature_c = (
+                metrics.get("cpu_temperature_c")
+                if metrics.get("cpu_temperature_c") is None
+                else str(metrics.get("cpu_temperature_c"))
+            )
 
-        columns = [
-            "timestamp",
-            "cpu_percent",
-            "cpu_cores_percent",
-            "cpu_temperature_c",
-            "cpu_power_w",
-            "gpu_usage",
-            "gpu_memory_used_mb",
-            "gpu_memory_total_mb",
-            "gpu_temperature_c",
-            "gpu_fan_speed_rpm",
-            "gpu_power_w",
-            "memory_used_mb",
-            "memory_total_mb",
-            "memory_percent",
-            "system_power_w",
-        ]
+            columns = [
+                "timestamp",
+                "cpu_percent",
+                "cpu_cores_percent",
+                "cpu_temperature_c",
+                "cpu_power_w",
+                "gpu_usage",
+                "gpu_memory_used_mb",
+                "gpu_memory_total_mb",
+                "gpu_temperature_c",
+                "gpu_fan_speed_rpm",
+                "gpu_power_w",
+                "memory_used_mb",
+                "memory_total_mb",
+                "memory_percent",
+                "system_power_w",
+            ]
 
-        values = [
-            timestamp,
-            metrics.get("cpu_percent"),
-            cpu_cores_percent,
-            cpu_temperature_c,
-            metrics.get("cpu_power_w"),
-            metrics.get("gpu_usage"),
-            metrics.get("gpu_memory_used_mb"),
-            metrics.get("gpu_memory_total_mb"),
-            metrics.get("gpu_temperature_c"),
-            metrics.get("gpu_fan_speed_rpm"),
-            metrics.get("gpu_power_w"),
-            metrics.get("memory_used_mb"),
-            metrics.get("memory_total_mb"),
-            metrics.get("memory_percent"),
-            metrics.get("system_power_w"),
-        ]
+            values = [
+                timestamp,
+                metrics.get("cpu_percent"),
+                cpu_cores_percent,
+                cpu_temperature_c,
+                metrics.get("cpu_power_w"),
+                metrics.get("gpu_usage"),
+                metrics.get("gpu_memory_used_mb"),
+                metrics.get("gpu_memory_total_mb"),
+                metrics.get("gpu_temperature_c"),
+                metrics.get("gpu_fan_speed_rpm"),
+                metrics.get("gpu_power_w"),
+                metrics.get("memory_used_mb"),
+                metrics.get("memory_total_mb"),
+                metrics.get("memory_percent"),
+                metrics.get("system_power_w"),
+            ]
 
-        placeholders = ", ".join(["?" for _ in columns])
-        column_names = ", ".join(columns)
+            placeholders = ", ".join(["?" for _ in columns])
+            column_names = ", ".join(columns)
 
-        cursor.execute(
-            f"""
-            INSERT OR REPLACE INTO {table} ({column_names})
-            VALUES ({placeholders})
-            """,
-            values,
-        )
+            cursor.execute(
+                f"""
+                INSERT OR REPLACE INTO {table} ({column_names})
+                VALUES ({placeholders})
+                """,
+                values,
+            )
+            self.conn.commit()
 
     def insert_process_gpu_metrics(
         self,
@@ -531,17 +601,19 @@ class Database:
             gpu_memory_mb: GPU memory usage in MB
             table: Table name (raw, 1m, or 1h)
         """
-        cursor = self.conn.cursor()
+        with self._lock:
+            cursor = self.conn.cursor()
 
-        cursor.execute(
-            f"""
-            INSERT OR REPLACE INTO {table} (
-                timestamp, process_name, pid, gpu_utilization, gpu_memory_mb
+            cursor.execute(
+                f"""
+                INSERT OR REPLACE INTO {table} (
+                    timestamp, process_name, pid, gpu_utilization, gpu_memory_mb
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (timestamp, process_name, pid, gpu_utilization, gpu_memory_mb),
             )
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (timestamp, process_name, pid, gpu_utilization, gpu_memory_mb),
-        )
+            self.conn.commit()
 
     def insert_idle_baseline(
         self,
@@ -560,17 +632,19 @@ class Database:
             system_power_w: System power in watts
             is_valid: Whether this is a valid baseline
         """
-        cursor = self.conn.cursor()
+        with self._lock:
+            cursor = self.conn.cursor()
 
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO idle_baseline (
-                timestamp, cpu_percent, gpu_percent, system_power_w, is_valid
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO idle_baseline (
+                    timestamp, cpu_percent, gpu_percent, system_power_w, is_valid
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (timestamp, cpu_percent, gpu_percent, system_power_w, 1 if is_valid else 0),
             )
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (timestamp, cpu_percent, gpu_percent, system_power_w, 1 if is_valid else 0),
-        )
+            self.conn.commit()
 
     def insert_server_metrics_raw(
         self,
@@ -597,28 +671,29 @@ class Database:
             slots_active: Number of active slots.
             slots_processing: Number of processing slots.
         """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO server_metrics_raw (
-                timestamp, prompt_tokens_total, prompt_tokens_seconds,
-                tokens_predicted_total, predicted_tokens_seconds,
-                requests_processing, requests_deferred, slots_active, slots_processing
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                timestamp,
-                prompt_tokens_total,
-                prompt_tokens_seconds,
-                tokens_predicted_total,
-                predicted_tokens_seconds,
-                requests_processing,
-                requests_deferred,
-                slots_active,
-                slots_processing,
-            ),
-        )
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO server_metrics_raw (
+                    timestamp, prompt_tokens_total, prompt_tokens_seconds,
+                    tokens_predicted_total, predicted_tokens_seconds,
+                    requests_processing, requests_deferred, slots_active, slots_processing
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    timestamp,
+                    prompt_tokens_total,
+                    prompt_tokens_seconds,
+                    tokens_predicted_total,
+                    predicted_tokens_seconds,
+                    requests_processing,
+                    requests_deferred,
+                    slots_active,
+                    slots_processing,
+                ),
+            )
+            self.conn.commit()
 
     def insert_system_metrics_raw(
         self,
@@ -657,35 +732,36 @@ class Database:
             memory_percent: System memory usage percentage.
             system_power_w: System power in watts.
         """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO system_metrics_raw (
-                timestamp, cpu_percent, cpu_cores_percent, cpu_temperature_c,
-                cpu_power_w, gpu_usage, gpu_memory_used_mb, gpu_memory_total_mb,
-                gpu_temperature_c, gpu_fan_speed_rpm, gpu_power_w,
-                memory_used_mb, memory_total_mb, memory_percent, system_power_w
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                timestamp,
-                cpu_percent,
-                cpu_cores_percent,
-                cpu_temperature_c,
-                cpu_power_w,
-                gpu_usage,
-                gpu_memory_used_mb,
-                gpu_memory_total_mb,
-                gpu_temperature_c,
-                gpu_fan_speed_rpm,
-                gpu_power_w,
-                memory_used_mb,
-                memory_total_mb,
-                memory_percent,
-                system_power_w,
-            ),
-        )
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO system_metrics_raw (
+                    timestamp, cpu_percent, cpu_cores_percent, cpu_temperature_c,
+                    cpu_power_w, gpu_usage, gpu_memory_used_mb, gpu_memory_total_mb,
+                    gpu_temperature_c, gpu_fan_speed_rpm, gpu_power_w,
+                    memory_used_mb, memory_total_mb, memory_percent, system_power_w
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    timestamp,
+                    cpu_percent,
+                    cpu_cores_percent,
+                    cpu_temperature_c,
+                    cpu_power_w,
+                    gpu_usage,
+                    gpu_memory_used_mb,
+                    gpu_memory_total_mb,
+                    gpu_temperature_c,
+                    gpu_fan_speed_rpm,
+                    gpu_power_w,
+                    memory_used_mb,
+                    memory_total_mb,
+                    memory_percent,
+                    system_power_w,
+                ),
+            )
+            self.conn.commit()
 
     def insert_process_gpu_metrics_raw(
         self,
@@ -704,16 +780,17 @@ class Database:
             gpu_utilization: GPU utilization percentage.
             gpu_memory_mb: GPU memory used in MB.
         """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO process_gpu_metrics_raw (
-                timestamp, process_name, pid, gpu_utilization, gpu_memory_mb
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
-            (timestamp, process_name, pid, gpu_utilization, gpu_memory_mb),
-        )
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO process_gpu_metrics_raw (
+                    timestamp, process_name, pid, gpu_utilization, gpu_memory_mb
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (timestamp, process_name, pid, gpu_utilization, gpu_memory_mb),
+            )
+            self.conn.commit()
 
     def insert_process_cpu_metrics_raw(
         self,
@@ -732,16 +809,17 @@ class Database:
             cpu_percent: CPU utilization percentage.
             cpu_power_w: CPU power in watts.
         """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO process_cpu_metrics_raw (
-                timestamp, process_name, pid, cpu_percent, cpu_power_w
-            ) VALUES (?, ?, ?, ?, ?)
-            """,
-            (timestamp, process_name, pid, cpu_percent, cpu_power_w),
-        )
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO process_cpu_metrics_raw (
+                    timestamp, process_name, pid, cpu_percent, cpu_power_w
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (timestamp, process_name, pid, cpu_percent, cpu_power_w),
+            )
+            self.conn.commit()
 
     def update_cumulative_energy(
         self,
@@ -760,17 +838,19 @@ class Database:
             cpu_wh: CPU energy in watt-hours
             session_cost_usd: Session cost in USD
         """
-        cursor = self.conn.cursor()
+        with self._lock:
+            cursor = self.conn.cursor()
 
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO cumulative_energy (
-                id, session_start, last_update, total_wh, gpu_wh, cpu_wh, session_cost_usd
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO cumulative_energy (
+                    id, session_start, last_update, total_wh, gpu_wh, cpu_wh, session_cost_usd
+                )
+                VALUES (1, ?, datetime('now'), ?, ?, ?, ?)
+                """,
+                (session_start, total_wh, gpu_wh, cpu_wh, session_cost_usd),
             )
-            VALUES (1, ?, datetime('now'), ?, ?, ?, ?)
-            """,
-            (session_start, total_wh, gpu_wh, cpu_wh, session_cost_usd),
-        )
+            self.conn.commit()
 
     def get_cumulative_energy(self) -> Optional[Dict[str, Any]]:
         """Get current cumulative energy values.
@@ -919,15 +999,16 @@ class Database:
             key: Setting key
             value: Value to set
         """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO settings (key, value, updated_at)
-            VALUES (?, ?, datetime('now'))
-            """,
-            (key, str(value)),
-        )
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO settings (key, value, updated_at)
+                VALUES (?, ?, datetime('now'))
+                """,
+                (key, str(value)),
+            )
+            self.conn.commit()
 
     def get_cost_rate(self) -> float:
         """Get the cost rate from settings.
