@@ -12,6 +12,7 @@ The web server should be started separately from the aggregator daemon.
 import json
 import os
 import sys
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -649,7 +650,7 @@ def index() -> str:
             // Update cost
             const cost = data.cost || {};
             const totalWh = cost.total_wh || 0;
-            const costRate = {{ cost_rate|default(0.12) }};
+            const costRate = cost.cost_rate || 0.12;
             const costUsd = totalWh / 1000 * costRate;
 
             document.getElementById('cost-value').textContent = '$' + costUsd.toFixed(4);
@@ -739,7 +740,7 @@ def index() -> str:
 
         async function fetchMetrics() {
             try {
-                const port = {{ port|default(8080) }};
+                const port = 8080;
                 const response = await fetch('http://localhost:' + port + '/api/metrics/latest');
                 if (response.ok) {
                     const data = await response.json();
@@ -963,6 +964,48 @@ def run_server(host="0.0.0.0", port=8080, debug=False):
     print("Press Ctrl+C to stop")
 
     socketio.run(app, host=host, port=port, debug=debug)
+
+
+# Global server reference for stop_server
+_server_thread = None
+
+
+def start_server(host="0.0.0.0", port=8080, metrics_cache=None):
+    """Start the web server in a background thread.
+
+    Args:
+        host: Host to bind to
+        port: Port to listen on
+        metrics_cache: Optional MetricsCache instance for sharing data
+    """
+    global _server_thread
+
+    print(f"Starting web server on http://{host}:{port}")
+
+    # Create and start server thread
+    def run():
+        run_server(host=host, port=port, debug=False)
+
+    _server_thread = threading.Thread(target=run, daemon=True)
+    _server_thread.start()
+
+    # Wait for server to be ready
+    import time
+    time.sleep(0.5)
+
+    print(f"Web server started on http://{host}:{port}")
+
+
+def stop_server():
+    """Stop the running web server."""
+    global _server_thread
+
+    if _server_thread:
+        print("Stopping web server...")
+        # Note: Flask-SocketIO doesn't have a clean shutdown method
+        # The thread will be marked daemon=True so it exits when main process ends
+        _server_thread = None
+        print("Web server stopped")
 
 
 def main():

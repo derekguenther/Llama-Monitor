@@ -293,8 +293,9 @@ class ElectricityCostCalculator:
 if __name__ == "__main__":
     # Test the calculator
     db = Database(":memory:")
+    db.set_cost_rate(0.12)  # Set cost rate in database
     with db:
-        calculator = ElectricityCostCalculator(db, cost_rate=0.12)
+        calculator = ElectricityCostCalculator(db)
 
         # Start a session
         calculator.start_session()
