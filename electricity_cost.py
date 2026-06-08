@@ -22,6 +22,8 @@ class ElectricityCostCalculator:
             idle_baseline_w: Default idle power baseline in watts
         """
         self.database = database
+        # Ensure database connection is open before accessing settings
+        self.database.connect()
         # Load cost rate from database (persisted user setting)
         self.cost_rate = self.database.get_cost_rate()
         self.idle_baseline_w = idle_baseline_w
