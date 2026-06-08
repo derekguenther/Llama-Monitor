@@ -35,7 +35,9 @@ class Database:
             SQLite connection object
         """
         if self.conn is None:
-            self.conn = sqlite3.connect(self.db_path)
+            # check_same_thread=False allows using the connection from any thread
+            # This is necessary because the aggregator runs in a background thread
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             self.conn.row_factory = sqlite3.Row
             self._initialize_schema()
         return self.conn
