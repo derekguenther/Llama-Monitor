@@ -50,15 +50,15 @@ class Aggregator:
         self.config = load_config(self.config_path)
 
         # Database
-        self.db = Database(self.config.database_path)
+        self.db = Database(self.config.get("database.path", "llama-monitor.db"))
 
         # Collectors
         self.server_collector = ServerMetricsCollector(
-            server_url=self.config.server_url,
-            metrics_endpoint=self.config.server_metrics_endpoint
+            server_url=self.config.get("server.url", "http://localhost:8080"),
+            metrics_endpoint=self.config.get("server.metrics_endpoint", "/metrics")
         )
         self.system_collector = SystemMetricsCollector(
-            tracked_processes=self.config.tracked_processes
+            tracked_processes=self.config.get("metrics_collection.tracked_processes", ["llama.cpp"])
         )
 
         # Cost calculator
@@ -277,7 +277,7 @@ class Aggregator:
         self.last_compression_check = current_time
 
         # Check if compression is enabled
-        if not self.config.compression_enabled:
+        if not self.config.get("compression.enabled", True):
             return
 
         # Check for 1-minute compression (raw data older than 1 week)
@@ -477,7 +477,7 @@ class Aggregator:
         self.running = True
         self.cost_calculator.start_session()
 
-        polling_interval = self.config.polling_interval
+        polling_interval = self.config.get("metrics_collection.interval_seconds", 1.0)
 
         def collection_loop():
             while self.running:
@@ -805,7 +805,7 @@ def create_app(aggregator: Aggregator) -> HTTPServer:
         Configured HTTPServer instance
     """
     MetricsHandler.aggregator = aggregator
-    server = HTTPServer(("0.0.0.0", aggregator.config.web_http_port), MetricsHandler)
+    server = HTTPServer(("0.0.0.0", aggregator.config.get("web.http_port", 8080)), MetricsHandler)
     return server
 
 
@@ -847,7 +847,8 @@ def main() -> int:
     # Start aggregator collection
     aggregator.start()
 
-    print(f"Aggregator started on port {aggregator.config.web_http_port}")
+    port = aggregator.config.get("web.http_port", 8080)
+    print(f"Aggregator started on port {port}")
     print("Press Ctrl+C to stop")
 
     # Create and run HTTP server

@@ -15,12 +15,15 @@ class Config:
             "power_w": 150.0,
         },
         "compression": {
+            "enabled": True,
             "raw_to_1m_interval_seconds": 60,
             "raw_to_1m_start_after_seconds": 60,
             "1m_to_1h_interval_seconds": 3600,
             "1m_to_1h_start_after_seconds": 120,
         },
         "server": {
+            "url": "http://localhost:8080",
+            "metrics_endpoint": "/metrics",
             "port": 8000,
         },
         "electricity": {
@@ -29,6 +32,13 @@ class Config:
         "metrics_collection": {
             "interval_seconds": 1.0,
             "collect_metrics": True,
+            "tracked_processes": ["llama.cpp"],
+        },
+        "database": {
+            "path": "llama-monitor.db",
+        },
+        "web": {
+            "http_port": 8080,
         },
     }
 
@@ -92,6 +102,21 @@ class Config:
             else:
                 return default
         return value
+
+    def set(self, key: str, value: Any) -> None:
+        """Set a configuration value by dot-notation key.
+
+        Args:
+            key: Dot-notation key (e.g., "web.http_port").
+            value: Value to set.
+        """
+        parts = key.split(".")
+        config = self._config
+        for part in parts[:-1]:
+            if part not in config:
+                config[part] = {}
+            config = config[part]
+        config[parts[-1]] = value
 
     def get_idle_baseline_config(self) -> Dict[str, Any]:
         """Get idle baseline configuration.
