@@ -455,16 +455,19 @@ def main():
     # On Windows, disable TUI by default and warn if user tries to enable it
     if os.name == 'nt':
         if args.tui:
-            print("ERROR: TUI mode requires windows-curses on Windows.")
-            print("")
-            print("The curses module is not installed by default on Windows.")
-            print("")
-            print("Options:")
-            print("  1. Use the web interface (default): python main.py")
-            print("  2. Install windows-curses: pip install windows-curses")
-            print("  3. Use Windows Terminal, PowerShell, or MSYS2")
-            print("")
-            sys.exit(1)
+            try:
+                import curses
+            except ImportError:
+                print("ERROR: TUI mode requires windows-curses on Windows.")
+                print("")
+                print("The curses module is not installed by default on Windows.")
+                print("")
+                print("Options:")
+                print("  1. Use the web interface (default): python main.py")
+                print("  2. Install windows-curses: pip install windows-curses")
+                print("  3. Use Windows Terminal, PowerShell, or MSYS2")
+                print("")
+                sys.exit(1)
         # On Windows, default to web-only mode (already handled by enable_web default)
         # but make it explicit
         if not args.no_web:
