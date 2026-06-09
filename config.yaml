@@ -1,0 +1,120 @@
+# llama-monitor Configuration Example
+# Copy this file to config.yaml and customize for your setup
+
+# Server connection settings
+server:
+  # URL of your llama.cpp server
+  url: "http://localhost:8000"
+
+  # Model alias (for display purposes)
+  model_id: "qwen3-coder-next"
+
+  # Metrics endpoint (default: /metrics)
+  metrics_endpoint: "/metrics"
+
+# Data collection settings
+data:
+  # How often to poll for metrics (seconds)
+  # Valid values: 1, 2, 5, 10, 15, 20, 30
+  polling_interval: 1
+
+  # First compression level (raw -> 1-minute buckets)
+  compression_level_1:
+    # Aggregation interval
+    interval: 1
+
+    # Start compression after this duration
+    start_after: 1
+
+    # Time unit for start_after
+    # Options: second, minute, hour, day, week, month
+    unit: week
+
+  # Second compression level (1-minute -> 1-hour buckets)
+  compression_level_2:
+    # Aggregation interval
+    interval: 1
+
+    # Start compression after this duration
+    start_after: 1
+
+    # Time unit for start_after
+    unit: month
+
+  # Retention settings
+  retention:
+    # If true, raw data is kept forever (no compression)
+    raw_forever: false
+
+    # Optional: path to archive directory for old data
+    archive_path: "archive/"
+
+# Display settings
+display:
+  # TUI refresh rate (seconds)
+  tui_refresh_rate: 2.0
+
+  # Web dashboard refresh rate (seconds)
+  web_refresh_rate: 1.0
+
+  # Show electricity cost in displays
+  show_cost: true
+
+  # Show temperature readings
+  show_temps: true
+
+  # Electricity rate in USD per kWh
+  # Adjust this based on your local electricity rates
+  cost_rate: 0.12
+
+# Database settings
+database:
+  # Path to SQLite database file
+  path: "llama_monitor.db"
+
+  # Enable compression (if false, only raw data is stored)
+  compression_enabled: true
+
+  # Vacuum database periodically to reclaim space
+  auto_vacuum: true
+
+# Alert settings (future feature - not yet implemented)
+# alerts:
+#   gpu_temperature:
+#     warning: 80
+#     critical: 90
+#   cpu_usage:
+#     warning: 90
+#     critical: 95
+
+# Logging settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+
+  # Log file path (empty string = no file logging)
+  file: "llama_monitor.log"
+
+# Per-process tracking settings
+tracking:
+  # Track specific processes by name (exact match)
+  tracked_processes:
+    - "llama-server.exe"
+
+  # Minimum GPU utilization to track (0-100)
+  min_gpu_utilization: 1
+
+# Web server settings (for --web mode)
+web:
+  # HTTPS port (primary application traffic)
+  https_port: 2633
+
+  # HTTP port (onboarding/CA certificate downloads)
+  http_port: 2634
+
+  # Enable HTTPS (requires valid cert/key)
+  https_enabled: true
+
+  # Certificate and key paths (if using custom certs)
+  # cert_path: "cert.pem"
+  # key_path: "key.pem"

@@ -126,7 +126,9 @@ class ServerMetricsCollector:
             # Direct JSON format
             for key, value in metrics.items():
                 if isinstance(value, (int, float)):
-                    result[key] = value
+                    # Strip llamacpp: prefix if present
+                    clean_key = key.replace("llamacpp:", "")
+                    result[clean_key] = value
         elif isinstance(metrics, str):
             # Prometheus text format
             for line in metrics.strip().split("\n"):
@@ -138,7 +140,9 @@ class ServerMetricsCollector:
                 if len(parts) == 2:
                     name, value = parts
                     try:
-                        result[name] = float(value)
+                        # Strip llamacpp: prefix if present
+                        clean_name = name.replace("llamacpp:", "")
+                        result[clean_name] = float(value)
                     except ValueError:
                         pass
 
