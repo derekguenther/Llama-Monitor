@@ -37,6 +37,9 @@ app.config["SECRET_KEY"] = "llama-monitor-secret-key"
 # Configure SocketIO
 socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
+# Global metrics_cache reference (set by start_server())
+_metrics_cache: Optional[Any] = None
+
 
 def get_aggregator() -> Optional[Aggregator]:
     """Get aggregator instance if available."""
@@ -800,8 +803,17 @@ def index() -> str:
 
 @app.route("/api/metrics/latest")
 def api_latest_metrics():
-    """Return latest metrics from aggregator or database."""
-    # Try aggregator first
+    """Return latest metrics from metrics_cache, aggregator, or database."""
+    # Try metrics_cache first (shared with aggregator)
+    if _metrics_cache is not None:
+        try:
+            cached = _metrics_cache.get()
+            if cached:
+                return jsonify(cached)
+        except Exception:
+            pass
+
+    # Try aggregator next
     if AGGREGATOR_AVAILABLE:
         aggregator = get_aggregator()
         if aggregator and aggregator.last_metrics:
@@ -990,7 +1002,10 @@ def start_server(host="0.0.0.0", port=8080, metrics_cache=None):
         port: Port to listen on
         metrics_cache: Optional MetricsCache instance for sharing data
     """
-    global _server_thread
+    global _server_thread, _metrics_cache
+
+    # Store metrics_cache for use by route handlers
+    _metrics_cache = metrics_cache
 
     print(f"Starting web server on http://{host}:{port}")
 
