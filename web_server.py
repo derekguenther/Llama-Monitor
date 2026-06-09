@@ -10,12 +10,18 @@ The web server should be started separately from the aggregator daemon.
 """
 
 import json
+import logging
 import os
 import sys
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+# Suppress Werkzeug/Flask HTTP request logs
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('socketio').setLevel(logging.WARNING)
+logging.getLogger('engineio').setLevel(logging.WARNING)
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_socketio import SocketIO, emit

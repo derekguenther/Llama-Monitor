@@ -51,15 +51,49 @@ class Aggregator:
         """Collect all metrics from all sources.
 
         Returns:
-            Dictionary with all metrics.
+            Dictionary with all metrics (flattened for cache/web).
         """
         server_metrics = self.server_collector.collect()
         system_metrics = self.system_collector.collect()
 
+        # Flatten server metrics for cache/web usage
+        # server_metrics from collector has nested structure:
+        # { "timestamp": "...", "server": {...}, "slots": [...], "props": {...} }
+        # We want to extract just the actual server metrics
+        server_data = server_metrics.get("server", {})
+
+        # Flatten system metrics for cache/web usage
+        # system_metrics from collector has nested structure:
+        # { "timestamp": "...", "cpu": {...}, "gpu": {...}, "memory": {...}, ... }
+        # The frontend expects flattened keys, so we extract the nested values
+        system = system_metrics
+        cpu = system.get("cpu", {})
+        gpu = system.get("gpu", {})
+        memory = system.get("memory", {})
+
+        system_data = {
+            "cpu_percent": cpu.get("percent", 0),
+            "cpu_cores": cpu.get("cores", []),
+            "cpu_count": cpu.get("count", 0),
+            "cpu_power_w": cpu.get("cpu_power_w", 0),
+            "gpu_usage": gpu.get("usage", 0),
+            "gpu_memory_used": gpu.get("memory_used", 0),
+            "gpu_memory_total": gpu.get("memory_total", 0),
+            "gpu_temperature_c": gpu.get("temperature_c", 0),
+            "gpu_fan_speed_rpm": gpu.get("fan_speed_rpm", 0),
+            "gpu_power_w": gpu.get("power_w", 0),
+            "memory_used": memory.get("used", 0),
+            "memory_total": memory.get("total", 0),
+            "memory_percent": memory.get("percent", 0),
+            "memory_available": memory.get("available", 0),
+            "system_power_w": system.get("system", {}).get("system_power_w", 0),
+            "timestamp": system.get("timestamp", int(time.time())),
+        }
+
         return {
             "timestamp": int(time.time()),
-            "server": server_metrics,
-            "system": system_metrics,
+            "server": server_data,
+            "system": system_data,
         }
 
     def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:
@@ -71,7 +105,7 @@ class Aggregator:
         timestamp = metrics.get("timestamp", int(time.time()))
 
         # Store server metrics
-        server = metrics.get("server", {}).get("server", {})
+        server = metrics.get("server", {})
         self.db.insert_server_metrics_raw(
             timestamp=timestamp,
             prompt_tokens_total=server.get("prompt_tokens_total", 0),
