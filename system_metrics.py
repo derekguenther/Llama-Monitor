@@ -372,6 +372,46 @@ class SystemMetricsCollector:
 
         return result
 
+    def _get_cpu_power_w(self) -> float:
+        """Get CPU package power from Energy Meter performance counter.
+
+        Uses PowerShell's Get-Counter to query the Energy Meter counter set.
+        Returns power in watts, or 0.0 if not available.
+
+        Returns:
+            CPU package power in watts
+        """
+        try:
+            import subprocess
+            import re
+
+            # Query the Energy Meter counter for CPU package power
+            # Use PowerShell to query the Energy Meter performance counter
+            powershell_path = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+            counter_path = r"\Energy Meter(*)\Power"
+
+            cmd = [
+                powershell_path,
+                "-Command",
+                f'(Get-Counter "{counter_path}").CounterSamples | Where-Object {{ $_.InstanceName -like "*pkg*" }} | Select-Object -ExpandProperty CookedValue',
+            ]
+
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=10
+            )
+
+            if result.returncode == 0:
+                # Parse the numeric value from PowerShell output
+                value_str = result.stdout.strip()
+                match = re.match(r"[\d.]+", value_str)
+                if match:
+                    # Energy Meter returns power in milliwatts, convert to watts
+                    return float(match.group()) / 1000.0
+
+            return 0.0
+        except Exception:
+            return 0.0
+
     def _collect_system_power(self) -> Dict[str, Any]:
         """Collect system power consumption.
 
@@ -380,7 +420,13 @@ class SystemMetricsCollector:
         """
         result = {}
 
-        # Try WMI for system power
+        # Get CPU/package power from Energy Meter performance counter
+        cpu_power_w = self._get_cpu_power_w()
+        if cpu_power_w > 0:
+            result["cpu_power_w"] = cpu_power_w
+            result["system_power_w"] = cpu_power_w  # System power equals CPU package power
+
+        # Try WMI for additional power data
         if self.wmi:
             try:
                 # Use battery or power sensor data if available
