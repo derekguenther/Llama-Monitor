@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "llama_monitor",
+  "project_id": "4dcf8713-ba17-4e3b-bc8f-697a4c413c06"
+}
