@@ -1,5 +1,6 @@
 """SQLite database initialization and management for llama-monitor."""
 
+import datetime
 import sqlite3
 import threading
 import time
@@ -891,7 +892,7 @@ class Database:
             Dictionary of energy values or None if not initialized
         """
         cursor = self.conn.cursor()
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
         cursor.execute(
             """
             SELECT date, total_wh, gpu_wh, cpu_wh, last_update
@@ -920,8 +921,8 @@ class Database:
         """
         with self._lock:
             cursor = self.conn.cursor()
-            today = datetime.now().strftime("%Y-%m-%d")
-            now = datetime.now().isoformat()
+            today = datetime.datetime.now().strftime("%Y-%m-%d")
+            now = datetime.datetime.now().isoformat()
 
             cursor.execute(
                 """

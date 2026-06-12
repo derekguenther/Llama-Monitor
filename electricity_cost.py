@@ -220,15 +220,7 @@ class ElectricityCostCalculator:
         self.last_update = datetime.now().isoformat()
         self.last_today_update = datetime.now().isoformat()
 
-        # Update database
-        session_cost = self.calculate_cost(self.total_energy_wh)
-        self.database.update_cumulative_energy(
-            session_start=self.session_start,
-            total_wh=self.total_energy_wh,
-            gpu_wh=self.gpu_energy_wh,
-            cpu_wh=self.cpu_energy_wh,
-            session_cost_usd=session_cost,
-        )
+        # Persist today's energy to database (every second for crash recovery)
         self.database.update_today_energy(
             total_wh=self.today_energy_wh,
             gpu_wh=self.today_gpu_wh,
@@ -242,8 +234,19 @@ class ElectricityCostCalculator:
             "today_wh": self.today_energy_wh,
             "today_gpu_wh": self.today_gpu_wh,
             "today_cpu_wh": self.today_cpu_wh,
-            "total_cost_usd": session_cost,
         }
+
+    def persist_today_energy(self) -> None:
+        """Persist today's energy to database.
+
+        This should be called at least once per minute to ensure energy
+        data is preserved in case of crash or power loss.
+        """
+        self.database.update_today_energy(
+            total_wh=self.today_energy_wh,
+            gpu_wh=self.today_gpu_wh,
+            cpu_wh=self.today_cpu_wh,
+        )
 
     def calculate_idle_baseline(
         self,
