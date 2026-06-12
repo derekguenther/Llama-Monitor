@@ -885,21 +885,24 @@ class Database:
             return dict(row)
         return None
 
-    def get_today_energy(self) -> Optional[Dict[str, Any]]:
+    def get_today_energy(self, date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get today's energy consumption from midnight.
+
+        Args:
+            date: Optional date string (YYYY-MM-DD) to fetch a specific day
 
         Returns:
             Dictionary of energy values or None if not initialized
         """
         cursor = self.conn.cursor()
-        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        target_date = date or datetime.datetime.now().strftime("%Y-%m-%d")
         cursor.execute(
             """
             SELECT date, total_wh, gpu_wh, cpu_wh, last_update
             FROM daily_energy
             WHERE date = ?
             """,
-            (today,),
+            (target_date,),
         )
         row = cursor.fetchone()
         if row:
@@ -911,6 +914,8 @@ class Database:
         total_wh: float,
         gpu_wh: float,
         cpu_wh: float,
+        date_override: Optional[str] = None,
+        timestamp_override: Optional[str] = None,
     ) -> None:
         """Update today's energy consumption.
 
@@ -918,11 +923,13 @@ class Database:
             total_wh: Total energy in watt-hours
             gpu_wh: GPU energy in watt-hours
             cpu_wh: CPU energy in watt-hours
+            date_override: Optional date string (YYYY-MM-DD) to use instead of today
+            timestamp_override: Optional timestamp to use instead of now
         """
         with self._lock:
             cursor = self.conn.cursor()
-            today = datetime.datetime.now().strftime("%Y-%m-%d")
-            now = datetime.datetime.now().isoformat()
+            date = date_override or datetime.datetime.now().strftime("%Y-%m-%d")
+            timestamp = timestamp_override or datetime.datetime.now().isoformat()
 
             cursor.execute(
                 """
@@ -934,7 +941,7 @@ class Database:
                     cpu_wh = ?,
                     last_update = ?
                 """,
-                (today, total_wh, gpu_wh, cpu_wh, now, total_wh, gpu_wh, cpu_wh, now),
+                (date, total_wh, gpu_wh, cpu_wh, timestamp, total_wh, gpu_wh, cpu_wh, timestamp),
             )
             self.conn.commit()
 

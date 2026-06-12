@@ -40,9 +40,12 @@ class ElectricityCostCalculator:
         self.today_gpu_wh = 0.0
         self.today_cpu_wh = 0.0
         self.last_today_update = None
+        self.last_today_date = None
 
         # Load today's energy from database if it exists
         self._load_today_energy()
+        # Track which day we're currently tracking
+        self.last_today_date = datetime.now().strftime("%Y-%m-%d")
 
     def _load_today_energy(self) -> None:
         """Load today's energy from database if available.
@@ -56,6 +59,29 @@ class ElectricityCostCalculator:
             self.today_gpu_wh = today_energy.get("gpu_wh", 0.0)
             self.today_cpu_wh = today_energy.get("cpu_wh", 0.0)
             self.last_today_update = today_energy.get("last_update")
+
+    def _archive_previous_day(self, date: str) -> None:
+        """Archive the previous day's final energy values.
+
+        Stores the day's final value with a timestamp of 23:59:59 on that day
+        to ensure the value is correctly attributed to that day even if the
+        update happens after midnight.
+
+        Args:
+            date: The date of the day to archive (YYYY-MM-DD format)
+        """
+        # Calculate the final timestamp for that day (23:59:59)
+        day_end_time = f"{date}T23:59:59"
+
+        # Store the final value for this day in the daily_energy table
+        # with the day-end timestamp
+        self.database.update_today_energy(
+            total_wh=self.today_energy_wh,
+            gpu_wh=self.today_gpu_wh,
+            cpu_wh=self.today_cpu_wh,
+            date_override=date,
+            timestamp_override=day_end_time,
+        )
 
     def start_session(self) -> None:
         """Start a new energy tracking session."""
@@ -211,7 +237,17 @@ class ElectricityCostCalculator:
         self.cpu_energy_wh += cpu_energy
         self.total_energy_wh += total_energy
 
-        # Update today's energy (resets at midnight)
+        # Check if we've rolled over to a new day and archive the previous day
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        if self.last_today_date and self.last_today_date != current_date:
+            # Archive the previous day's final value with timestamp 23:59:59 of that day
+            self._archive_previous_day(self.last_today_date)
+            # Reset today's energy for the new day
+            self.today_energy_wh = 0.0
+            self.today_gpu_wh = 0.0
+            self.today_cpu_wh = 0.0
+
+        # Update today's energy
         self.today_gpu_wh += gpu_energy
         self.today_cpu_wh += cpu_energy
         self.today_energy_wh += total_energy
@@ -219,6 +255,7 @@ class ElectricityCostCalculator:
         # Update timestamp
         self.last_update = datetime.now().isoformat()
         self.last_today_update = datetime.now().isoformat()
+        self.last_today_date = current_date
 
         # Persist today's energy to database (every second for crash recovery)
         self.database.update_today_energy(
