@@ -65,6 +65,20 @@
             }
         }
 
+        /* Usage-Power Row: Combined Usage graph and Power grid side-by-side */
+        .usage-power-row {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .usage-power-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* Cards */
         .card {
             background: #16213e;
@@ -413,41 +427,45 @@
                 </div>
             </div>
 
-            <!-- Power & Cost -->
-            <div class="card">
-                <h2>Power & Cost</h2>
-                <div class="power-grid">
-                    <div class="power-item">
-                        <div class="power-value" id="gpu-power">0 W</div>
-                        <div class="power-label">GPU Power</div>
-                    </div>
-                    <div class="power-item">
-                        <div class="power-value" id="cpu-power">0 W</div>
-                        <div class="power-label">CPU Power</div>
-                    </div>
-                    <div class="power-item">
-                        <div class="power-value" id="total-power">0 W</div>
-                        <div class="power-label">Total System</div>
+            <!-- Top Row: Usage and Power side-by-side -->
+            <div class="usage-power-row">
+                <!-- Combined CPU/GPU Usage Graph -->
+                <div class="card">
+                    <h2>Usage (60s)</h2>
+                    <div class="graph-container">
+                        <div class="graph-label">CPU % & GPU %</div>
+                        <canvas id="combined-usage-graph" class="graph-canvas"></canvas>
                     </div>
                 </div>
-                <div class="cost-rate-control">
-                    <label>Electricity Rate ($/kWh)</label>
-                    <input type="number" id="cost-rate" value="{{ cost_rate }}" step="0.01" min="0">
+
+                <!-- Power Grid -->
+                <div class="card">
+                    <h2>Power & Cost</h2>
+                    <div class="power-grid">
+                        <div class="power-item">
+                            <div class="power-value" id="gpu-power">0 W</div>
+                            <div class="power-label">GPU Power</div>
+                        </div>
+                        <div class="power-item">
+                            <div class="power-value" id="cpu-power">0 W</div>
+                            <div class="power-label">CPU Power</div>
+                        </div>
+                        <div class="power-item">
+                            <div class="power-value" id="total-power">0 W</div>
+                            <div class="power-label">Total System</div>
+                        </div>
+                    </div>
+                    <div class="cost-rate-control">
+                        <label>Electricity Rate ($/kWh)</label>
+                        <input type="number" id="cost-rate" value="{{ cost_rate }}" step="0.01" min="0">
+                    </div>
                 </div>
             </div>
 
-            <!-- History Graphs -->
+            <!-- Tokens/Sec Graph -->
             <div class="card">
-                <h2>History (60 seconds)</h2>
+                <h2>Tokens/Sec (60s)</h2>
                 <div class="graph-container">
-                    <div class="graph-label">GPU Usage</div>
-                    <canvas id="gpu-graph" class="graph-canvas"></canvas>
-                </div>
-                <div class="graph-container" style="margin-top: 15px;">
-                    <div class="graph-label">CPU Usage</div>
-                    <canvas id="cpu-graph" class="graph-canvas"></canvas>
-                </div>
-                <div class="graph-container" style="margin-top: 15px;">
                     <div class="graph-label">Tokens/Sec</div>
                     <canvas id="tokens-graph" class="graph-canvas"></canvas>
                 </div>
@@ -494,15 +512,15 @@
         const MAX_HISTORY = 60;
 
         // Chart instances
-        let gpuChart, cpuChart, tokensChart;
+        let combinedUsageChart, tokensChart;
 
         // Initialize charts
         function initCharts() {
-            const gpuCtx = document.getElementById('gpu-graph').getContext('2d');
-            const cpuCtx = document.getElementById('cpu-graph').getContext('2d');
+            const combinedCtx = document.getElementById('combined-usage-graph').getContext('2d');
             const tokensCtx = document.getElementById('tokens-graph').getContext('2d');
 
-            gpuChart = new Chart(gpuCtx, {
+            // Combined CPU/GPU Usage Chart
+            combinedUsageChart = new Chart(combinedCtx, {
                 type: 'line',
                 data: {
                     labels: [],
@@ -515,34 +533,7 @@
                         tension: 0.4,
                         fill: true,
                         pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: {
-                            min: 0,
-                            max: 100,
-                            grid: { color: '#2a3b5c' },
-                            ticks: { color: '#888' }
-                        },
-                        x: {
-                            display: false
-                        }
-                    }
-                }
-            });
-
-            cpuChart = new Chart(cpuCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
+                    }, {
                         label: 'CPU %',
                         data: [],
                         borderColor: '#00d4ff',
@@ -558,7 +549,7 @@
                     maintainAspectRatio: false,
                     animation: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: true, labels: { color: '#888' } }
                     },
                     scales: {
                         y: {
@@ -704,14 +695,11 @@
                 historyData.labels.shift();
             }
 
-            // Update charts
-            gpuChart.data.datasets[0].data = historyData.gpu;
-            gpuChart.data.labels = historyData.labels;
-            gpuChart.update('none');
-
-            cpuChart.data.datasets[0].data = historyData.cpu;
-            cpuChart.data.labels = historyData.labels;
-            cpuChart.update('none');
+            // Update combined usage chart (GPU first, then CPU)
+            combinedUsageChart.data.datasets[0].data = historyData.gpu;
+            combinedUsageChart.data.datasets[1].data = historyData.cpu;
+            combinedUsageChart.data.labels = historyData.labels;
+            combinedUsageChart.update('none');
 
             tokensChart.data.datasets[0].data = historyData.tokens;
             tokensChart.data.labels = historyData.labels;
