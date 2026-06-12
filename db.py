@@ -885,24 +885,21 @@ class Database:
             return dict(row)
         return None
 
-    def get_today_energy(self, date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_today_energy(self) -> Optional[Dict[str, Any]]:
         """Get today's energy consumption from midnight.
-
-        Args:
-            date: Optional date string (YYYY-MM-DD) to fetch a specific day
 
         Returns:
             Dictionary of energy values or None if not initialized
         """
         cursor = self.conn.cursor()
-        target_date = date or datetime.datetime.now().strftime("%Y-%m-%d")
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
         cursor.execute(
             """
             SELECT date, total_wh, gpu_wh, cpu_wh, last_update
             FROM daily_energy
             WHERE date = ?
             """,
-            (target_date,),
+            (today,),
         )
         row = cursor.fetchone()
         if row:
@@ -914,8 +911,6 @@ class Database:
         total_wh: float,
         gpu_wh: float,
         cpu_wh: float,
-        date_override: Optional[str] = None,
-        timestamp_override: Optional[str] = None,
     ) -> None:
         """Update today's energy consumption.
 
@@ -923,14 +918,45 @@ class Database:
             total_wh: Total energy in watt-hours
             gpu_wh: GPU energy in watt-hours
             cpu_wh: CPU energy in watt-hours
-            date_override: Optional date string (YYYY-MM-DD) to use instead of today
-            timestamp_override: Optional timestamp to use instead of now
         """
         with self._lock:
             cursor = self.conn.cursor()
-            date = date_override or datetime.datetime.now().strftime("%Y-%m-%d")
-            timestamp = timestamp_override or datetime.datetime.now().isoformat()
+            today = datetime.datetime.now().strftime("%Y-%m-%d")
+            now = datetime.datetime.now().isoformat()
 
+            cursor.execute(
+                """
+                INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date) DO UPDATE SET
+                    total_wh = ?,
+                    gpu_wh = ?,
+                    cpu_wh = ?,
+                    last_update = ?
+                """,
+                (today, total_wh, gpu_wh, cpu_wh, now, total_wh, gpu_wh, cpu_wh, now),
+            )
+            self.conn.commit()
+
+    def update_today_energy_archived(
+        self,
+        date: str,
+        total_wh: float,
+        gpu_wh: float,
+        cpu_wh: float,
+        timestamp: str,
+    ) -> None:
+        """Update a specific day's energy with an archived timestamp.
+
+        Args:
+            date: The date to update
+            total_wh: Total energy in watt-hours
+            gpu_wh: GPU energy in watt-hours
+            cpu_wh: CPU energy in watt-hours
+            timestamp: The timestamp to store (e.g., "2026-06-01 23:59:59")
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
             cursor.execute(
                 """
                 INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
