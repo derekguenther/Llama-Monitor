@@ -592,8 +592,15 @@ def index() -> str:
         function updateMetrics(data) {
             if (!data) return;
 
-            const now = new Date().toISOString();
-            const timestamp = data.timestamp || now;
+            // Convert Unix epoch seconds to hh:mm:ss format
+            const now = new Date();
+            const timestamp = data.timestamp ? new Date(data.timestamp * 1000) : now;
+            const timeString = timestamp.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
 
             // Update server metrics
             const server = data.server || {};
@@ -669,8 +676,8 @@ def index() -> str:
                 }).join('');
             }
 
-            // Update history data
-            updateHistory(timestamp, system, server);
+            // Update history data with formatted time string
+            updateHistory(timeString, system, server);
 
             // Update charts
             updateCharts();
