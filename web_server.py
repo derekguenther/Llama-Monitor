@@ -520,9 +520,10 @@ def index() -> str:
                     ticks: { color: '#666', maxTicksLimit: 6 }
                 },
                 y: {
+                    min: 0,
+                    max: 100,
                     grid: { color: '#2a2a4a' },
-                    ticks: { color: '#666' },
-                    suggestedMin: 0
+                    ticks: { color: '#666' }
                 }
             }
         };
