@@ -207,15 +207,15 @@ class Monitor:
 
         print("Starting TUI dashboard...")
 
-        self.tui = TUI(metrics_cache=self.metrics_cache)
+        # TUI connects to the aggregator daemon via HTTP API
+        self.tui = TUI(aggregator_host="localhost", aggregator_port=8080)
 
         try:
-            curses.wrapper(self.tui.run)
+            self.tui.run()
         except KeyboardInterrupt:
             pass
         finally:
             self.tui.running = False
-            self.tui.close_aggregator()
 
     def show_statistics(self):
         """Show system statistics and exit."""
@@ -473,10 +473,12 @@ def main():
                 print("  3. Use Windows Terminal, PowerShell, or MSYS2")
                 print("")
                 sys.exit(1)
-        # On Windows, default to web-only mode (already handled by enable_web default)
-        # but make it explicit
-        if not args.no_web:
-            args.tui = False
+        # On Windows, default to web-only mode if TUI not requested
+        # (if user explicitly requests TUI, respect that)
+        # But if TUI is requested, disable web by default (unless --no-web was NOT set)
+        # Actually, let's make TUI imply --no-web for cleaner UX
+        if args.tui and not args.no_web:
+            args.no_web = True
 
     monitor = Monitor(
         server_url=args.server,
