@@ -107,6 +107,21 @@
             margin-bottom: 0;
         }
 
+        /* Combined CPU/GPU Usage Graph */
+        .combined-graph-card {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .combined-graph-card h2 {
+            font-size: 1rem;
+            color: #00d4ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a3b5c;
+        }
+
         .resource-header {
             display: flex;
             justify-content: space-between;
@@ -372,27 +387,18 @@
                 </div>
             </div>
 
+            <!-- Combined CPU/GPU Usage Graph -->
+            <div class="combined-graph-card">
+                <h2>CPU/GPU Usage</h2>
+                <div class="graph-container">
+                    <div class="graph-label">Usage %</div>
+                    <canvas id="cpu-gpu-graph" class="graph-canvas"></canvas>
+                </div>
+            </div>
+
             <!-- System Resources -->
             <div class="card">
                 <h2>System Resources</h2>
-                <div class="resource-bar">
-                    <div class="resource-header">
-                        <span>CPU Usage</span>
-                        <span id="cpu-percent">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill cpu-fill" id="cpu-bar" style="width: 0%"></div>
-                    </div>
-                </div>
-                <div class="resource-bar">
-                    <div class="resource-header">
-                        <span>GPU Usage</span>
-                        <span id="gpu-percent">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill gpu-fill" id="gpu-bar" style="width: 0%"></div>
-                    </div>
-                </div>
                 <div class="resource-bar">
                     <div class="resource-header">
                         <span>Memory</span>
@@ -440,14 +446,6 @@
             <div class="card">
                 <h2>History (60 seconds)</h2>
                 <div class="graph-container">
-                    <div class="graph-label">GPU Usage</div>
-                    <canvas id="gpu-graph" class="graph-canvas"></canvas>
-                </div>
-                <div class="graph-container" style="margin-top: 15px;">
-                    <div class="graph-label">CPU Usage</div>
-                    <canvas id="cpu-graph" class="graph-canvas"></canvas>
-                </div>
-                <div class="graph-container" style="margin-top: 15px;">
                     <div class="graph-label">Tokens/Sec</div>
                     <canvas id="tokens-graph" class="graph-canvas"></canvas>
                 </div>
@@ -494,19 +492,28 @@
         const MAX_HISTORY = 60;
 
         // Chart instances
-        let gpuChart, cpuChart, tokensChart;
+        let cpuGpuChart, tokensChart;
 
         // Initialize charts
         function initCharts() {
-            const gpuCtx = document.getElementById('gpu-graph').getContext('2d');
-            const cpuCtx = document.getElementById('cpu-graph').getContext('2d');
+            const cpuGpuCtx = document.getElementById('cpu-gpu-graph').getContext('2d');
             const tokensCtx = document.getElementById('tokens-graph').getContext('2d');
 
-            gpuChart = new Chart(gpuCtx, {
+            // Combined CPU/GPU Usage Chart
+            cpuGpuChart = new Chart(cpuGpuCtx, {
                 type: 'line',
                 data: {
                     labels: [],
                     datasets: [{
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 0
+                    }, {
                         label: 'GPU %',
                         data: [],
                         borderColor: '#00ff88',
@@ -522,43 +529,7 @@
                     maintainAspectRatio: false,
                     animation: false,
                     plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: {
-                            min: 0,
-                            max: 100,
-                            grid: { color: '#2a3b5c' },
-                            ticks: { color: '#888' }
-                        },
-                        x: {
-                            display: false
-                        }
-                    }
-                }
-            });
-
-            cpuChart = new Chart(cpuCtx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'CPU %',
-                        data: [],
-                        borderColor: '#00d4ff',
-                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    plugins: {
-                        legend: { display: false }
+                        legend: { display: true }
                     },
                     scales: {
                         y: {
@@ -704,14 +675,11 @@
                 historyData.labels.shift();
             }
 
-            // Update charts
-            gpuChart.data.datasets[0].data = historyData.gpu;
-            gpuChart.data.labels = historyData.labels;
-            gpuChart.update('none');
-
-            cpuChart.data.datasets[0].data = historyData.cpu;
-            cpuChart.data.labels = historyData.labels;
-            cpuChart.update('none');
+            // Update combined CPU/GPU chart
+            cpuGpuChart.data.datasets[0].data = historyData.cpu;
+            cpuGpuChart.data.datasets[1].data = historyData.gpu;
+            cpuGpuChart.data.labels = historyData.labels;
+            cpuGpuChart.update('none');
 
             tokensChart.data.datasets[0].data = historyData.tokens;
             tokensChart.data.labels = historyData.labels;
