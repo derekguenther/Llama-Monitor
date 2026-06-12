@@ -153,14 +153,15 @@ def format_stats(metrics: Dict[str, Any], verbose: bool = False) -> str:
     # Cost stats
     cost = metrics.get("cost", {})
     if cost:
-        total_wh = cost.get("total_wh", 0) or 0
+        # Use today's energy if available, otherwise fall back to session energy
+        total_wh = cost.get("today_wh") or cost.get("total_wh", 0) or 0
         cost_rate = cost.get("cost_rate", 0) or 0
         session_cost = total_wh / 1000 * cost_rate
 
         lines.append("")
         lines.append("Cost:")
-        lines.append(f"  Session cost: ${session_cost:.4f}")
-        lines.append(f"  Total energy: {total_wh:.2f} Wh")
+        lines.append(f"  Today's cost: ${session_cost:.4f}")
+        lines.append(f"  Today's energy: {total_wh:.2f} Wh")
         lines.append(f"  Cost rate:    ${cost_rate:.2f}/kWh")
 
     return "\n".join(lines)

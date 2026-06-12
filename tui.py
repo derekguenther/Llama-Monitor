@@ -141,13 +141,14 @@ class TUI:
         # Cost card
         row = start_row
         stdscr.attron(curses.A_REVERSE)
-        stdscr.addstr(row, 0, " Session Cost ".center(section_width)[:section_width])
+        stdscr.addstr(row, 0, " Today's Energy Cost ".center(section_width)[:section_width])
         stdscr.attroff(curses.A_REVERSE)
 
         row += 1
         if self.metrics and self.metrics.get("cost"):
             cost = self.metrics["cost"]
-            total_wh = cost.get("total_wh", 0)
+            # Use today's energy if available, otherwise fall back to session energy
+            total_wh = cost.get("today_wh") or cost.get("total_wh", 0)
             cost_rate = getattr(self.config, "cost_rate", 0.12)
             cost_usd = total_wh / 1000 * cost_rate
 

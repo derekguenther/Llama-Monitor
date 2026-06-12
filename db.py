@@ -439,6 +439,19 @@ class Database:
             """
         )
 
+        # Daily energy tracking table
+        cursor.execute(
+            """
+            CREATE TABLE daily_energy (
+                date TEXT PRIMARY KEY,
+                total_wh REAL DEFAULT 0,
+                gpu_wh REAL DEFAULT 0,
+                cpu_wh REAL DEFAULT 0,
+                last_update TEXT
+            )
+            """
+        )
+
         # Settings table for persistent configuration
         cursor.execute(
             """
@@ -870,6 +883,59 @@ class Database:
         if row:
             return dict(row)
         return None
+
+    def get_today_energy(self) -> Optional[Dict[str, Any]]:
+        """Get today's energy consumption from midnight.
+
+        Returns:
+            Dictionary of energy values or None if not initialized
+        """
+        cursor = self.conn.cursor()
+        today = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute(
+            """
+            SELECT date, total_wh, gpu_wh, cpu_wh, last_update
+            FROM daily_energy
+            WHERE date = ?
+            """,
+            (today,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+    def update_today_energy(
+        self,
+        total_wh: float,
+        gpu_wh: float,
+        cpu_wh: float,
+    ) -> None:
+        """Update today's energy consumption.
+
+        Args:
+            total_wh: Total energy in watt-hours
+            gpu_wh: GPU energy in watt-hours
+            cpu_wh: CPU energy in watt-hours
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+            today = datetime.now().strftime("%Y-%m-%d")
+            now = datetime.now().isoformat()
+
+            cursor.execute(
+                """
+                INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date) DO UPDATE SET
+                    total_wh = ?,
+                    gpu_wh = ?,
+                    cpu_wh = ?,
+                    last_update = ?
+                """,
+                (today, total_wh, gpu_wh, cpu_wh, now, total_wh, gpu_wh, cpu_wh, now),
+            )
+            self.conn.commit()
 
     def get_server_metrics(
         self,

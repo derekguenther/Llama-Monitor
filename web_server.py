@@ -369,9 +369,9 @@ def index() -> str:
     </div>
 
     <div class="cost-display">
-        <h3>Session Cost</h3>
+        <h3>Today's Energy Cost</h3>
         <div class="cost-value" id="cost-value">$0.0000</div>
-        <div class="cost-sub" id="cost-sub">This session: 0 seconds @ $0.12/kWh</div>
+        <div class="cost-sub" id="cost-sub">Today's energy: 0 Wh @ $0.12/kWh</div>
     </div>
 
     <div class="grid">
@@ -640,15 +640,15 @@ def index() -> str:
             document.getElementById('system-power').textContent =
                 (system.system_power_w || 0).toFixed(1) + ' W';
 
-            // Update cost
+            // Update cost - show today's energy cost
             const cost = data.cost || {};
-            const totalWh = cost.total_wh || 0;
+            const todayWh = cost.today_wh || 0;
             const costRate = cost.cost_rate || 0.12;
-            const costUsd = totalWh / 1000 * costRate;
+            const costUsd = todayWh / 1000 * costRate;
 
             document.getElementById('cost-value').textContent = '$' + costUsd.toFixed(4);
             document.getElementById('cost-sub').textContent =
-                'Session energy: ' + totalWh.toFixed(1) + ' Wh @ $' + costRate.toFixed(2) + '/kWh';
+                'Today\'s energy: ' + todayWh.toFixed(1) + ' Wh @ $' + costRate.toFixed(2) + '/kWh';
 
             // Update process GPU list
             const processGpu = data.process_gpu || {};

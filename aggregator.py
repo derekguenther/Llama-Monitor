@@ -178,6 +178,12 @@ class Aggregator:
             cpu_power_w=cpu.get("cpu_power_w", 0) or 0,
             duration_seconds=1.0
         )
+        # Add today's energy stats
+        today_stats = self.cost_calculator.get_today_stats()
+        cost["today_wh"] = today_stats["total_wh"] if today_stats else 0
+        cost["today_gpu_wh"] = today_stats["gpu_wh"] if today_stats else 0
+        cost["today_cpu_wh"] = today_stats["cpu_wh"] if today_stats else 0
+
         self.db.execute(
             """
             INSERT INTO combined_metrics (timestamp, server_data, system_data, cost_data)
@@ -211,6 +217,14 @@ class Aggregator:
             Dictionary with cost information.
         """
         return self.cost_calculator.get_session_stats()
+
+    def calculate_today_cost(self) -> Dict[str, Any]:
+        """Calculate today's energy cost (from midnight).
+
+        Returns:
+            Dictionary with today's cost information.
+        """
+        return self.cost_calculator.get_today_stats()
 
     def close(self) -> None:
         """Clean up resources."""

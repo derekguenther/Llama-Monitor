@@ -35,6 +35,12 @@ class ElectricityCostCalculator:
         self.gpu_energy_wh = 0.0
         self.cpu_energy_wh = 0.0
 
+        # Today's energy tracking (resets at midnight)
+        self.today_energy_wh = 0.0
+        self.today_gpu_wh = 0.0
+        self.today_cpu_wh = 0.0
+        self.last_today_update = None
+
     def start_session(self) -> None:
         """Start a new energy tracking session."""
         self.session_start = datetime.now().isoformat()
@@ -179,8 +185,14 @@ class ElectricityCostCalculator:
         self.cpu_energy_wh += cpu_energy
         self.total_energy_wh += total_energy
 
+        # Update today's energy (resets at midnight)
+        self.today_gpu_wh += gpu_energy
+        self.today_cpu_wh += cpu_energy
+        self.today_energy_wh += total_energy
+
         # Update timestamp
         self.last_update = datetime.now().isoformat()
+        self.last_today_update = datetime.now().isoformat()
 
         # Update database
         session_cost = self.calculate_cost(self.total_energy_wh)
@@ -191,11 +203,19 @@ class ElectricityCostCalculator:
             cpu_wh=self.cpu_energy_wh,
             session_cost_usd=session_cost,
         )
+        self.database.update_today_energy(
+            total_wh=self.today_energy_wh,
+            gpu_wh=self.today_gpu_wh,
+            cpu_wh=self.today_cpu_wh,
+        )
 
         return {
             "total_wh": self.total_energy_wh,
             "gpu_wh": self.gpu_energy_wh,
             "cpu_wh": self.cpu_energy_wh,
+            "today_wh": self.today_energy_wh,
+            "today_gpu_wh": self.today_gpu_wh,
+            "today_cpu_wh": self.today_cpu_wh,
             "total_cost_usd": session_cost,
         }
 
@@ -275,6 +295,31 @@ class ElectricityCostCalculator:
                 "gpu_wh": row["gpu_wh"],
                 "cpu_wh": row["cpu_wh"],
                 "session_cost_usd": row["session_cost_usd"],
+            }
+        return None
+
+    def get_today_stats(self) -> Optional[Dict[str, Any]]:
+        """Get today's energy statistics.
+
+        Returns:
+            Dictionary with today's energy stats or None if not tracked
+        """
+        row = self.database.execute_query(
+            """
+            SELECT date, total_wh, gpu_wh, cpu_wh, last_update
+            FROM daily_energy
+            WHERE date = ?
+            """,
+            (datetime.now().strftime("%Y-%m-%d"),),
+        )
+        if row:
+            return {
+                "date": row["date"],
+                "total_wh": row["total_wh"],
+                "gpu_wh": row["gpu_wh"],
+                "cpu_wh": row["cpu_wh"],
+                "total_cost_usd": self.calculate_cost(row["total_wh"]),
+                "last_update": row["last_update"],
             }
         return None
 

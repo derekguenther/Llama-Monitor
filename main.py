@@ -250,11 +250,12 @@ class Monitor:
         print(f"  System Power:     {sys_power.get('system_power_w', 0):.1f} W")
         print(f"  GPU Power:        {gpu.get('power_w', 0):.1f} W")
 
-        # Cost
+        # Cost - show today's energy
         print("\nCost:")
         if cost:
-            print(f"  Total Cost:       ${cost.get('total_cost', 0):.4f}")
-            print(f"  Energy Used:      {cost.get('total_energy_wh', 0):.2f} Wh")
+            today_wh = cost.get('today_wh') or cost.get('total_energy_wh', 0)
+            print(f"  Today's Cost:     ${cost.get('total_cost', 0):.4f}")
+            print(f"  Today's Energy:   {today_wh:.2f} Wh")
         else:
             print("  No cost data available (no active session)")
 
