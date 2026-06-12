@@ -41,6 +41,22 @@ class ElectricityCostCalculator:
         self.today_cpu_wh = 0.0
         self.last_today_update = None
 
+        # Load today's energy from database if it exists
+        self._load_today_energy()
+
+    def _load_today_energy(self) -> None:
+        """Load today's energy from database if available.
+
+        This allows the monitor to continue tracking from where it left off
+        if restarted during the same day.
+        """
+        today_energy = self.database.get_today_energy()
+        if today_energy:
+            self.today_energy_wh = today_energy.get("total_wh", 0.0)
+            self.today_gpu_wh = today_energy.get("gpu_wh", 0.0)
+            self.today_cpu_wh = today_energy.get("cpu_wh", 0.0)
+            self.last_today_update = today_energy.get("last_update")
+
     def start_session(self) -> None:
         """Start a new energy tracking session."""
         self.session_start = datetime.now().isoformat()
@@ -79,6 +95,13 @@ class ElectricityCostCalculator:
             session_cost_usd=session_cost,
         )
 
+        # Update today's energy in database
+        self.database.update_today_energy(
+            total_wh=self.today_energy_wh,
+            gpu_wh=self.today_gpu_wh,
+            cpu_wh=self.today_cpu_wh,
+        )
+
         # Close session in sessions table
         self.database.execute(
             """
@@ -95,6 +118,9 @@ class ElectricityCostCalculator:
             "total_wh": self.total_energy_wh,
             "gpu_wh": self.gpu_energy_wh,
             "cpu_wh": self.cpu_energy_wh,
+            "today_wh": self.today_energy_wh,
+            "today_gpu_wh": self.today_gpu_wh,
+            "today_cpu_wh": self.today_cpu_wh,
             "total_cost_usd": session_cost,
         }
 
