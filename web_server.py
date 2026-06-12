@@ -481,13 +481,7 @@ def index() -> str:
                 <canvas id="cpu-chart"></canvas>
             </div>
         </div>
-        <div class="history-card">
-            <h3>Token Rate (60s)</h3>
-            <div class="chart-container">
-                <canvas id="tokens-chart"></canvas>
-            </div>
-        </div>
-        <div class="history-card">
+         <div class="history-card">
             <h3>Power (60s)</h3>
             <div class="chart-container">
                 <canvas id="power-chart"></canvas>
@@ -502,7 +496,6 @@ def index() -> str:
         let historyData = {
             gpu: [],
             cpu: [],
-            tokens: [],
             power: [],
             timestamps: []
         };
@@ -535,7 +528,7 @@ def index() -> str:
         };
 
         // Charts
-        let gpuChart, cpuChart, tokensChart, powerChart;
+        let gpuChart, cpuChart, powerChart;
 
         function initCharts() {
             const ctx1 = document.getElementById('gpu-chart').getContext('2d');
@@ -572,25 +565,8 @@ def index() -> str:
                 options: chartOptions
             });
 
-            const ctx3 = document.getElementById('tokens-chart').getContext('2d');
-            tokensChart = new Chart(ctx3, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Tokens/s',
-                        data: [],
-                        borderColor: '#ff00ff',
-                        backgroundColor: 'rgba(255, 0, 255, 0.1)',
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: chartOptions
-            });
-
-            const ctx4 = document.getElementById('power-chart').getContext('2d');
-            powerChart = new Chart(ctx4, {
+            const ctx3 = document.getElementById('power-chart').getContext('2d');
+            powerChart = new Chart(ctx3, {
                 type: 'line',
                 data: {
                     labels: [],
@@ -710,7 +686,6 @@ def index() -> str:
             // Add new data point
             historyData.gpu.push(system.gpu_usage || 0);
             historyData.cpu.push(system.cpu_percent || 0);
-            historyData.tokens.push(server.prompt_tokens_seconds || 0);
             historyData.power.push((system.gpu_power_w || 0) + (system.cpu_power_w || 0));
             historyData.timestamps.push(timestamp);
 
@@ -719,7 +694,6 @@ def index() -> str:
             if (historyData.gpu.length > maxPoints) {
                 historyData.gpu.shift();
                 historyData.cpu.shift();
-                historyData.tokens.shift();
                 historyData.power.shift();
                 historyData.timestamps.shift();
             }
@@ -736,14 +710,11 @@ def index() -> str:
             cpuChart.data.datasets[0].data = historyData.cpu.slice(-60);
             cpuChart.update('none');
 
-            // Update tokens chart
-            tokensChart.data.labels = historyData.timestamps.slice(-60);
-            tokensChart.data.datasets[0].data = historyData.tokens.slice(-60);
-            tokensChart.update('none');
-
             // Update power chart
             powerChart.data.labels = historyData.timestamps.slice(-60);
-            powerChart.data.datasets[0].data = historyData.power.slice(-60);
+            // Combine GPU and CPU power into a single array for display
+            const totalPower = historyData.power.slice(-60);
+            powerChart.data.datasets[0].data = totalPower;
             powerChart.update('none');
         }
 
