@@ -487,6 +487,40 @@ def index() -> str:
         </div>
     </div>
 
+    <div class="card" id="historical-section" style="display: none;">
+        <div class="controls">
+            <h2 style="color: #00d9ff; margin-bottom: 15px;">Historical Data</h2>
+            <div class="controls">
+                <select id="timeframe-select" class="btn secondary">
+                    <option value="hour">Last Hour</option>
+                    <option value="day" selected>Last Day</option>
+                    <option value="week">Last Week</option>
+                    <option value="month">Last Month</option>
+                    <option value="custom">Custom Range</option>
+                </select>
+                <input type="datetime-local" id="custom-start" class="btn secondary" style="padding: 8px 12px;">
+                <input type="datetime-local" id="custom-end" class="btn secondary" style="padding: 8px 12px;">
+                <button id="load-historical-btn" class="btn">Load Data</button>
+                <button id="toggle-historical-btn" class="btn secondary">Show Historical</button>
+            </div>
+        </div>
+
+        <div class="history-grid">
+            <div class="history-card">
+                <h3 id="historical-usage-title">Usage</h3>
+                <div class="chart-container">
+                    <canvas id="historical-combined-chart"></canvas>
+                </div>
+            </div>
+            <div class="history-card">
+                <h3 id="historical-power-title">Power</h3>
+                <div class="chart-container">
+                    <canvas id="historical-power-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="refresh-indicator" id="refresh-time">Last update: Never</div>
 
     <script>
@@ -550,6 +584,15 @@ def index() -> str:
 
         // Charts
         let combinedChart, powerChart;
+        let historicalCombinedChart, historicalPowerChart;
+
+        // Historical data state
+        let historicalData = {
+            gpu: [],
+            cpu: [],
+            power: [],
+            timestamps: []
+        };
 
         function initCharts() {
             const ctx = document.getElementById('combined-chart').getContext('2d');
@@ -598,6 +641,124 @@ def index() -> str:
                 },
                 options: chartOptions
             });
+        }
+
+        function initHistoricalCharts() {
+            const ctx = document.getElementById('historical-combined-chart').getContext('2d');
+            historicalCombinedChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'GPU %',
+                        data: [],
+                        borderColor: '#00ff88',
+                        backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: chartOptions
+            });
+
+            const ctx2 = document.getElementById('historical-power-chart').getContext('2d');
+            historicalPowerChart = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'GPU Power (W)',
+                            data: [],
+                            borderColor: '#00d9ff',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'CPU Power (W)',
+                            data: [],
+                            borderColor: '#00ff88',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: chartOptions
+            });
+        }
+
+        function updateHistoricalCharts() {
+            if (!historicalCombinedChart || !historicalPowerChart) return;
+
+            // Update combined GPU/CPU chart
+            historicalCombinedChart.data.labels = historicalData.timestamps;
+            historicalCombinedChart.data.datasets[0].data = historicalData.gpu;
+            historicalCombinedChart.data.datasets[1].data = historicalData.cpu;
+            historicalCombinedChart.update('none');
+
+            // Update power chart
+            historicalPowerChart.data.labels = historicalData.timestamps;
+            historicalPowerChart.data.datasets[0].data = historicalData.power;
+            historicalPowerChart.update('none');
+        }
+
+        async function fetchHistoricalData() {
+            const timeframe = document.getElementById('timeframe-select').value;
+            const port = 8080;
+
+            try {
+                let url = `/api/metrics/historical?timeframe=${timeframe}`;
+                const limit = document.getElementById('limit-input')?.value || 1000;
+                url += `&limit=${limit}`;
+
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Bad response');
+                }
+
+                const data = await response.json();
+                updateHistoricalMetrics(data);
+            } catch (error) {
+                console.error('Error fetching historical data:', error);
+                alert('Failed to load historical data: ' + error.message);
+            }
+        }
+
+        function updateHistoricalMetrics(data) {
+            if (!data || !data.system || data.system.length === 0) {
+                console.log('No historical data available');
+                return;
+            }
+
+            // Clear existing data
+            historicalData.gpu = [];
+            historicalData.cpu = [];
+            historicalData.power = [];
+            historicalData.timestamps = [];
+
+            // Process each data point
+            for (const point of data.system) {
+                historicalData.gpu.push(point.gpu_usage || 0);
+                historicalData.cpu.push(point.cpu_percent || 0);
+                historicalData.power.push((point.gpu_power_w || 0) + (point.cpu_power_w || 0));
+
+                // Convert Unix timestamp to readable format
+                const timestamp = point.timestamp;
+                const date = new Date(timestamp * 1000);
+                historicalData.timestamps.push(date.toLocaleTimeString('en-US', {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }));
+            }
+
+            updateHistoricalCharts();
         }
 
         function updateMetrics(data) {
@@ -774,6 +935,47 @@ def index() -> str:
             updateMetrics(data);
         });
 
+        // Initialize historical charts
+        initHistoricalCharts();
+
+        // Toggle historical section visibility
+        document.getElementById('toggle-historical-btn').addEventListener('click', function() {
+            const section = document.getElementById('historical-section');
+            section.style.display = section.style.display === 'none' ? 'block' : 'none';
+        });
+
+        // Load historical data button
+        document.getElementById('load-historical-btn').addEventListener('click', function() {
+            const timeframe = document.getElementById('timeframe-select').value;
+            if (timeframe === 'custom') {
+                const start = document.getElementById('custom-start').value;
+                const end = document.getElementById('custom-end').value;
+                if (!start || !end) {
+                    alert('Please select a start and end time for custom range');
+                    return;
+                }
+                fetchHistoricalRange(start, end);
+            } else {
+                fetchHistoricalData();
+            }
+        });
+
+        // Timeframe change handler
+        document.getElementById('timeframe-select').addEventListener('change', function() {
+            const timeframe = this.value;
+            const customInputs = document.getElementById('custom-start').closest('.controls');
+            if (timeframe === 'custom') {
+                customInputs.style.display = 'flex';
+            } else {
+                customInputs.style.display = 'none';
+                // Auto-load when changing timeframe
+                fetchHistoricalData();
+            }
+        });
+
+        // Initial load for default timeframe
+        fetchHistoricalData();
+
         // Initial load
         initCharts();
         fetchMetrics();
@@ -783,6 +985,26 @@ def index() -> str:
 
         // Refresh button
         document.getElementById('refresh-btn').addEventListener('click', fetchMetrics);
+
+        // Fetch historical range function (defined after for access to port)
+        async function fetchHistoricalRange(start, end) {
+            const port = 8080;
+            const limit = 5000;
+
+            try {
+                const url = `/api/metrics/historical/range?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&limit=${limit}`;
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Bad response');
+                }
+
+                const data = await response.json();
+                updateHistoricalMetrics(data);
+            } catch (error) {
+                console.error('Error fetching historical range:', error);
+                alert('Failed to load historical data: ' + error.message);
+            }
+        }
     </script>
 </body>
 </html>
@@ -932,6 +1154,231 @@ def api_metrics_list():
         return jsonify({
             "tables": tables,
             "metrics": metrics_info,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/metrics/historical")
+def api_historical_metrics():
+    """Return historical metrics for a specified timeframe.
+
+    Query params:
+    - timeframe: Predefined period (hour, day, week, month)
+    - start: Start timestamp (ISO format or Unix epoch)
+    - end: End timestamp (ISO format or Unix epoch)
+    - limit: Maximum number of data points (default: 1000)
+    - sample: Sample interval in seconds (default: 60 for 1-minute intervals)
+    """
+    config = get_config()
+    db_path = getattr(config, "database_path", "llama_monitor.db")
+
+    timeframe = request.args.get("timeframe", "day")
+    start = request.args.get("start")
+    end = request.args.get("end")
+    limit = request.args.get("limit", 1000, type=int)
+    sample_interval = request.args.get("sample", 60, type=int)
+
+    import sqlite3
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Calculate time range based on timeframe if not provided
+        now = datetime.now()
+        if start is None:
+            if timeframe == "hour":
+                start_dt = now - timedelta(hours=1)
+            elif timeframe == "day":
+                start_dt = now - timedelta(days=1)
+            elif timeframe == "week":
+                start_dt = now - timedelta(weeks=1)
+            elif timeframe == "month":
+                start_dt = now - timedelta(days=30)
+            else:
+                start_dt = now - timedelta(hours=1)
+            start = start_dt.isoformat()
+
+        if end is None:
+            end = now.isoformat()
+
+        # Query system metrics with sampling
+        system_query = """
+            SELECT
+                timestamp,
+                AVG(cpu_percent) as cpu_percent,
+                AVG(gpu_usage) as gpu_usage,
+                AVG(gpu_memory_used_mb) as gpu_memory_used_mb,
+                AVG(gpu_power_w) as gpu_power_w,
+                AVG(cpu_power_w) as cpu_power_w,
+                AVG(memory_used_mb) as memory_used_mb,
+                AVG(system_power_w) as system_power_w
+            FROM system_metrics_raw
+            WHERE timestamp >= strftime('%s', ?) AND timestamp <= strftime('%s', ?)
+            GROUP BY (timestamp / ?)
+            ORDER BY timestamp ASC
+        """
+
+        # Query server metrics with sampling
+        server_query = """
+            SELECT
+                timestamp,
+                AVG(prompt_tokens_total) as prompt_tokens_total,
+                AVG(tokens_predicted_total) as tokens_predicted_total,
+                AVG(predicted_tokens_seconds) as predicted_tokens_seconds,
+                AVG(requests_processing) as requests_processing,
+                AVG(slots_active) as slots_active
+            FROM server_metrics_raw
+            WHERE timestamp >= strftime('%s', ?) AND timestamp <= strftime('%s', ?)
+            GROUP BY (timestamp / ?)
+            ORDER BY timestamp ASC
+        """
+
+        cursor.execute(system_query, (start, end, sample_interval))
+        system_rows = cursor.fetchall()
+
+        cursor.execute(server_query, (start, end, sample_interval))
+        server_rows = cursor.fetchall()
+        conn.close()
+
+        # Process system metrics
+        system_data = []
+        for row in system_rows:
+            system_data.append({
+                "timestamp": row["timestamp"],
+                "cpu_percent": row["cpu_percent"],
+                "gpu_usage": row["gpu_usage"],
+                "gpu_memory_used_mb": row["gpu_memory_used_mb"],
+                "gpu_power_w": row["gpu_power_w"],
+                "cpu_power_w": row["cpu_power_w"],
+                "memory_used_mb": row["memory_used_mb"],
+                "system_power_w": row["system_power_w"],
+            })
+
+        # Process server metrics
+        server_data = []
+        for row in server_rows:
+            server_data.append({
+                "timestamp": row["timestamp"],
+                "prompt_tokens_total": row["prompt_tokens_total"],
+                "tokens_predicted_total": row["tokens_predicted_total"],
+                "predicted_tokens_seconds": row["predicted_tokens_seconds"],
+                "requests_processing": row["requests_processing"],
+                "slots_active": row["slots_active"],
+            })
+
+        return jsonify({
+            "timeframe": timeframe,
+            "start": start,
+            "end": end,
+            "sample_interval": sample_interval,
+            "count": len(system_data),
+            "system": system_data,
+            "server": server_data,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/metrics/historical/range")
+def api_historical_range():
+    """Return historical metrics for a custom time range.
+
+    Query params:
+    - start: Start timestamp (ISO format)
+    - end: End timestamp (ISO format)
+    - limit: Maximum number of records (default: 5000)
+    """
+    config = get_config()
+    db_path = getattr(config, "database_path", "llama_monitor.db")
+
+    start = request.args.get("start")
+    end = request.args.get("end")
+    limit = request.args.get("limit", 5000, type=int)
+
+    import sqlite3
+
+    if not start or not end:
+        return jsonify({"error": "start and end timestamps are required"}), 400
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Get system metrics
+        cursor.execute(
+            """
+            SELECT
+                timestamp,
+                cpu_percent,
+                gpu_usage,
+                gpu_memory_used_mb,
+                gpu_power_w,
+                cpu_power_w,
+                memory_used_mb,
+                system_power_w
+            FROM system_metrics_raw
+            WHERE timestamp >= strftime('%s', ?) AND timestamp <= strftime('%s', ?)
+            ORDER BY timestamp ASC
+            LIMIT ?
+            """,
+            (start, end, limit)
+        )
+        system_rows = cursor.fetchall()
+
+        # Get server metrics
+        cursor.execute(
+            """
+            SELECT
+                timestamp,
+                prompt_tokens_total,
+                tokens_predicted_total,
+                predicted_tokens_seconds,
+                requests_processing,
+                slots_active
+            FROM server_metrics_raw
+            WHERE timestamp >= strftime('%s', ?) AND timestamp <= strftime('%s', ?)
+            ORDER BY timestamp ASC
+            LIMIT ?
+            """,
+            (start, end, limit)
+        )
+        server_rows = cursor.fetchall()
+        conn.close()
+
+        system_data = []
+        for row in system_rows:
+            system_data.append({
+                "timestamp": row["timestamp"],
+                "cpu_percent": row["cpu_percent"],
+                "gpu_usage": row["gpu_usage"],
+                "gpu_memory_used_mb": row["gpu_memory_used_mb"],
+                "gpu_power_w": row["gpu_power_w"],
+                "cpu_power_w": row["cpu_power_w"],
+                "memory_used_mb": row["memory_used_mb"],
+                "system_power_w": row["system_power_w"],
+            })
+
+        server_data = []
+        for row in server_rows:
+            server_data.append({
+                "timestamp": row["timestamp"],
+                "prompt_tokens_total": row["prompt_tokens_total"],
+                "tokens_predicted_total": row["tokens_predicted_total"],
+                "predicted_tokens_seconds": row["predicted_tokens_seconds"],
+                "requests_processing": row["requests_processing"],
+                "slots_active": row["slots_active"],
+            })
+
+        return jsonify({
+            "start": start,
+            "end": end,
+            "count": len(system_data),
+            "system": system_data,
+            "server": server_data,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
