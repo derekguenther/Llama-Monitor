@@ -1002,6 +1002,28 @@ class Database:
             return dict(row)
         return None
 
+    def get_monthly_energy(self, days: int = 30) -> List[Dict[str, Any]]:
+        """Get energy consumption for the last N days.
+
+        Args:
+            days: Number of days to retrieve (default 30)
+
+        Returns:
+            List of daily energy records with date, total_wh, gpu_wh, cpu_wh
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT date, total_wh, gpu_wh, cpu_wh, last_update
+            FROM daily_energy
+            WHERE date >= date('now', ?)
+            ORDER BY date ASC
+            """,
+            (f'-{days} days',),
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
     def update_today_energy(
         self,
         total_wh: float,
