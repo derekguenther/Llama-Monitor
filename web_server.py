@@ -18,16 +18,23 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Suppress Werkzeug/Flask HTTP request logs
+# Suppress Werkzeug/Flask HTTP request logs (default: WARNING level)
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 logging.getLogger('socketio').setLevel(logging.WARNING)
 logging.getLogger('engineio').setLevel(logging.WARNING)
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, render_template_string
 from flask_socketio import SocketIO, emit
 
 # Local imports
 from config import load_config, find_config
+
+# Try to import database
+try:
+    from db import Database
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
 
 # Try to import aggregator daemon for direct data access
 try:
@@ -132,7 +139,7 @@ def index() -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>llama-monitor Dashboard</title>
+    <title>Llama Monitor Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
     <style>
@@ -358,12 +365,13 @@ def index() -> str:
 </head>
 <body>
     <div class="header">
-        <h1>llama-monitor Dashboard</h1>
+        <h1>Llama Monitor Dashboard</h1>
         <div class="status">
             <div class="status-indicator">
                 <div class="indicator-dot" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
             </div>
+            <a href="/settings" class="btn secondary"><i class="fa-solid fa-sliders"></i> Settings</a>
             <button class="btn secondary" id="refresh-btn">Refresh</button>
         </div>
     </div>
@@ -380,10 +388,6 @@ def index() -> str:
             <div class="metric-row">
                 <span class="metric-label">Prompt Tokens</span>
                 <span class="metric-value" id="server-prompt-tokens">0</span>
-            </div>
-            <div class="metric-row">
-                <span class="metric-label">Token Rate</span>
-                <span class="metric-value metric-rate" id="server-prompt-rate">0/s</span>
             </div>
             <div class="metric-row">
                 <span class="metric-label">Generated Tokens</span>
@@ -470,18 +474,12 @@ def index() -> str:
 
     <div class="history-grid">
         <div class="history-card">
-            <h3>GPU Usage (60s)</h3>
+            <h3>Usage (60s)</h3>
             <div class="chart-container">
-                <canvas id="gpu-chart"></canvas>
+                <canvas id="combined-chart"></canvas>
             </div>
         </div>
         <div class="history-card">
-            <h3>CPU Usage (60s)</h3>
-            <div class="chart-container">
-                <canvas id="cpu-chart"></canvas>
-            </div>
-        </div>
-         <div class="history-card">
             <h3>Power (60s)</h3>
             <div class="chart-container">
                 <canvas id="power-chart"></canvas>
@@ -492,6 +490,28 @@ def index() -> str:
     <div class="refresh-indicator" id="refresh-time">Last update: Never</div>
 
     <script>
+        // Helper function for 4 significant digits formatting
+        function formatSignificantDigits(value, digits = 4) {
+            if (value === null || value === undefined || isNaN(value)) {
+                return '0';
+            }
+            if (value === 0) {
+                return '0';
+            }
+            const absValue = Math.abs(value);
+            // Calculate the number of decimal places needed
+            const exponent = Math.floor(Math.log10(absValue));
+            let decimalPlaces = digits - 1 - exponent;
+            if (decimalPlaces < 0) {
+                decimalPlaces = 0;
+            }
+            return absValue.toLocaleString('en-US', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: decimalPlaces,
+                useGrouping: true
+            });
+        }
+
         // Global state
         let historyData = {
             gpu: [],
@@ -529,45 +549,35 @@ def index() -> str:
         };
 
         // Charts
-        let gpuChart, cpuChart, powerChart;
+        let combinedChart, powerChart;
 
         function initCharts() {
-            const ctx1 = document.getElementById('gpu-chart').getContext('2d');
-            gpuChart = new Chart(ctx1, {
+            const ctx = document.getElementById('combined-chart').getContext('2d');
+            combinedChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: [],
                     datasets: [{
                         label: 'GPU %',
                         data: [],
-                        borderColor: '#00d9ff',
-                        backgroundColor: 'rgba(0, 217, 255, 0.1)',
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: chartOptions
-            });
-
-            const ctx2 = document.getElementById('cpu-chart').getContext('2d');
-            cpuChart = new Chart(ctx2, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'CPU %',
-                        data: [],
                         borderColor: '#00ff88',
                         backgroundColor: 'rgba(0, 255, 136, 0.1)',
                         tension: 0.4,
                         fill: true
+                    }, {
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                        tension: 0.4,
+                        fill: true
                     }]
                 },
                 options: chartOptions
             });
 
-            const ctx3 = document.getElementById('power-chart').getContext('2d');
-            powerChart = new Chart(ctx3, {
+            const ctx2 = document.getElementById('power-chart').getContext('2d');
+            powerChart = new Chart(ctx2, {
                 type: 'line',
                 data: {
                     labels: [],
@@ -607,8 +617,6 @@ def index() -> str:
             const server = data.server || {};
             document.getElementById('server-prompt-tokens').textContent =
                 (server.prompt_tokens_total || 0).toLocaleString();
-            document.getElementById('server-prompt-rate').textContent =
-                (server.prompt_tokens_seconds || 0).toLocaleString() + '/s';
             document.getElementById('server-generated-tokens').textContent =
                 (server.tokens_predicted_total || 0).toLocaleString();
             document.getElementById('server-gen-rate').textContent =
@@ -620,13 +628,13 @@ def index() -> str:
             const gpuPercent = system.gpu_usage || 0;
             const memoryPercent = system.memory_percent || 0;
 
-            document.getElementById('cpu-percent').textContent = cpuPercent.toFixed(1) + '%';
+            document.getElementById('cpu-percent').textContent = formatSignificantDigits(cpuPercent) + '%';
             document.getElementById('cpu-bar').style.width = Math.min(cpuPercent, 100) + '%';
 
-            document.getElementById('gpu-percent').textContent = gpuPercent.toFixed(1) + '%';
+            document.getElementById('gpu-percent').textContent = formatSignificantDigits(gpuPercent) + '%';
             document.getElementById('gpu-bar').style.width = Math.min(gpuPercent, 100) + '%';
 
-            document.getElementById('memory-percent').textContent = memoryPercent.toFixed(1) + '%';
+            document.getElementById('memory-percent').textContent = formatSignificantDigits(memoryPercent) + '%';
             document.getElementById('memory-bar').style.width = Math.min(memoryPercent, 100) + '%';
 
             document.getElementById('gpu-memory').textContent =
@@ -634,11 +642,11 @@ def index() -> str:
 
             // Update power metrics
             document.getElementById('gpu-power').textContent =
-                (system.gpu_power_w || 0).toFixed(1) + ' W';
+                formatSignificantDigits(system.gpu_power_w || 0) + ' W';
             document.getElementById('cpu-power').textContent =
-                (system.cpu_power_w || 0).toFixed(1) + ' W';
+                formatSignificantDigits(system.cpu_power_w || 0) + ' W';
             document.getElementById('system-power').textContent =
-                (system.system_power_w || 0).toFixed(1) + ' W';
+                formatSignificantDigits(system.system_power_w || 0) + ' W';
 
             // Update cost - show today's energy cost
             const cost = data.cost || {};
@@ -646,9 +654,9 @@ def index() -> str:
             const costRate = cost.cost_rate || 0.12;
             const costUsd = todayWh / 1000 * costRate;
 
-            document.getElementById('cost-value').textContent = '$' + costUsd.toFixed(4);
+            document.getElementById('cost-value').textContent = '$' + formatSignificantDigits(costUsd);
             document.getElementById('cost-sub').textContent =
-                'Today\'s energy: ' + todayWh.toFixed(1) + ' Wh @ $' + costRate.toFixed(2) + '/kWh';
+                'Today\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ $' + formatSignificantDigits(costRate) + '/kWh';
 
             // Update process GPU list
             const processGpu = data.process_gpu || {};
@@ -664,12 +672,12 @@ def index() -> str:
                         <div class="metric-row">
                             <span class="metric-label">${name} (PID: ${proc.pid || '?'})</span>
                             <div style="text-align: right;">
-                                <span class="metric-value">${proc.gpu_utilization || 0}%</span>
+                                <span class="metric-value">${formatSignificantDigits(proc.gpu_utilization || 0)}%</span>
                                 <div class="progress-bar">
                                     <div class="progress-fill" style="width: ${Math.min(proc.gpu_utilization || 0, 100)}%"></div>
                                 </div>
                                 <span class="metric-rate" style="margin-top: 3px;">
-                                    ${proc.gpu_memory_mb || 0} MB
+                                    ${formatSignificantDigits(proc.gpu_memory_mb || 0)} MB
                                 </span>
                             </div>
                         </div>
@@ -708,15 +716,11 @@ def index() -> str:
         }
 
         function updateCharts() {
-            // Update GPU chart
-            gpuChart.data.labels = historyData.timestamps.slice(-60);
-            gpuChart.data.datasets[0].data = historyData.gpu.slice(-60);
-            gpuChart.update('none');
-
-            // Update CPU chart
-            cpuChart.data.labels = historyData.timestamps.slice(-60);
-            cpuChart.data.datasets[0].data = historyData.cpu.slice(-60);
-            cpuChart.update('none');
+            // Update combined GPU/CPU chart
+            combinedChart.data.labels = historyData.timestamps.slice(-60);
+            combinedChart.data.datasets[0].data = historyData.gpu.slice(-60);
+            combinedChart.data.datasets[1].data = historyData.cpu.slice(-60);
+            combinedChart.update('none');
 
             // Update power chart
             powerChart.data.labels = historyData.timestamps.slice(-60);
@@ -949,6 +953,477 @@ def api_status():
     })
 
 
+def get_db():
+    """Get database instance."""
+    if not DB_AVAILABLE:
+        return None
+    config = get_config()
+    db_path = getattr(config, "database_path", "llama_monitor.db")
+    return Database(db_path)
+
+
+@app.route("/settings")
+def settings_page():
+    """Serve the settings page HTML."""
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Llama Monitor - Settings</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            background: #16213e;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            color: #00d4ff;
+        }
+
+        .header a {
+            color: #00d4ff;
+            text-decoration: none;
+        }
+
+        .card {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            color: #00d4ff;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a3b5c;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-group input[type="number"],
+        .form-group input[type="text"] {
+            width: 100%;
+            padding: 12px 15px;
+            background: #0d111d;
+            border: 1px solid #2a3b5c;
+            border-radius: 6px;
+            color: #eee;
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .form-group .hint {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #00d4ff;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+
+        .btn-primary:hover {
+            background: #00a8cc;
+        }
+
+        .btn-secondary {
+            background: #2a3b5c;
+            color: #eee;
+        }
+
+        .btn-secondary:hover {
+            background: #3a4b6c;
+        }
+
+        .btn-link {
+            background: none;
+            border: none;
+            color: #00d4ff;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .btn-link:hover {
+            text-decoration: underline;
+        }
+
+        .feedback {
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .feedback.success {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+            display: block;
+        }
+
+        .feedback.error {
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid rgba(255, 71, 87, 0.3);
+            color: #ff4757;
+            display: block;
+        }
+
+        .settings-section {
+            margin-bottom: 25px;
+            padding-bottom: 25px;
+            border-bottom: 1px solid #2a3b5c;
+        }
+
+        .settings-section:last-child {
+            border-bottom: none;
+        }
+
+        .section-title {
+            font-size: 0.9rem;
+            color: #00d4ff;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .value-display {
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fa-solid fa-sliders"></i> Settings</h1>
+            <a href="/" class="btn-link"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a>
+        </div>
+
+        <div id="feedback" class="feedback"></div>
+
+        <form id="settings-form">
+            <div class="settings-section">
+                <h2 class="section-title">Display Settings</h2>
+
+                <div class="form-group">
+                    <label for="web_refresh_rate">Refresh Rate (seconds)</label>
+                    <input type="number" id="web_refresh_rate" name="web_refresh_rate" min="1" max="60" step="1">
+                    <div class="hint">How often the dashboard updates</div>
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="show_cost" name="show_cost">
+                        <label for="show_cost">Show Cost Display</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="show_temps" name="show_temps">
+                        <label for="show_temps">Show Temperature Display</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h2 class="section-title">Cost Settings</h2>
+
+                <div class="form-group">
+                    <label for="cost_rate">Electricity Cost ($/kWh)</label>
+                    <input type="number" id="cost_rate" name="cost_rate" step="0.01" min="0">
+                    <div class="hint">Current electricity rate for cost calculations</div>
+                </div>
+            </div>
+
+            <div class="settings-section">
+                <h2 class="section-title">Current Values</h2>
+                <div id="current-values" style="font-size: 0.85rem; color: #888;">
+                    <!-- Values will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" id="reset-btn"><i class="fa-solid fa-rotate-right"></i> Reset to Default</button>
+                <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Load settings on page load
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadSettings();
+        });
+
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                if (!response.ok) throw new Error('Failed to load settings');
+                const settings = await response.json();
+
+                // Populate form fields
+                document.getElementById('web_refresh_rate').value = settings.web_refresh_rate || 1;
+                document.getElementById('show_cost').checked = settings.show_cost !== false;
+                document.getElementById('show_temps').checked = settings.show_temps !== false;
+                document.getElementById('cost_rate').value = settings.cost_rate || 0.12;
+
+                // Display current values
+                document.getElementById('current-values').innerHTML = `
+                    <div><strong>Refresh Rate:</strong> <span class="value-display">${settings.web_refresh_rate || 1}s</span></div>
+                    <div><strong>Cost Display:</strong> <span class="value-display">${settings.show_cost !== false ? 'Enabled' : 'Disabled'}</span></div>
+                    <div><strong>Temp Display:</strong> <span class="value-display">${settings.show_temps !== false ? 'Enabled' : 'Disabled'}</span></div>
+                    <div><strong>Electricity Cost:</strong> <span class="value-display">$${parseFloat(settings.cost_rate || 0.12).toFixed(2)}/kWh</span></div>
+                `;
+            } catch (error) {
+                showFeedback('Error loading settings: ' + error.message, 'error');
+            }
+        }
+
+        async function saveSettings() {
+            const settings = {
+                web_refresh_rate: parseInt(document.getElementById('web_refresh_rate').value) || 1,
+                show_cost: document.getElementById('show_cost').checked,
+                show_temps: document.getElementById('show_temps').checked,
+                cost_rate: parseFloat(document.getElementById('cost_rate').value) || 0.12
+            };
+
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to save settings');
+                }
+
+                showFeedback('Settings saved successfully!', 'success');
+                await loadSettings();
+            } catch (error) {
+                showFeedback('Error saving settings: ' + error.message, 'error');
+            }
+        }
+
+        function showFeedback(message, type) {
+            const feedback = document.getElementById('feedback');
+            feedback.textContent = message;
+            feedback.className = 'feedback ' + type;
+
+            // Auto-hide after 5 seconds
+            setTimeout(function() {
+                feedback.style.display = 'none';
+            }, 5000);
+        }
+
+        // Form submission
+        document.getElementById('settings-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveSettings();
+        });
+
+        // Reset button
+        document.getElementById('reset-btn').addEventListener('click', async function() {
+            if (confirm('Reset all settings to default values?')) {
+                try {
+                    const response = await fetch('/api/settings/reset', { method: 'POST' });
+                    if (!response.ok) throw new Error('Failed to reset settings');
+                    showFeedback('Settings reset to defaults', 'success');
+                    await loadSettings();
+                } catch (error) {
+                    showFeedback('Error resetting settings: ' + error.message, 'error');
+                }
+            }
+        });
+    </script>
+</body>
+</html>"""
+    return render_template_string(html)
+
+
+@app.route("/api/settings")
+def api_get_settings():
+    """Get all settings from the database."""
+    if not DB_AVAILABLE:
+        return jsonify({
+            "web_refresh_rate": 1,
+            "show_cost": True,
+            "show_temps": True,
+            "cost_rate": 0.12
+        })
+
+    db = get_db()
+    if not db:
+        return jsonify({
+            "web_refresh_rate": 1,
+            "show_cost": True,
+            "show_temps": True,
+            "cost_rate": 0.12
+        })
+
+    settings = {
+        "web_refresh_rate": db.get_setting("web_refresh_rate", "1"),
+        "show_cost": db.get_setting("show_cost", "true"),
+        "show_temps": db.get_setting("show_temps", "true"),
+        "cost_rate": db.get_setting("cost_rate_usd_per_kwh", "0.12")
+    }
+
+    # Convert to appropriate types
+    try:
+        settings["web_refresh_rate"] = int(settings["web_refresh_rate"])
+    except (ValueError, TypeError):
+        settings["web_refresh_rate"] = 1
+
+    try:
+        settings["show_cost"] = settings["show_cost"].lower() in ("true", "1", "yes")
+    except (AttributeError, TypeError):
+        settings["show_cost"] = True
+
+    try:
+        settings["show_temps"] = settings["show_temps"].lower() in ("true", "1", "yes")
+    except (AttributeError, TypeError):
+        settings["show_temps"] = True
+
+    try:
+        settings["cost_rate"] = float(settings["cost_rate"])
+    except (ValueError, TypeError):
+        settings["cost_rate"] = 0.12
+
+    return jsonify(settings)
+
+
+@app.route("/api/settings", methods=["POST"])
+def api_set_settings():
+    """Set settings in the database."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    try:
+        # Update each setting that was provided
+        if "web_refresh_rate" in data:
+            db.set_setting("web_refresh_rate", int(data["web_refresh_rate"]))
+
+        if "show_cost" in data:
+            db.set_setting("show_cost", "true" if data["show_cost"] else "false")
+
+        if "show_temps" in data:
+            db.set_setting("show_temps", "true" if data["show_temps"] else "false")
+
+        if "cost_rate" in data:
+            db.set_setting("cost_rate_usd_per_kwh", float(data["cost_rate"]))
+
+        return jsonify({"success": True, "message": "Settings saved"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/settings/reset", methods=["POST"])
+def api_reset_settings():
+    """Reset settings to defaults."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    try:
+        # Delete all settings to reset to defaults
+        cursor = db.conn.cursor()
+        cursor.execute("DELETE FROM settings")
+        db.conn.commit()
+
+        # Re-insert default cost rate
+        cursor.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)",
+            ("cost_rate_usd_per_kwh", "0.12")
+        )
+        db.conn.commit()
+
+        return jsonify({"success": True, "message": "Settings reset to defaults"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @socketio.on("connect")
 def handle_connect():
     """Handle WebSocket connection."""
@@ -961,14 +1436,25 @@ def handle_disconnect():
     print("Client disconnected")
 
 
-def run_server(host="0.0.0.0", port=8080, debug=False):
+def run_server(host="0.0.0.0", port=8080, debug=False, verbose=False):
     """Run the web server.
 
     Args:
         host: Host to bind to
         port: Port to listen on
         debug: Enable debug mode
+        verbose: Enable verbose logging (INFO level for werkzeug, socketio, engineio)
     """
+    # Configure logging based on verbose flag
+    if verbose:
+        logging.getLogger('werkzeug').setLevel(logging.INFO)
+        logging.getLogger('socketio').setLevel(logging.INFO)
+        logging.getLogger('engineio').setLevel(logging.INFO)
+    else:
+        logging.getLogger('werkzeug').setLevel(logging.WARNING)
+        logging.getLogger('socketio').setLevel(logging.WARNING)
+        logging.getLogger('engineio').setLevel(logging.WARNING)
+
     print(f"llama-monitor web server starting on http://{host}:{port}")
     print("Press Ctrl+C to stop")
 
@@ -979,13 +1465,14 @@ def run_server(host="0.0.0.0", port=8080, debug=False):
 _server_thread = None
 
 
-def start_server(host="0.0.0.0", port=8080, metrics_cache=None):
+def start_server(host="0.0.0.0", port=8080, metrics_cache=None, verbose=False):
     """Start the web server in a background thread.
 
     Args:
         host: Host to bind to
         port: Port to listen on
         metrics_cache: Optional MetricsCache instance for sharing data
+        verbose: Enable verbose logging (INFO level for werkzeug, socketio, engineio)
     """
     global _server_thread, _metrics_cache
 
@@ -996,7 +1483,7 @@ def start_server(host="0.0.0.0", port=8080, metrics_cache=None):
 
     # Create and start server thread
     def run():
-        run_server(host=host, port=port, debug=False)
+        run_server(host=host, port=port, debug=False, verbose=verbose)
 
     _server_thread = threading.Thread(target=run, daemon=True)
     _server_thread.start()
@@ -1039,10 +1526,15 @@ def main():
         action="store_true",
         help="Enable debug mode",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (INFO level for werkzeug, socketio, engineio)",
+    )
 
     args = parser.parse_args()
 
-    run_server(host=args.host, port=args.port, debug=args.debug)
+    run_server(host=args.host, port=args.port, debug=args.debug, verbose=args.verbose)
 
 
 if __name__ == "__main__":
