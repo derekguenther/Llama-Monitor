@@ -1,3 +1,19 @@
+## Concurrent Worktree Protocol (CRITICAL)
+You must never edit files in the root directory.
+
+**To Start a Bead:**
+1. Read the `REPO_MAP.md` file in the root directory to understand the project architecture and locate the functions you need.
+2. `git worktree add .worktrees/<task-name> -b <task-name>`
+3. `cd .worktrees/<task-name>`
+4. Do all your coding inside this folder.
+
+**To Finish a Bead:**
+1. From inside your worktree, run: `finish-bead "Brief description of what you did"`
+2. Close the bead in the tracker and `/exit`
+
+Never leave a completed worktree behind. Never push to a remote repository.
+
+
 # Project Instructions for AI Agents
 
 This file provides instructions and context for AI coding agents working on this project.
@@ -10,17 +26,92 @@ This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full 
 ### Quick Reference
 
 ```bash
-bd ready              # Find available work
+bd ready              # Find available work (open or in_progress)
+bd ready --json       # Find available work as JSON
 bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
+bd show <id> --json   # View issue details as JSON
+bd update <id> --claim  # Claim work (sets status to in_progress)
 bd close <id>         # Complete work
 ```
+
+### Status Labels (How to Track Work State)
+
+Beads has 5 built-in statuses (`open`, `in_progress`, `blocked`, `closed`, `deferred`). To track additional states like "needs review" or "ready to merge", use **labels**:
+
+| Label | Purpose |
+|-------|---------|
+| `status:needs-review` | Work is complete but needs review before closing |
+| `status:ready-to-merge` | Review complete, ready to merge to main |
+| `status:in-worktree` | Currently being implemented in a worktree |
+
+**Status + Label Combinations:**
+
+| Status | Labels | Meaning |
+|--------|--------|---------|
+| `in_progress` | (none) | Actively working on this |
+| `in_progress` | `status:needs-review` | Complete, waiting for review |
+| `in_progress` | `status:ready-to-merge` | Review complete, ready to merge |
+| `in_progress` | `status:in-worktree` | Currently in a worktree |
+| `closed` | (none) | Merged to main - truly done |
+
+**Common Workflows:**
+
+1. **Starting work**: 
+   ```bash
+   bd update <id> --claim  # status becomes in_progress
+   ```
+
+2. **Work complete, needs review**: 
+   ```bash
+   bd update <id> --add-label status:needs-review
+   # Keep status as in_progress (do NOT close yet)
+   ```
+
+3. **Review complete, ready to merge**:
+   ```bash
+   bd update <id> --remove-label status:needs-review --add-label status:ready-to-merge
+   # Commit and push changes
+   ```
+
+4. **Merged to main**:
+   ```bash
+   bd update <id> --remove-label status:ready-to-merge
+   bd close <id> --reason "Merged to main"
+   # Verify git status shows "up to date with origin"
+   ```
+
+### Closure Protocol (CRITICAL)
+
+**DO NOT close a bead until the following checklist is complete:**
+
+```
+[ ] Code is committed with descriptive message
+[ ] Changes are pushed to remote (`git push`)
+[ ] Quality gates pass (tests, linters)
+[ ] Changes verified on main branch
+```
+
+**The bead is NOT complete until `git push` succeeds.** Never stop before pushing - that leaves work stranded locally.
+
+**If a bead is ready for review but not yet complete:**
+- Keep it `in_progress` status
+- Add label: `bd update <id> --add-label status:needs-review`
+- Do NOT close until it's merged
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+- **DO NOT close beads that need review** - use labels instead
 
 ### Rules
 
 - Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+- Use **labels** to track work state within `open`/`in_progress` statuses
+- Only use `closed` status when work is truly merged and complete
 
 ## Session Completion
 
