@@ -2,6 +2,8 @@
 """Main entry point for llama-monitor."""
 
 import argparse
+import logging
+import math
 import os
 import signal
 import sys
@@ -12,6 +14,33 @@ from typing import Any, Dict, Optional
 from aggregator import Aggregator
 from config import Config, get_config, reload_config
 from db import Database
+
+
+def format_significant_digits(value: float, digits: int = 4) -> str:
+    """Format a value with the specified number of significant digits.
+
+    Args:
+        value: The numeric value to format
+        digits: Number of significant digits (default: 4)
+
+    Returns:
+        Formatted string with the specified significant digits
+    """
+    if value is None or value == 0 or not isinstance(value, (int, float)):
+        return "0"
+    if value == 0:
+        return "0"
+
+    abs_value = abs(value)
+    exponent = math.floor(math.log10(abs_value))
+    # Calculate decimal places needed
+    decimal_places = digits - 1 - exponent
+    if decimal_places < 0:
+        decimal_places = 0
+
+    # Format with the calculated decimal places
+    format_str = f"{{:.{decimal_places}f}}"
+    return format_str.format(value)
 
 
 class MetricsCache:
@@ -43,6 +72,7 @@ class Monitor:
         enable_web: bool = True,
         enable_tui: bool = False,
         show_stats: bool = False,
+        verbose: bool = False,
     ):
         """Initialize the monitor.
 
@@ -53,6 +83,7 @@ class Monitor:
             enable_web: Enable web server mode.
             enable_tui: Enable TUI mode.
             show_stats: Show stats and exit.
+            verbose: Enable verbose logging.
         """
         self.server_url = server_url
         self.config_path = config_path
@@ -60,6 +91,25 @@ class Monitor:
         self.enable_web = enable_web
         self.enable_tui = enable_tui
         self.show_stats = show_stats
+        self.verbose = verbose
+
+        # Configure logging based on verbose flag
+        if verbose:
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            logging.getLogger('werkzeug').setLevel(logging.INFO)
+            logging.getLogger('socketio').setLevel(logging.INFO)
+            logging.getLogger('engineio').setLevel(logging.INFO)
+        else:
+            logging.basicConfig(
+                level=logging.WARNING,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            logging.getLogger('werkzeug').setLevel(logging.WARNING)
+            logging.getLogger('socketio').setLevel(logging.WARNING)
+            logging.getLogger('engineio').setLevel(logging.WARNING)
 
         # Load config first
         self.config = get_config(config_path)
@@ -164,7 +214,7 @@ class Monitor:
 
         # Start web server in background thread
         self.web_server_thread = threading.Thread(
-            target=lambda: start_web_server(host="0.0.0.0", port=8080, metrics_cache=self.metrics_cache),
+            target=lambda: start_web_server(host="0.0.0.0", port=8080, metrics_cache=self.metrics_cache, verbose=self.verbose),
             daemon=True,
         )
         self.web_server_thread.start()
@@ -242,20 +292,20 @@ class Monitor:
         sys_power = system.get("system", {})
 
         print("\nSystem:")
-        print(f"  CPU:              {cpu.get('percent', 0):.1f}%")
-        print(f"  GPU Usage:        {gpu.get('usage', 0):.1f}%")
-        print(f"  GPU Memory:       {gpu.get('memory_used', 0):,} MB / {gpu.get('memory_total', 0):,} MB")
-        print(f"  Memory:           {mem.get('used', 0):,} MB / {mem.get('total', 0):,} MB")
-        print(f"  GPU Temp:         {gpu.get('temperature_c', 0):.0f}°C")
-        print(f"  System Power:     {sys_power.get('system_power_w', 0):.1f} W")
-        print(f"  GPU Power:        {gpu.get('power_w', 0):.1f} W")
+        print(f"  CPU:              {format_significant_digits(cpu.get('percent', 0))}%")
+        print(f"  GPU Usage:        {format_significant_digits(gpu.get('usage', 0))}%")
+        print(f"  GPU Memory:       {format_significant_digits(gpu.get('memory_used', 0))} MB / {format_significant_digits(gpu.get('memory_total', 0))} MB")
+        print(f"  Memory:           {format_significant_digits(mem.get('used', 0))} MB / {format_significant_digits(mem.get('total', 0))} MB")
+        print(f"  GPU Temp:         {format_significant_digits(gpu.get('temperature_c', 0))}°C")
+        print(f"  System Power:     {format_significant_digits(sys_power.get('system_power_w', 0))} W")
+        print(f"  GPU Power:        {format_significant_digits(gpu.get('power_w', 0))} W")
 
         # Cost - show today's energy
         print("\nCost:")
         if cost:
             today_wh = cost.get('today_wh') or cost.get('total_energy_wh', 0)
-            print(f"  Today's Cost:     ${cost.get('total_cost', 0):.4f}")
-            print(f"  Today's Energy:   {today_wh:.2f} Wh")
+            print(f"  Today's Cost:     ${format_significant_digits(cost.get('total_cost', 0))}")
+            print(f"  Today's Energy:   {format_significant_digits(today_wh)} Wh")
         else:
             print("  No cost data available (no active session)")
 
@@ -354,6 +404,12 @@ def parse_args() -> argparse.Namespace:
         "--version",
         action="store_true",
         help="Show version and exit",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose logging (INFO level for werkzeug, socketio, engineio)",
     )
 
     return parser.parse_args()
@@ -486,6 +542,7 @@ def main():
         enable_web=not args.no_web,
         enable_tui=args.tui,
         show_stats=args.stats,
+        verbose=args.verbose,
     )
 
     # Set up signal handlers for graceful shutdown

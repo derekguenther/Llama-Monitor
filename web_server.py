@@ -1424,6 +1424,192 @@ def api_reset_settings():
         return jsonify({"error": str(e)}), 500
 
 
+# Vendor rates API endpoints
+# ======================================================================
+
+@app.route("/api/vendor/rates", methods=["GET"])
+def api_get_vendor_rates():
+    """Get all vendor rates."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    try:
+        rates = db.get_all_vendor_rates()
+        return jsonify({"success": True, "rates": rates})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/vendor/rates", methods=["POST"])
+def api_add_vendor_rate():
+    """Add a new vendor rate."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    try:
+        vendor_name = data.get("vendor_name")
+        rate_usd_per_token = data.get("rate_usd_per_token", 0)
+        is_local_server = data.get("is_local_server", False)
+
+        if not vendor_name:
+            return jsonify({"error": "vendor_name is required"}), 400
+
+        success = db.add_vendor_rate(vendor_name, rate_usd_per_token, is_local_server)
+        if success:
+            return jsonify({"success": True, "message": "Vendor rate added"})
+        else:
+            return jsonify({"error": "Vendor already exists"}), 409
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/vendor/rates/<vendor_name>", methods=["PUT"])
+def api_update_vendor_rate(vendor_name):
+    """Update an existing vendor rate."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    try:
+        rate_usd_per_token = data.get("rate_usd_per_token")
+        is_local_server = data.get("is_local_server")
+
+        success = db.update_vendor_rate(vendor_name, rate_usd_per_token, is_local_server)
+        if success:
+            return jsonify({"success": True, "message": "Vendor rate updated"})
+        else:
+            return jsonify({"error": "Vendor not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/vendor/rates/<vendor_name>", methods=["DELETE"])
+def api_delete_vendor_rate(vendor_name):
+    """Delete a vendor rate."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    try:
+        success = db.delete_vendor_rate(vendor_name)
+        if success:
+            return jsonify({"success": True, "message": "Vendor rate deleted"})
+        else:
+            return jsonify({"error": "Vendor not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Token cost API endpoints
+# ======================================================================
+
+@app.route("/api/token/accumulator", methods=["GET"])
+def api_get_token_accumulator():
+    """Get today's token tracking statistics."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    try:
+        stats = db.get_today_token_tracking()
+        if stats:
+            return jsonify({
+                "success": True,
+                "data": stats
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "data": {
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "total_tokens": 0,
+                    "prompt_tokens": 0,
+                    "generated_tokens": 0,
+                    "last_update": None
+                }
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/vendor/comparison", methods=["GET"])
+def api_get_vendor_comparison():
+    """Get vendor cost comparison based on today's tokens."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    try:
+        # Calculate local server rate based on electricity cost
+        calculator = ElectricityCostCalculator(db)
+
+        # Get today's token stats
+        today_stats = calculator.get_today_token_stats()
+        if not today_stats:
+            return jsonify({
+                "success": True,
+                "comparison": [],
+                "local_server_rate": 0
+            })
+
+        # Get vendor rates
+        vendor_rates = db.get_all_vendor_rates()
+
+        total_tokens = today_stats.get("total_tokens", 0)
+
+        comparison = []
+        for vendor in vendor_rates:
+            rate = vendor.get("rate_usd_per_token", 0)
+            cost = total_tokens * rate
+            comparison.append({
+                "vendor_name": vendor["vendor_name"],
+                "rate_usd_per_token": rate,
+                "total_tokens": total_tokens,
+                "cost_usd": cost,
+                "is_local_server": vendor.get("is_local_server", False),
+            })
+
+        # Calculate local server rate
+        local_rate = calculator.calculate_local_server_rate()
+
+        return jsonify({
+            "success": True,
+            "comparison": comparison,
+            "local_server_rate": local_rate,
+            "total_tokens": total_tokens
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @socketio.on("connect")
 def handle_connect():
     """Handle WebSocket connection."""

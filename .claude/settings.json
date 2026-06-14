@@ -22,5 +22,8 @@
         "matcher": ""
       }
     ]
+  },
+  "env": {
+    "PATH": "/home/yolo_agent/.npm-global/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   }
 }

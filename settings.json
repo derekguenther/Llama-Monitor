@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git push*)",
+      "Bash(git rebase*)",
+      "Bash(git reset*)",
+      "Bash(git clean*)",
+      "Bash(git branch -D*)"
+    ]
+  }
+  "env": {
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "ANTHROPIC_BASE_URL": "http://host.docker.internal:8000",
+    "ANTHROPIC_API_KEY": "12345",
+    "ANTHROPIC_MODEL": "qwen3-coder-next",
+    "ANTHROPIC_SMALL_FAST_MODEL": "qwen3-coder-next",
+    "CLAUDE_SONNET": "qwen3-coder-next",
+    "CLAUDE_OPUS": "qwen3-coder-next",
+    "CLAUDE_HAIKU": "qwen3-coder-next",
+    "EPISODIC_MEMORY_API_MODEL": "qwen3-coder-next",
+    "EPISODIC_MEMORY_API_MODEL_FALLBACK": "qwen3-coder-next",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_USE_POWERSHELL_TOOL": "0",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "131072",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "131072",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "85",
+    "CLAUDE_CODE_BYPASS_ALL_PERMISSIONS": "1",
+    "IS_SANDBOX": "1",
+    "CLAUDE_CODE_SUPPRESS_UI_PROMPTS": "1",
+    "ANTHROPIC_DISABLE_SAFETY_CHECKS": "1"
+  }
+}

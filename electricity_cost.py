@@ -35,6 +35,11 @@ class ElectricityCostCalculator:
         self.gpu_energy_wh = 0.0
         self.cpu_energy_wh = 0.0
 
+        # Token tracking
+        self.total_tokens = 0
+        self.prompt_tokens = 0
+        self.generated_tokens = 0
+
         # Today's energy tracking (resets at midnight)
         self.today_energy_wh = 0.0
         self.today_gpu_wh = 0.0
@@ -326,6 +331,129 @@ class ElectricityCostCalculator:
             time_str = f"{duration_seconds:.0f} seconds"
 
         return f"${cost:.4f} ({time_str} @ ${rate:.2f}/kWh)"
+
+    # Token tracking methods
+    # ======================================================================
+
+    def get_today_token_stats(self) -> Optional[Dict[str, Any]]:
+        """Get today's token tracking statistics.
+
+        Returns:
+            Dictionary with today's token stats or None if not tracked
+        """
+        row = self.database.execute_query(
+            """
+            SELECT date, total_tokens, prompt_tokens, generated_tokens, last_update
+            FROM daily_token_tracking
+            WHERE date = ?
+            """,
+            (datetime.now().strftime("%Y-%m-%d"),),
+        )
+        if row:
+            return {
+                "date": row["date"],
+                "total_tokens": row["total_tokens"],
+                "prompt_tokens": row["prompt_tokens"],
+                "generated_tokens": row["generated_tokens"],
+                "last_update": row["last_update"],
+            }
+        return None
+
+    def update_token_tracking(
+        self,
+        prompt_tokens: int,
+        generated_tokens: int,
+    ) -> Dict[str, int]:
+        """Update token tracking with new tokens.
+
+        Args:
+            prompt_tokens: New prompt tokens to add
+            generated_tokens: New generated tokens to add
+
+        Returns:
+            Dictionary with updated token counts
+        """
+        # Update running totals
+        self.prompt_tokens += prompt_tokens
+        self.generated_tokens += generated_tokens
+        self.total_tokens = self.prompt_tokens + self.generated_tokens
+
+        # Update today's token tracking in database
+        today_stats = self.database.get_today_token_tracking()
+        if today_stats:
+            new_total = today_stats.get("total_tokens", 0) + prompt_tokens + generated_tokens
+            new_prompt = today_stats.get("prompt_tokens", 0) + prompt_tokens
+            new_generated = today_stats.get("generated_tokens", 0) + generated_tokens
+        else:
+            new_total = prompt_tokens + generated_tokens
+            new_prompt = prompt_tokens
+            new_generated = generated_tokens
+
+        self.database.update_today_token_tracking(
+            total_tokens=new_total,
+            prompt_tokens=new_prompt,
+            generated_tokens=new_generated,
+        )
+
+        return {
+            "total_tokens": self.total_tokens,
+            "prompt_tokens": self.prompt_tokens,
+            "generated_tokens": self.generated_tokens,
+        }
+
+    def calculate_local_server_rate(self) -> float:
+        """Calculate local server rate based on electricity cost and tokens.
+
+        Returns:
+            Rate in USD per token for local server
+        """
+        today_stats = self.get_today_token_stats()
+        today_energy = self.database.get_today_energy()
+
+        if not today_stats or not today_energy:
+            # Fall back to cumulative stats
+            cumulative = self.database.get_cumulative_energy()
+            if cumulative:
+                total_tokens = self.total_tokens
+                total_wh = cumulative.get("total_wh", 0)
+                if total_tokens > 0:
+                    return self.calculate_cost(total_wh) / total_tokens
+            return 0.0
+
+        total_tokens = today_stats.get("total_tokens", 0)
+        total_wh = today_energy.get("total_wh", 0)
+
+        if total_tokens > 0:
+            return self.calculate_cost(total_wh) / total_tokens
+        return 0.0
+
+    def get_vendor_comparison(self) -> List[Dict[str, Any]]:
+        """Get vendor comparison data.
+
+        Returns:
+            List of vendor comparison records with cost calculations
+        """
+        vendor_rates = self.database.get_all_vendor_rates()
+        today_stats = self.get_today_token_stats()
+
+        if not today_stats:
+            return []
+
+        total_tokens = today_stats.get("total_tokens", 0)
+
+        comparison = []
+        for vendor in vendor_rates:
+            rate = vendor.get("rate_usd_per_token", 0)
+            cost = total_tokens * rate
+            comparison.append({
+                "vendor_name": vendor["vendor_name"],
+                "rate_usd_per_token": rate,
+                "total_tokens": total_tokens,
+                "cost_usd": cost,
+                "is_local_server": vendor.get("is_local_server", False),
+            })
+
+        return comparison
 
     def get_session_stats(self) -> Optional[Dict[str, Any]]:
         """Get current session statistics.

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>llama-monitor</title>
+    <title>Llama Monitor</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
@@ -322,13 +322,133 @@
             border-radius: 4px;
             font-family: 'Courier New', monospace;
         }
+
+        /* Token Accumulator */
+        .token-accumulator {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .token-accumulator:hover {
+            transform: scale(1.05);
+        }
+
+        .token-accumulator .stat-value {
+            color: #4ade80;
+        }
+
+        /* Vendor Comparison Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 25px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2a3b5c;
+        }
+
+        .modal-header h2 {
+            color: #00d4ff;
+            margin: 0;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            color: #888;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .close-modal:hover {
+            color: #00d4ff;
+        }
+
+        .vendor-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .vendor-table th,
+        .vendor-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #2a3b5c;
+        }
+
+        .vendor-table th {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .vendor-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .vendor-table .local-server {
+            background: rgba(74, 172, 128, 0.1);
+        }
+
+        .vendor-table .cost-column {
+            font-weight: bold;
+            color: #4ade80;
+        }
+
+        .modal-footer {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #2a3b5c;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .vendor-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .add-vendor-btn {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1><i class="fa-solid fa-chart-line"></i> llama-monitor</h1>
+            <h1><i class="fa-solid fa-chart-line"></i> Llama Monitor</h1>
             <div class="server-info">
                 Server: <a href="{{ server_url }}" target="_blank">{{ server_url }}</a>
             </div>
@@ -338,7 +458,7 @@
         <div class="stats-summary">
             <h2>Summary</h2>
             <div class="stats-grid">
-                <div class="stat-item">
+                <div class="stat-item token-accumulator" id="token-accumulator">
                     <div class="stat-value" id="total-tokens">0</div>
                     <div class="stat-label">Total Tokens</div>
                 </div>
@@ -356,6 +476,48 @@
                 </div>
             </div>
         </div>
+
+        <!-- Vendor Comparison Modal -->
+        <div class="modal-overlay" id="vendor-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2><i class="fa-solid fa-exchange-alt"></i> Token Cost Comparison</h2>
+                    <button class="close-modal" id="close-modal">&times;</button>
+                </div>
+                <div id="modal-body">
+                    <p style="color: #888; margin-bottom: 15px;">
+                        Today's tokens: <span id="modal-tokens" style="color: #00d4ff; font-weight: bold;">0</span>
+                    </p>
+                    <table class="vendor-table">
+                        <thead>
+                            <tr>
+                                <th>Vendor</th>
+                                <th>Rate ($/token)</th>
+                                <th>Total Tokens</th>
+                                <th class="cost-column">Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody id="vendor-table-body">
+                            <tr>
+                                <td colspan="4" style="text-align: center; color: #888;">Loading vendor data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <div class="vendor-controls">
+                        <button class="btn btn-primary add-vendor-btn" id="add-vendor-btn">
+                            <i class="fa-solid fa-plus"></i> Add Vendor
+                        </button>
+                    </div>
+                    <div id="local-server-info" style="color: #888; font-size: 0.9rem;">
+                        <!-- Local server info will be injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dashboard Grid -->
 
         <!-- Dashboard Grid -->
         <div class="dashboard-grid">
@@ -755,6 +917,110 @@
                 }
             }
         });
+
+        // Token Accumulator and Vendor Comparison Modal
+        const tokenAccumulator = document.getElementById('token-accumulator');
+        const vendorModal = document.getElementById('vendor-modal');
+        const closeModalBtn = document.getElementById('close-modal');
+        const addVendorBtn = document.getElementById('add-vendor-btn');
+        const vendorTableBody = document.getElementById('vendor-table-body');
+        const modalTokensSpan = document.getElementById('modal-tokens');
+        const localServerInfo = document.getElementById('local-server-info');
+
+        // Open vendor comparison modal
+        tokenAccumulator.addEventListener('click', async function() {
+            await loadVendorComparison();
+            vendorModal.classList.add('active');
+        });
+
+        // Close modal
+        closeModalBtn.addEventListener('click', function() {
+            vendorModal.classList.remove('active');
+        });
+
+        // Close modal when clicking outside
+        vendorModal.addEventListener('click', function(e) {
+            if (e.target === vendorModal) {
+                vendorModal.classList.remove('active');
+            }
+        });
+
+        // Add new vendor button
+        addVendorBtn.addEventListener('click', async function() {
+            const vendorName = prompt('Enter vendor name:');
+            if (!vendorName) return;
+
+            const rate = prompt('Enter rate in USD per token:', '0.00');
+            if (rate === null) return;
+
+            try {
+                const response = await fetch('/api/vendor/rates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        vendor_name: vendorName,
+                        rate_usd_per_token: parseFloat(rate)
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert('Vendor added successfully!');
+                    await loadVendorComparison();
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to add vendor'));
+                }
+            } catch (error) {
+                console.error('Error adding vendor:', error);
+                alert('Failed to add vendor. Check console for details.');
+            }
+        });
+
+        // Load vendor comparison data
+        async function loadVendorComparison() {
+            try {
+                // Get token stats
+                const tokenResponse = await fetch('/api/token/accumulator');
+                const tokenData = await tokenResponse.json();
+
+                // Get vendor comparison
+                const vendorResponse = await fetch('/api/vendor/comparison');
+                const vendorData = await vendorResponse.json();
+
+                if (tokenData.success && vendorData.success) {
+                    // Update modal tokens display
+                    const totalTokens = tokenData.data?.total_tokens || 0;
+                    modalTokensSpan.textContent = totalTokens.toLocaleString();
+
+                    // Update local server info
+                    const localRate = vendorData.local_server_rate || 0;
+                    localServerInfo.innerHTML = `Local server rate: $${localRate.toFixed(6)}/token`;
+
+                    // Build vendor table
+                    let html = '';
+                    for (const vendor of vendorData.comparison || []) {
+                        const isLocal = vendor.is_local_server ? 'local-server' : '';
+                        html += `
+                            <tr class="${isLocal}">
+                                <td>${vendor.vendor_name} ${vendor.is_local_server ? '(Local)' : ''}</td>
+                                <td>$${vendor.rate_usd_per_token.toFixed(6)}</td>
+                                <td>${vendor.total_tokens.toLocaleString()}</td>
+                                <td class="cost-column">$${vendor.cost_usd.toFixed(4)}</td>
+                            </tr>
+                        `;
+                    }
+
+                    if (!vendorData.comparison || vendorData.comparison.length === 0) {
+                        html = '<tr><td colspan="4" style="text-align: center; color: #888;">No vendors configured. Click "Add Vendor" to add one.</td></tr>';
+                    }
+
+                    vendorTableBody.innerHTML = html;
+                }
+            } catch (error) {
+                console.error('Error loading vendor comparison:', error);
+                vendorTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #888;">Error loading data. Check console for details.</td></tr>';
+            }
+        }
 
         // Initialize and start polling
         document.addEventListener('DOMContentLoaded', function() {

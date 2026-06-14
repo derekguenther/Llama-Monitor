@@ -71,8 +71,17 @@ class Aggregator:
         gpu = system.get("gpu", {})
         memory = system.get("memory", {})
 
+        # Calculate CPU percent: prioritize process CPU if available, otherwise use total OS CPU
+        process_cpu = cpu.get("process_cpu", {})
+        if process_cpu:
+            # Sum all tracked process CPU percentages
+            cpu_percent = sum(data.get("cpu_percent", 0) for data in process_cpu.values())
+        else:
+            # Fall back to total OS CPU
+            cpu_percent = cpu.get("percent", 0)
+
         system_data = {
-            "cpu_percent": cpu.get("percent", 0),
+            "cpu_percent": cpu_percent,
             "cpu_cores": cpu.get("cores", []),
             "cpu_count": cpu.get("count", 0),
             "cpu_power_w": cpu.get("cpu_power_w", 0),
@@ -115,6 +124,11 @@ class Aggregator:
             requests_processing=server.get("requests_processing", 0),
             requests_deferred=server.get("requests_deferred", 0),
         )
+
+        # Track token usage for cost comparison
+        prompt_tokens = server.get("prompt_tokens_total", 0)
+        generated_tokens = server.get("tokens_predicted_total", 0)
+        self.cost_calculator.update_token_tracking(prompt_tokens, generated_tokens)
 
         # Store system metrics
         system = metrics.get("system", {})

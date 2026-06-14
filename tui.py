@@ -28,6 +28,34 @@ except ImportError:
     REQUESTS_AVAILABLE = False
 
 
+def format_significant_digits(value: float, digits: int = 4) -> str:
+    """Format a value with the specified number of significant digits.
+
+    Args:
+        value: The numeric value to format
+        digits: Number of significant digits (default: 4)
+
+    Returns:
+        Formatted string with the specified significant digits
+    """
+    if value is None or value == 0 or not isinstance(value, (int, float)):
+        return "0"
+    if value == 0:
+        return "0"
+
+    import math
+    abs_value = abs(value)
+    exponent = math.floor(math.log10(abs_value))
+    # Calculate decimal places needed
+    decimal_places = digits - 1 - exponent
+    if decimal_places < 0:
+        decimal_places = 0
+
+    # Format with the calculated decimal places
+    format_str = f"{{:.{decimal_places}f}}"
+    return format_str.format(value)
+
+
 class TUI:
     """Terminal UI for llama-monitor."""
 
@@ -107,7 +135,7 @@ class TUI:
         height, width = stdscr.getmaxyx()
 
         # Title
-        title = " llama-monitor Dashboard "
+        title = " Llama Monitor Dashboard "
         stdscr.attron(self.colors.get("header", curses.A_BOLD))
         stdscr.addstr(0, 0, title.center(width)[:width-1])
         stdscr.attroff(self.colors.get("header", curses.A_BOLD))
@@ -152,13 +180,13 @@ class TUI:
             cost_rate = getattr(self.config, "cost_rate", 0.12)
             cost_usd = total_wh / 1000 * cost_rate
 
-            cost_str = f" ${cost_usd:.4f} "
+            cost_str = f" ${format_significant_digits(cost_usd)} "
             stdscr.attron(self.colors.get("cost", curses.A_BOLD))
             stdscr.addstr(row, 2, cost_str)
             stdscr.attroff(self.colors.get("cost", curses.A_BOLD))
 
             row += 1
-            sub_str = f" Energy: {total_wh:.1f} Wh @ ${cost_rate:.2f}/kWh "
+            sub_str = f" Energy: {format_significant_digits(total_wh)} Wh @ ${format_significant_digits(cost_rate)}/kWh "
             stdscr.addstr(row, 2, sub_str[:section_width-4], curses.A_DIM)
         else:
             stdscr.addstr(row, 2, " No cost data available ", curses.A_DIM)
@@ -240,26 +268,26 @@ class TUI:
 
             # CPU usage
             cpu_percent = system.get("cpu_percent", 0) or 0
-            stdscr.addstr(row, 4, f"CPU Usage:  {cpu_percent:5.1f}%", self.colors.get("normal"))
+            stdscr.addstr(row, 4, f"CPU Usage:  {format_significant_digits(cpu_percent)}%", self.colors.get("normal"))
             self._draw_progress_bar(stdscr, row, 18, cpu_percent, section_width - 22)
             row += 1
 
             # GPU usage
             gpu_percent = system.get("gpu_usage", 0) or 0
-            stdscr.addstr(row, 4, f"GPU Usage:  {gpu_percent:5.1f}%", self.colors.get("cost"))
+            stdscr.addstr(row, 4, f"GPU Usage:  {format_significant_digits(gpu_percent)}%", self.colors.get("cost"))
             self._draw_progress_bar(stdscr, row, 18, gpu_percent, section_width - 22)
             row += 1
 
             # Memory usage
             memory_percent = system.get("memory_percent", 0) or 0
-            stdscr.addstr(row, 4, f"Memory:     {memory_percent:5.1f}%", self.colors.get("normal"))
+            stdscr.addstr(row, 4, f"Memory:     {format_significant_digits(memory_percent)}%", self.colors.get("normal"))
             self._draw_progress_bar(stdscr, row, 18, memory_percent, section_width - 22)
             row += 2
 
             # GPU memory
             gpu_mem_used = system.get("gpu_memory_used", 0) or 0
             gpu_mem_total = system.get("gpu_memory_total", 0) or 1
-            stdscr.addstr(row, 4, f"GPU Memory: {gpu_mem_used:,} / {gpu_mem_total:,} MB", self.colors.get("normal"))
+            stdscr.addstr(row, 4, f"GPU Memory: {format_significant_digits(gpu_mem_used)} / {format_significant_digits(gpu_mem_total)} MB", self.colors.get("normal"))
             row += 1
         else:
             stdscr.addstr(row, 4, " No system data available ", curses.A_DIM)
@@ -292,23 +320,23 @@ class TUI:
 
             # GPU power
             gpu_power = system.get("gpu_power_w", 0) or 0
-            stdscr.addstr(row, 4, f"GPU Power:    {gpu_power:6.1f} W", self.colors.get("cost"))
+            stdscr.addstr(row, 4, f"GPU Power:    {format_significant_digits(gpu_power)} W", self.colors.get("cost"))
             row += 1
 
             # CPU power
             cpu_power = system.get("cpu_power_w", 0) or 0
-            stdscr.addstr(row, 4, f"CPU Power:    {cpu_power:6.1f} W", self.colors.get("normal"))
+            stdscr.addstr(row, 4, f"CPU Power:    {format_significant_digits(cpu_power)} W", self.colors.get("normal"))
             row += 1
 
             # System power
             system_power = system.get("system_power_w", 0) or 0
-            stdscr.addstr(row, 4, f"System Power: {system_power:6.1f} W", self.colors.get("normal"))
+            stdscr.addstr(row, 4, f"System Power: {format_significant_digits(system_power)} W", self.colors.get("normal"))
             row += 2
 
             # Session energy
             if self.metrics.get("cost"):
                 total_wh = self.metrics["cost"].get("total_wh", 0) or 0
-                stdscr.addstr(row, 4, f"Session Energy: {total_wh:.1f} Wh", self.colors.get("secondary"))
+                stdscr.addstr(row, 4, f"Session Energy: {format_significant_digits(total_wh)} Wh", self.colors.get("secondary"))
                 row += 1
         else:
             stdscr.addstr(row, 4, " No power data available ", curses.A_DIM)
@@ -352,7 +380,7 @@ class TUI:
                     gpu_mem = proc.get("gpu_memory_mb", 0) or 0
 
                     stdscr.addstr(row, 4, f"{name[:15]:15s} (PID: {pid})", self.colors.get("normal"))
-                    stdscr.addstr(row, 30, f"{gpu_util:5.1f}% {gpu_mem:6,} MB", self.colors.get("cost"))
+                    stdscr.addstr(row, 30, f"{format_significant_digits(gpu_util)}% {format_significant_digits(gpu_mem)} MB", self.colors.get("cost"))
                     row += 1
                 row += 1
         else:

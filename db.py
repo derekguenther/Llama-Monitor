@@ -132,39 +132,100 @@ class Database:
         cursor.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
         )
-        if cursor.fetchone():
-            return  # Schema already initialized
+        schema_exists = cursor.fetchone() is not None
 
-        # Create schema version table
-        cursor.execute(
-            """
-            CREATE TABLE schema_version (
-                version TEXT PRIMARY KEY,
-                created_at TEXT DEFAULT (datetime('now'))
+        if not schema_exists:
+            # Create schema version table
+            cursor.execute(
+                """
+                CREATE TABLE schema_version (
+                    version TEXT PRIMARY KEY,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+                """
             )
+            cursor.execute(
+                "INSERT INTO schema_version (version) VALUES (?)",
+                (self.SCHEMA_VERSION,),
+            )
+
+            # Create server metrics tables
+            self._create_server_metrics_tables(cursor)
+
+            # Create system metrics tables
+            self._create_system_metrics_tables(cursor)
+
+            # Create per-process GPU metrics tables
+            self._create_process_gpu_metrics_tables(cursor)
+
+            # Create per-process CPU metrics tables (from Public Documents schema)
+            self._create_process_cpu_metrics_tables(cursor)
+
+            # Create auxiliary tables
+            self._create_auxiliary_tables(cursor)
+
+            self.conn.commit()
+        else:
+            # Schema exists - check for and add missing tables (migrations)
+            self._migrate_schema(cursor)
+            self.conn.commit()
+
+    def _migrate_schema(self, cursor: sqlite3.Cursor) -> None:
+        """Check for and add missing tables (schema migrations)."""
+        # Get existing tables
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        )
+        existing_tables = {row[0] for row in cursor.fetchall()}
+
+        # Check for and create missing tables
+        if 'daily_energy' not in existing_tables:
+            cursor.execute(
+                """
+                CREATE TABLE daily_energy (
+                    date TEXT PRIMARY KEY,
+                    total_wh REAL DEFAULT 0,
+                    gpu_wh REAL DEFAULT 0,
+                    cpu_wh REAL DEFAULT 0,
+                    last_update TEXT
+                )
+                """
+            )
+
+        if 'daily_token_tracking' not in existing_tables:
+            cursor.execute(
+                """
+                CREATE TABLE daily_token_tracking (
+                    date TEXT PRIMARY KEY,
+                    total_tokens INTEGER DEFAULT 0,
+                    prompt_tokens INTEGER DEFAULT 0,
+                    generated_tokens INTEGER DEFAULT 0,
+                    last_update TEXT
+                )
+                """
+            )
+
+        if 'vendor_rates' not in existing_tables:
+            cursor.execute(
+                """
+                CREATE TABLE vendor_rates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    vendor_name TEXT UNIQUE NOT NULL,
+                    rate_usd_per_token REAL DEFAULT 0,
+                    is_local_server BOOLEAN DEFAULT 0,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    updated_at TEXT DEFAULT (datetime('now'))
+                )
+                """
+            )
+
+        # Insert default local server entry if not exists
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO vendor_rates (vendor_name, rate_usd_per_token, is_local_server)
+            VALUES ('Local Server (Electricity)', 0.0, 1)
             """
         )
-        cursor.execute(
-            "INSERT INTO schema_version (version) VALUES (?)",
-            (self.SCHEMA_VERSION,),
-        )
-
-        # Create server metrics tables
-        self._create_server_metrics_tables(cursor)
-
-        # Create system metrics tables
-        self._create_system_metrics_tables(cursor)
-
-        # Create per-process GPU metrics tables
-        self._create_process_gpu_metrics_tables(cursor)
-
-        # Create per-process CPU metrics tables (from Public Documents schema)
-        self._create_process_cpu_metrics_tables(cursor)
-
-        # Create auxiliary tables
-        self._create_auxiliary_tables(cursor)
-
-        self.conn.commit()
 
     def _create_server_metrics_tables(self, cursor: sqlite3.Cursor) -> None:
         """Create server metrics tables."""
@@ -469,6 +530,41 @@ class Database:
             """
             INSERT OR IGNORE INTO settings (key, value)
             VALUES ('cost_rate_usd_per_kwh', '0.12')
+            """
+        )
+
+        # Daily token tracking table (similar to daily_energy)
+        cursor.execute(
+            """
+            CREATE TABLE daily_token_tracking (
+                date TEXT PRIMARY KEY,
+                total_tokens INTEGER DEFAULT 0,
+                prompt_tokens INTEGER DEFAULT 0,
+                generated_tokens INTEGER DEFAULT 0,
+                last_update TEXT
+            )
+            """
+        )
+
+        # Vendor rates table for token cost comparison
+        cursor.execute(
+            """
+            CREATE TABLE vendor_rates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                vendor_name TEXT UNIQUE NOT NULL,
+                rate_usd_per_token REAL DEFAULT 0,
+                is_local_server BOOLEAN DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
+
+        # Insert default local server entry if not exists
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO vendor_rates (vendor_name, rate_usd_per_token, is_local_server)
+            VALUES ('Local Server (Electricity)', 0.0, 1)
             """
         )
 
@@ -1129,6 +1225,238 @@ class Database:
             rate: Cost rate in USD per kWh
         """
         self.set_setting("cost_rate_usd_per_kwh", str(rate))
+
+    # Token tracking methods
+    # ======================================================================
+
+    def get_today_token_tracking(self) -> Optional[Dict[str, Any]]:
+        """Get today's token tracking from midnight.
+
+        Returns:
+            Dictionary of token tracking values or None if not initialized
+        """
+        cursor = self.conn.cursor()
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        cursor.execute(
+            """
+            SELECT date, total_tokens, prompt_tokens, generated_tokens, last_update
+            FROM daily_token_tracking
+            WHERE date = ?
+            """,
+            (today,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+    def update_today_token_tracking(
+        self,
+        total_tokens: int,
+        prompt_tokens: int,
+        generated_tokens: int,
+    ) -> None:
+        """Update today's token tracking.
+
+        Args:
+            total_tokens: Total tokens processed
+            prompt_tokens: Prompt tokens processed
+            generated_tokens: Generated tokens
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+            today = datetime.datetime.now().strftime("%Y-%m-%d")
+            now = datetime.datetime.now().isoformat()
+
+            cursor.execute(
+                """
+                INSERT INTO daily_token_tracking (date, total_tokens, prompt_tokens, generated_tokens, last_update)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date) DO UPDATE SET
+                    total_tokens = ?,
+                    prompt_tokens = ?,
+                    generated_tokens = ?,
+                    last_update = ?
+                """,
+                (today, total_tokens, prompt_tokens, generated_tokens, now, total_tokens, prompt_tokens, generated_tokens, now),
+            )
+            self.conn.commit()
+
+    def update_today_token_tracking_archived(
+        self,
+        date: str,
+        total_tokens: int,
+        prompt_tokens: int,
+        generated_tokens: int,
+        timestamp: str,
+    ) -> None:
+        """Update a specific day's token tracking with an archived timestamp.
+
+        Args:
+            date: The date to update
+            total_tokens: Total tokens
+            prompt_tokens: Prompt tokens
+            generated_tokens: Generated tokens
+            timestamp: The timestamp to store (e.g., "2026-06-01 23:59:59")
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO daily_token_tracking (date, total_tokens, prompt_tokens, generated_tokens, last_update)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date) DO UPDATE SET
+                    total_tokens = ?,
+                    prompt_tokens = ?,
+                    generated_tokens = ?,
+                    last_update = ?
+                """,
+                (date, total_tokens, prompt_tokens, generated_tokens, timestamp, total_tokens, prompt_tokens, generated_tokens, timestamp),
+            )
+            self.conn.commit()
+
+    def get_all_token_tracking(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all token tracking data.
+
+        Args:
+            limit: Maximum number of records
+
+        Returns:
+            List of token tracking records
+        """
+        cursor = self.conn.cursor()
+        query = "SELECT date, total_tokens, prompt_tokens, generated_tokens, last_update FROM daily_token_tracking ORDER BY date DESC"
+        if limit:
+            query += f" LIMIT {limit}"
+        cursor.execute(query)
+        return [dict(row) for row in cursor.fetchall()]
+
+    # Vendor rates methods
+    # ======================================================================
+
+    def get_all_vendor_rates(self) -> List[Dict[str, Any]]:
+        """Get all vendor rates.
+
+        Returns:
+            List of vendor rate records
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, vendor_name, rate_usd_per_token, is_local_server, created_at, updated_at
+            FROM vendor_rates
+            ORDER BY is_local_server DESC, vendor_name ASC
+            """
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_vendor_rate_by_name(self, vendor_name: str) -> Optional[Dict[str, Any]]:
+        """Get a specific vendor rate by name.
+
+        Args:
+            vendor_name: Name of the vendor
+
+        Returns:
+            Vendor rate record or None
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, vendor_name, rate_usd_per_token, is_local_server, created_at, updated_at
+            FROM vendor_rates
+            WHERE vendor_name = ?
+            """,
+            (vendor_name,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+        return None
+
+    def add_vendor_rate(self, vendor_name: str, rate_usd_per_token: float, is_local_server: bool = False) -> bool:
+        """Add a new vendor rate.
+
+        Args:
+            vendor_name: Name of the vendor
+            rate_usd_per_token: Rate in USD per token
+            is_local_server: Whether this is the local server entry
+
+        Returns:
+            True if successful, False if vendor already exists
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO vendor_rates (vendor_name, rate_usd_per_token, is_local_server)
+                    VALUES (?, ?, ?)
+                    """,
+                    (vendor_name, rate_usd_per_token, is_local_server),
+                )
+                self.conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False
+
+    def update_vendor_rate(self, vendor_name: str, rate_usd_per_token: Optional[float] = None, is_local_server: Optional[bool] = None) -> bool:
+        """Update an existing vendor rate.
+
+        Args:
+            vendor_name: Name of the vendor
+            rate_usd_per_token: New rate in USD per token (optional)
+            is_local_server: New is_local_server flag (optional)
+
+        Returns:
+            True if successful, False if vendor not found
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+
+            updates = []
+            params = []
+
+            if rate_usd_per_token is not None:
+                updates.append("rate_usd_per_token = ?")
+                params.append(rate_usd_per_token)
+            if is_local_server is not None:
+                updates.append("is_local_server = ?")
+                params.append(is_local_server)
+
+            if not updates:
+                return True  # Nothing to update
+
+            params.append(vendor_name)
+            query = f"""
+                UPDATE vendor_rates
+                SET {', '.join(updates)}, updated_at = datetime('now')
+                WHERE vendor_name = ?
+            """
+
+            cursor.execute(query, params)
+            self.conn.commit()
+            return cursor.rowcount > 0
+
+    def delete_vendor_rate(self, vendor_name: str) -> bool:
+        """Delete a vendor rate.
+
+        Args:
+            vendor_name: Name of the vendor
+
+        Returns:
+            True if successful, False if vendor not found
+        """
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                DELETE FROM vendor_rates
+                WHERE vendor_name = ?
+                """,
+                (vendor_name,),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
 
     def compress_to_1m(self) -> int:
         """Compress raw metrics to 1-minute buckets.
