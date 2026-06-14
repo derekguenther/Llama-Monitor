@@ -487,6 +487,18 @@ def index() -> str:
         </div>
     </div>
 
+    <div class="history-grid">
+        <div class="history-card">
+            <h3>Monthly Cost</h3>
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="monthly-cost-chart"></canvas>
+            </div>
+            <div style="text-align: center; margin-top: 10px; color: #00ff88; font-size: 1.2rem;">
+                Total: <span id="monthly-total-cost">$0.00</span>
+            </div>
+        </div>
+    </div>
+
     <div class="refresh-indicator" id="refresh-time">Last update: Never</div>
 
     <script>
@@ -549,7 +561,7 @@ def index() -> str:
         };
 
         // Charts
-        let combinedChart, powerChart;
+        let combinedChart, powerChart, monthlyCostChart;
 
         function initCharts() {
             const ctx = document.getElementById('combined-chart').getContext('2d');
@@ -597,6 +609,49 @@ def index() -> str:
                     ]
                 },
                 options: chartOptions
+            });
+
+            // Monthly Cost Chart
+            const monthlyCostCtx = document.getElementById('monthly-cost-chart').getContext('2d');
+            monthlyCostChart = new Chart(monthlyCostCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Cost ($)',
+                        data: [],
+                        backgroundColor: 'rgba(255, 217, 61, 0.7)',
+                        borderColor: '#ffd93d',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#2a2a4a' },
+                            ticks: {
+                                color: '#666',
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#666',
+                                maxTicksLimit: 10
+                            }
+                        }
+                    }
+                }
             });
         }
 
@@ -730,6 +785,35 @@ def index() -> str:
             powerChart.update('none');
         }
 
+        async function fetchMonthlyCost() {
+            try {
+                const response = await fetch('/api/metrics/monthly-cost');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data && data.data.length > 0) {
+                        // Format dates as MM/dd/yyyy
+                        const formattedDates = data.data.map(entry => {
+                            const date = new Date(entry.date + 'T00:00:00');
+                            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                            const day = date.getDate().toString().padStart(2, '0');
+                            const year = date.getFullYear();
+                            return month + '/' + day + '/' + year;
+                        });
+
+                        monthlyCostChart.data.labels = formattedDates;
+                        monthlyCostChart.data.datasets[0].data = data.data.map(entry => entry.cost_usd);
+                        monthlyCostChart.update('none');
+
+                        // Update total cost display
+                        const totalCost = data.data.reduce((sum, entry) => sum + entry.cost_usd, 0);
+                        document.getElementById('monthly-total-cost').textContent = '$' + totalCost.toFixed(2);
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching monthly cost:', error);
+            }
+        }
+
         async function fetchMetrics() {
             try {
                 const port = 8080;
@@ -737,6 +821,7 @@ def index() -> str:
                 if (response.ok) {
                     const data = await response.json();
                     updateMetrics(data);
+                    fetchMonthlyCost();
                 } else {
                     throw new Error('Bad response');
                 }
@@ -747,6 +832,7 @@ def index() -> str:
                     if (dbResponse.ok) {
                         const data = await dbResponse.json();
                         updateMetrics(data);
+                        fetchMonthlyCost();
                     }
                 } catch (dbError) {
                     document.getElementById('status-dot').className = 'indicator-dot offline';
@@ -897,6 +983,44 @@ def api_range_metrics():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/metrics/monthly-cost")
+def api_monthly_cost():
+    """Return monthly cost data for the last 30 days."""
+    config = get_config()
+    db_path = getattr(config, "database_path", "llama_monitor.db")
+
+    try:
+        db = Database(db_path)
+        db.connect()
+
+        # Get monthly energy data
+        monthly_energy = db.get_monthly_energy(days=30)
+
+        # Calculate cost for each day
+        cost_rate = db.get_cost_rate()
+        monthly_cost_data = []
+        for entry in monthly_energy:
+            total_wh = entry.get("total_wh", 0)
+            cost_usd = (total_wh / 1000) * cost_rate
+            monthly_cost_data.append({
+                "date": entry.get("date", ""),
+                "total_wh": total_wh,
+                "gpu_wh": entry.get("gpu_wh", 0),
+                "cpu_wh": entry.get("cpu_wh", 0),
+                "cost_usd": cost_usd,
+            })
+
+        db.close()
+
+        return jsonify({
+            "success": True,
+            "cost_rate": cost_rate,
+            "data": monthly_cost_data,
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route("/api/metrics/list")

@@ -632,6 +632,16 @@
                     <canvas id="tokens-graph" class="graph-canvas"></canvas>
                 </div>
             </div>
+
+            <!-- Monthly Cost Graph -->
+            <div class="card">
+                <h2>Monthly Cost</h2>
+                <div class="graph-container">
+                    <div class="graph-label">Cost by Day (MM/dd/yyyy)</div>
+                    <canvas id="monthly-cost-graph" class="graph-canvas"></canvas>
+                </div>
+                <div class="cost-value" id="monthly-total-cost" style="margin-top: 15px; font-size: 1.2rem;">$0.00</div>
+            </div>
         </div>
 
         <!-- Controls -->
@@ -673,8 +683,15 @@
         };
         const MAX_HISTORY = 60;
 
+        // Monthly cost data
+        let monthlyCostData = {
+            dates: [],
+            costs: [],
+            labels: []
+        };
+
         // Chart instances
-        let combinedUsageChart, tokensChart;
+        let combinedUsageChart, tokensChart, monthlyCostChart;
 
         // Initialize charts
         function initCharts() {
@@ -761,6 +778,80 @@
                     }
                 }
             });
+
+            // Monthly Cost Chart
+            const monthlyCostCtx = document.getElementById('monthly-cost-graph').getContext('2d');
+            monthlyCostChart = new Chart(monthlyCostCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Cost ($)',
+                        data: [],
+                        backgroundColor: 'rgba(255, 217, 61, 0.7)',
+                        borderColor: '#ffd93d',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#2a3b5c' },
+                            ticks: {
+                                color: '#888',
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: '#888',
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Fetch monthly cost data
+        async function fetchMonthlyCost() {
+            try {
+                const response = await fetch('/api/metrics/monthly-cost');
+                if (!response.ok) throw new Error('Failed to fetch monthly cost');
+                const data = await response.json();
+
+                if (data.success && data.data && data.data.length > 0) {
+                    // Format dates as MM/dd/yyyy
+                    const formattedDates = data.data.map(entry => {
+                        const date = new Date(entry.date + 'T00:00:00');
+                        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                        const day = date.getDate().toString().padStart(2, '0');
+                        const year = date.getFullYear();
+                        return `${month}/${day}/${year}`;
+                    });
+
+                    monthlyCostChart.data.labels = formattedDates;
+                    monthlyCostChart.data.datasets[0].data = data.data.map(entry => entry.cost_usd);
+                    monthlyCostChart.update('none');
+
+                    // Update total cost display
+                    const totalCost = data.data.reduce((sum, entry) => sum + entry.cost_usd, 0);
+                    document.getElementById('monthly-total-cost').textContent = '$' + totalCost.toFixed(2);
+                }
+            } catch (error) {
+                console.error('Error fetching monthly cost:', error);
+            }
         }
 
         // Fetch metrics
@@ -776,6 +867,7 @@
                 updateCharts(data);
                 updateSummary(data);
                 updateLastUpdated();
+                fetchMonthlyCost();
             } catch (error) {
                 console.error('Error fetching metrics:', error);
             } finally {
@@ -1027,6 +1119,8 @@
             initCharts();
             fetchMetrics();
             setInterval(fetchMetrics, CONFIG.refreshRate);
+            // Also fetch monthly cost on initial load
+            fetchMonthlyCost();
         });
     </script>
 </body>
