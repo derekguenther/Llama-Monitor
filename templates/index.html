@@ -194,6 +194,64 @@
             margin-bottom: 5px;
         }
 
+        /* Horizontal Bar Graphs for Slots */
+        .horizontal-bar-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .horizontal-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .horizontal-bar-slot-label {
+            width: 80px;
+            font-size: 0.75rem;
+            color: #888;
+            font-family: 'Courier New', monospace;
+            text-align: right;
+        }
+
+        .horizontal-bar-track {
+            flex: 1;
+            height: 24px;
+            background: #0d111d;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .horizontal-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: #1a1a2e;
+            font-weight: bold;
+        }
+
+        .slot-progress-fill {
+            background: linear-gradient(90deg, #00d4ff, #0099cc);
+        }
+
+        .context-remaining-fill {
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+        }
+
+        .bar-value {
+            font-size: 0.7rem;
+            color: #eee;
+            min-width: 50px;
+            text-align: right;
+            font-family: 'Courier New', monospace;
+        }
+
         /* Stats Summary */
         .stats-summary {
             background: #16213e;
@@ -454,6 +512,21 @@
             </div>
         </div>
 
+        <!-- Slot Progress and Context Remaining Bar Graphs -->
+        <div class="card">
+            <h2>Slot Progress & Context</h2>
+            <!-- Slot Progress Bar Graph -->
+            <div class="graph-container" style="height: 80px; margin-bottom: 15px;">
+                <div class="graph-label">Slot Progress (0-100% completion)</div>
+                <canvas id="slot-progress-graph" class="graph-canvas"></canvas>
+            </div>
+            <!-- Context Remaining Bar Graph -->
+            <div class="graph-container" style="height: 80px;">
+                <div class="graph-label">Context Remaining (tokens before compaction)</div>
+                <canvas id="context-remaining-graph" class="graph-canvas"></canvas>
+            </div>
+        </div>
+
         <!-- Stats Summary -->
         <div class="stats-summary">
             <h2>Summary</h2>
@@ -675,6 +748,7 @@
 
         // Chart instances
         let combinedUsageChart, tokensChart;
+        let slotProgressChart, contextRemainingChart;
 
         // Initialize charts
         function initCharts() {
@@ -774,6 +848,7 @@
 
                 updateDisplay(data);
                 updateCharts(data);
+                updateSlotCharts(data);
                 updateSummary(data);
                 updateLastUpdated();
             } catch (error) {
@@ -866,6 +941,156 @@
             tokensChart.data.datasets[0].data = historyData.tokens;
             tokensChart.data.labels = historyData.labels;
             tokensChart.update('none');
+        }
+
+        // Update slot progress and context remaining charts
+        function updateSlotCharts(data) {
+            const slots = data.server?.slots || [];
+
+            if (!slots || slots.length === 0) {
+                // Clear charts if no slots
+                slotProgressChart.data.labels = [];
+                slotProgressChart.data.datasets[0].data = [];
+                slotProgressChart.update('none');
+
+                contextRemainingChart.data.labels = [];
+                contextRemainingChart.data.datasets[0].data = [];
+                contextRemainingChart.update('none');
+                return;
+            }
+
+            // Extract slot progress data
+            const slotLabels = slots.map((slot, index) => `Slot ${slot.id || index}`);
+            const slotProgress = slots.map(slot => {
+                // Calculate progress percentage from next_token stats
+                const progress = slot.progress || 0;
+                // Convert to percentage (0-100)
+                return Math.min(Math.round(progress * 100), 100);
+            });
+
+            // Update slot progress chart
+            slotProgressChart.data.labels = slotLabels;
+            slotProgressChart.data.datasets[0].data = slotProgress;
+            slotProgressChart.update('none');
+
+            // Extract context remaining data
+            // Context remaining is calculated as: total context - (n_prompt_tokens + n_gen_tokens)
+            // We need to get the context limit from the props or use a default
+            const props = data.server?.props || {};
+            const contextLimit = props.n_ctx || 4096; // Default to 4096 if not available
+
+            const contextRemaining = slots.map(slot => {
+                const n_prompt_tokens = slot.n_prompt_tokens || 0;
+                const n_gen_tokens = slot.n_gen_tokens || 0;
+                const n_tokens = slot.n_tokens || 0;
+                // Context remaining = total context - current tokens in context
+                // The 'n_tokens' represents tokens currently in the context
+                return Math.max(0, contextLimit - n_tokens);
+            });
+
+            // Update context remaining chart
+            contextRemainingChart.data.labels = slotLabels;
+            contextRemainingChart.data.datasets[0].data = contextRemaining;
+            contextRemainingChart.update('none');
+        }
+
+        // Initialize slot progress and context remaining charts
+        function initSlotCharts() {
+            const slotProgressCtx = document.getElementById('slot-progress-graph').getContext('2d');
+            const contextRemainingCtx = document.getElementById('context-remaining-graph').getContext('2d');
+
+            // Slot Progress Chart (horizontal bar)
+            slotProgressChart = new Chart(slotProgressCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Progress',
+                        data: [],
+                        backgroundColor: '#00d4ff',
+                        borderColor: '#0099cc',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        barPercentage: 0.7,
+                        categoryPercentage: 0.8
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Progress: ' + context.parsed.x + '%';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            min: 0,
+                            max: 100,
+                            grid: { color: '#2a3b5c' },
+                            ticks: { color: '#888', callback: function(value) { return value + '%'; } },
+                            title: { display: false }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
+
+            // Context Remaining Chart (horizontal bar)
+            contextRemainingChart = new Chart(contextRemainingCtx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Context Remaining',
+                        data: [],
+                        backgroundColor: '#00ff88',
+                        borderColor: '#00cc6a',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        barPercentage: 0.7,
+                        categoryPercentage: 0.8
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.parsed.x + ' tokens remaining';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            min: 0,
+                            grid: { color: '#2a3b5c' },
+                            ticks: { color: '#888' },
+                            title: { display: false }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
         }
 
         // Update summary
@@ -1025,6 +1250,7 @@
         // Initialize and start polling
         document.addEventListener('DOMContentLoaded', function() {
             initCharts();
+            initSlotCharts();
             fetchMetrics();
             setInterval(fetchMetrics, CONFIG.refreshRate);
         });
