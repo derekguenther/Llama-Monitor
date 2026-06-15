@@ -143,6 +143,7 @@ class Monitor:
         cost_rate = self.config.get("electricity.cost_rate", 0.12)
         idle_baseline = self.config.get("idle_baseline.power_w", 150.0)
         collect_metrics = self.config.get("metrics_collection.collect_metrics", True)
+        tracked_processes = self.config.get("metrics_collection.tracked_processes", ["llama.cpp"])
 
         self.aggregator = Aggregator(
             server_url=self.server_url,
@@ -151,6 +152,9 @@ class Monitor:
             cost_rate=cost_rate,
             collect_metrics=collect_metrics,
         )
+        # Override tracked_processes if specified in config
+        if tracked_processes:
+            self.aggregator.system_collector.tracked_processes = tracked_processes
 
         # Set polling interval from config
         self.polling_interval = self.config.get(

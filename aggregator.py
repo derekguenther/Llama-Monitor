@@ -99,10 +99,14 @@ class Aggregator:
             "timestamp": system.get("timestamp", int(time.time())),
         }
 
+        # Include process GPU metrics if available
+        process_gpu = system.get("process_gpu", {})
+
         return {
             "timestamp": int(time.time()),
             "server": server_data,
             "system": system_data,
+            "process_gpu": process_gpu,
         }
 
     def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:
@@ -131,27 +135,25 @@ class Aggregator:
         self.cost_calculator.update_token_tracking(prompt_tokens, generated_tokens)
 
         # Store system metrics
+        # Note: system data is flattened (cpu_percent, gpu_usage, etc.)
+        # not nested (system["cpu"]["percent"], etc.)
         system = metrics.get("system", {})
-        cpu = system.get("cpu", {})
-        gpu = system.get("gpu", {})
-        memory = system.get("memory", {})
-        system_power = system.get("system", {})
 
         self.db.insert_system_metrics_raw(
             timestamp=timestamp,
-            cpu_percent=cpu.get("percent", 0),
-            cpu_cores_percent=str(cpu.get("cores", [])),
-            cpu_power_w=cpu.get("cpu_power_w", 0),
-            gpu_usage=gpu.get("usage", 0),
-            gpu_memory_used_mb=gpu.get("memory_used", 0),
-            gpu_memory_total_mb=gpu.get("memory_total", 0),
-            gpu_temperature_c=gpu.get("temperature_c", 0),
-            gpu_fan_speed_rpm=gpu.get("fan_speed_rpm", 0),
-            gpu_power_w=gpu.get("power_w", 0),
-            memory_used_mb=memory.get("used", 0),
-            memory_total_mb=memory.get("total", 0),
-            memory_percent=memory.get("percent", 0),
-            system_power_w=system_power.get("system_power_w", 0),
+            cpu_percent=system.get("cpu_percent", 0),
+            cpu_cores_percent=str(system.get("cpu_cores", [])),
+            cpu_power_w=system.get("cpu_power_w", 0),
+            gpu_usage=system.get("gpu_usage", 0),
+            gpu_memory_used_mb=system.get("gpu_memory_used", 0),
+            gpu_memory_total_mb=system.get("gpu_memory_total", 0),
+            gpu_temperature_c=system.get("gpu_temperature_c", 0),
+            gpu_fan_speed_rpm=system.get("gpu_fan_speed_rpm", 0),
+            gpu_power_w=system.get("gpu_power_w", 0),
+            memory_used_mb=system.get("memory_used", 0),
+            memory_total_mb=system.get("memory_total", 0),
+            memory_percent=system.get("memory_percent", 0),
+            system_power_w=system.get("system_power_w", 0),
         )
 
         # Store process GPU metrics
@@ -166,9 +168,18 @@ class Aggregator:
             )
 
         # Store process CPU metrics with power allocation
-        process_cpu = cpu.get("process_cpu", {})
-        cpu_power_total = cpu.get("cpu_power_w", 0)
-        cpu_percent_total = cpu.get("percent", 0)
+        # Process CPU data comes from system_metrics.py as nested dict
+        # In flattened system data, it's under system["cpu"]["process_cpu"]
+        # But we need to get it from the raw metrics which preserves nesting
+        raw_system = metrics.get("system_raw", {})
+        if not raw_system:
+            # If no raw system data, try to get from system_raw in the metrics
+            # Otherwise use empty dict
+            raw_system = {}
+
+        process_cpu = raw_system.get("cpu", {}).get("process_cpu", {})
+        cpu_power_total = raw_system.get("cpu", {}).get("cpu_power_w", 0)
+        cpu_percent_total = raw_system.get("cpu", {}).get("percent", 0)
 
         # Only calculate per-process power if total CPU percent > 0
         if cpu_percent_total > 0:
@@ -187,17 +198,35 @@ class Aggregator:
 
         # Store combined metrics for web dashboard
         import json
-        cost = self.cost_calculator.calculate_power_cost(
-            gpu_power_w=gpu.get("power_w", 0) or 0,
-            cpu_power_w=cpu.get("cpu_power_w", 0) or 0,
+
+        # Get GPU and CPU power from flattened system data
+        gpu_power_w = system.get("gpu_power_w", 0)
+        cpu_power_w = system.get("cpu_power_w", 0)
+
+        # Update power readings to accumulate energy totals
+        energy_stats = self.cost_calculator.update_power_readings(
+            gpu_power_w=gpu_power_w or 0,
+            cpu_power_w=cpu_power_w or 0,
             duration_seconds=1.0
         )
-        # Add today's energy stats
-        today_stats = self.cost_calculator.get_today_stats()
-        cost["today_wh"] = today_stats["total_wh"] if today_stats else 0
-        cost["today_gpu_wh"] = today_stats["gpu_wh"] if today_stats else 0
-        cost["today_cpu_wh"] = today_stats["cpu_wh"] if today_stats else 0
 
+        # Build cost data from energy stats
+        cost = {
+            "gpu_power_w": gpu_power_w or 0,
+            "cpu_power_w": cpu_power_w or 0,
+            "duration_seconds": 1.0,
+            "duration_hours": 1.0 / 3600.0,
+            "gpu_wh": energy_stats["gpu_wh"],
+            "cpu_wh": energy_stats["cpu_wh"],
+            "total_wh": energy_stats["total_wh"],
+            "cost_usd": energy_stats["total_wh"] / 1000.0 * self.cost_calculator.cost_rate,
+            "today_wh": energy_stats["today_wh"],
+            "today_gpu_wh": energy_stats["today_gpu_wh"],
+            "today_cpu_wh": energy_stats["today_cpu_wh"],
+            "total_cost": energy_stats["total_wh"] / 1000.0 * self.cost_calculator.cost_rate,
+        }
+
+        # Store system data as flattened structure for combined_metrics
         self.db.execute(
             """
             INSERT INTO combined_metrics (timestamp, server_data, system_data, cost_data)
@@ -206,12 +235,7 @@ class Aggregator:
             (
                 timestamp,
                 json.dumps(server),
-                json.dumps({
-                    "cpu": cpu,
-                    "gpu": gpu,
-                    "memory": memory,
-                    "system": system_power,
-                }),
+                json.dumps(system),
                 json.dumps(cost),
             )
         )
@@ -228,9 +252,23 @@ class Aggregator:
         """Calculate current session cost.
 
         Returns:
-            Dictionary with cost information.
+            Dictionary with cost information including today's energy stats.
         """
-        return self.cost_calculator.get_session_stats()
+        session_stats = self.cost_calculator.get_session_stats()
+        today_stats = self.cost_calculator.get_today_stats()
+
+        # Merge session and today's stats, prioritizing today's stats
+        result = session_stats if session_stats else {}
+        if today_stats:
+            result["today_wh"] = today_stats["total_wh"]
+            result["today_gpu_wh"] = today_stats["gpu_wh"]
+            result["today_cpu_wh"] = today_stats["cpu_wh"]
+            result["total_cost"] = today_stats["total_cost_usd"]
+
+        # Add cost rate (needed by frontend)
+        result["cost_rate"] = self.cost_calculator.cost_rate
+
+        return result
 
     def calculate_today_cost(self) -> Dict[str, Any]:
         """Calculate today's energy cost (from midnight).

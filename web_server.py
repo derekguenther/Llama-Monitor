@@ -77,7 +77,7 @@ def fetch_metrics_from_aggregator() -> Optional[Dict[str, Any]]:
     import urllib.error
 
     config = get_config()
-    port = getattr(config, "web_http_port", 8080)
+    port = config.get("web.aggregator_port", 8081)
 
     try:
         url = f"http://localhost:{port}/api/metrics/latest"
@@ -131,8 +131,8 @@ def fetch_metrics_from_database(db_path: str) -> Optional[Dict[str, Any]]:
 def index() -> str:
     """Serve the main dashboard HTML."""
     config = get_config()
-    port = getattr(config, "web_http_port", 8080)
-    cost_rate = getattr(config, "cost_rate", 0.12)
+    port = config.get("web.http_port", 8080)
+    cost_rate = config.get("electricity.cost_rate", 0.12)
 
     html = """<!DOCTYPE html>
 <html lang="en">
@@ -978,8 +978,9 @@ def index() -> str:
 
         async function fetchMetrics() {
             try {
-                const port = 8080;
-                const response = await fetch('http://localhost:' + port + '/api/metrics/latest');
+                // Fetch from web server - it will check metrics_cache first (shared with aggregator),
+                // then fall back to database. This works whether running via main.py or aggregator daemon.
+                const response = await fetch('/api/metrics/latest');
                 if (response.ok) {
                     const data = await response.json();
                     updateMetrics(data);
@@ -988,7 +989,7 @@ def index() -> str:
                     throw new Error('Bad response');
                 }
             } catch (error) {
-                // Fallback to database if aggregator unavailable
+                // Fallback to database if web server unavailable
                 try {
                     const dbResponse = await fetch('/api/metrics/latest-db');
                     if (dbResponse.ok) {
@@ -1119,7 +1120,7 @@ def api_latest_metrics():
 
     # Fallback to database
     config = get_config()
-    db_path = getattr(config, "database_path", "llama_monitor.db")
+    db_path = config.get("database.path", "llama-monitor.db")
     metrics = fetch_metrics_from_database(db_path)
 
     if metrics:
@@ -1138,7 +1139,7 @@ def api_latest_metrics():
 def api_latest_metrics_db():
     """Return latest metrics from database directly."""
     config = get_config()
-    db_path = getattr(config, "database_path", "llama_monitor.db")
+    db_path = config.get("database.path", "llama-monitor.db")
     metrics = fetch_metrics_from_database(db_path)
 
     if metrics:
@@ -1157,7 +1158,7 @@ def api_latest_metrics_db():
 def api_range_metrics():
     """Return metrics within a time range."""
     config = get_config()
-    db_path = getattr(config, "database_path", "llama_monitor.db")
+    db_path = config.get("database.path", "llama-monitor.db")
 
     start = request.args.get("start")
     end = request.args.get("end")
@@ -1212,7 +1213,7 @@ def api_range_metrics():
 def api_monthly_cost():
     """Return monthly cost data for the last 30 days."""
     config = get_config()
-    db_path = getattr(config, "database_path", "llama_monitor.db")
+    db_path = config.get("database.path", "llama-monitor.db")
 
     try:
         db = Database(db_path)
@@ -1250,7 +1251,7 @@ def api_monthly_cost():
 def api_metrics_list():
     """Return list of available metrics and tables."""
     config = get_config()
-    db_path = getattr(config, "database_path", "llama_monitor.db")
+    db_path = config.get("database.path", "llama-monitor.db")
 
     import sqlite3
 
@@ -1296,7 +1297,7 @@ def api_historical_metrics():
     - sample: Sample interval in seconds (default: 60 for 1-minute intervals)
     """
     config = get_config()
-    db_path = getattr(config, "database_path", "llama_monitor.db")
+    db_path = config.get("database.path", "llama-monitor.db")
 
     timeframe = request.args.get("timeframe", "day")
     start = request.args.get("start")
@@ -1417,7 +1418,7 @@ def api_historical_range():
     - limit: Maximum number of records (default: 5000)
     """
     config = get_config()
-    db_path = getattr(config, "database_path", "llama_monitor.db")
+    db_path = config.get("database.path", "llama-monitor.db")
 
     start = request.args.get("start")
     end = request.args.get("end")
@@ -1530,7 +1531,7 @@ def get_db():
     if not DB_AVAILABLE:
         return None
     config = get_config()
-    db_path = getattr(config, "database_path", "llama_monitor.db")
+    db_path = config.get("database.path", "llama-monitor.db")
     return Database(db_path)
 
 
@@ -2216,7 +2217,8 @@ def run_server(host="0.0.0.0", port=8080, debug=False, verbose=False):
     print(f"llama-monitor web server starting on http://{host}:{port}")
     print("Press Ctrl+C to stop")
 
-    socketio.run(app, host=host, port=port, debug=debug)
+    # Use allow_unsafe_werkzeug=True to avoid RuntimeError in production
+    socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
 
 
 # Global server reference for stop_server

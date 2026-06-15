@@ -205,6 +205,8 @@ def get_config(config_path: Optional[str] = None) -> Config:
     """
     global _config
     if _config is None:
+        if config_path is None:
+            config_path = find_config()
         _config = Config(config_path)
     return _config
 
