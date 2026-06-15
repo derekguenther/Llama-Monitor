@@ -133,7 +133,7 @@ class Aggregator:
             Extracted server metrics dictionary
         """
         server = server_data.get("server", {})
-        return {
+        result = {
             "prompt_tokens_total": server.get("prompt_tokens_total"),
             "prompt_tokens_seconds": server.get("prompt_tokens_seconds"),
             "tokens_predicted_total": server.get("tokens_predicted_total"),
@@ -141,6 +141,16 @@ class Aggregator:
             "requests_processing": server.get("requests_processing"),
             "requests_deferred": server.get("requests_deferred"),
         }
+
+        # Include slots data if available (check explicitly for None, not empty list)
+        if server_data.get("slots") is not None:
+            result["slots"] = server_data["slots"]
+
+        # Include props data if available (check explicitly for None, not empty dict)
+        if server_data.get("props") is not None:
+            result["props"] = server_data["props"]
+
+        return result
 
     def _extract_system_metrics(self, system_data: Dict[str, Any]) -> Dict[str, Any]:
         """Extract system metrics from collector data.

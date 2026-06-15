@@ -25,6 +25,7 @@ class TestServerMetricsCollector(unittest.TestCase):
         mock_response = Mock()
         mock_response.json.return_value = {"test": "data"}
         mock_response.raise_for_status = Mock()
+        mock_response.headers = {"Content-Type": "application/json"}
         mock_get.return_value = mock_response
 
         result = self.collector._make_request("/test")
