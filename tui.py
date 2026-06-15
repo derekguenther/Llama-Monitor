@@ -456,6 +456,15 @@ class TUI:
                 bar_width = int(chart_width * value / max(max_cpu, 1))
                 stdscr.addstr(row + 6 + i, 7, "=" * bar_width, self.colors.get("good"))
 
+        # Draw Power chart
+        stdscr.addstr(row + 9, 2, "Power:", self.colors.get("cost"))
+        for i in range(3):
+            row_idx = chart_height - 1 - i
+            if row_idx < len(power_values):
+                value = power_values[row_idx]
+                bar_width = int(chart_width * value / max(max_power, 1))
+                stdscr.addstr(row + 10 + i, 7, "=" * bar_width, self.colors.get("cost"))
+
         # Legend
         row += chart_height + 1
         stdscr.addstr(row, 2, "Legend: GPU = green, CPU = blue, Power = magenta", curses.A_DIM)

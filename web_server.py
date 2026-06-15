@@ -566,6 +566,7 @@ def index() -> str:
             timestamps: []
         };
 
+        // Chart options for GPU/CPU usage (0-100% range)
         let chartOptions = {
             responsive: true,
             maintainAspectRatio: false,
@@ -588,6 +589,34 @@ def index() -> str:
                 y: {
                     min: 0,
                     max: 100,
+                    grid: { color: '#2a2a4a' },
+                    ticks: { color: '#666' }
+                }
+            }
+        };
+
+        // Chart options for power charts (auto-scale to data range)
+        let powerChartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: { color: '#888' }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: '#2a2a4a' },
+                    ticks: { color: '#666', maxTicksLimit: 6 }
+                },
+                y: {
+                    min: 0,
                     grid: { color: '#2a2a4a' },
                     ticks: { color: '#666' }
                 }
@@ -652,7 +681,7 @@ def index() -> str:
                         }
                     ]
                 },
-                options: chartOptions
+                options: powerChartOptions
             });
 
             // Monthly Cost Chart
@@ -744,7 +773,7 @@ def index() -> str:
                         }
                     ]
                 },
-                options: chartOptions
+                options: powerChartOptions
             });
         }
 
