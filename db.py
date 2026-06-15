@@ -1203,12 +1203,14 @@ class Database:
         Returns:
             Setting value or default
         """
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
-        row = cursor.fetchone()
-        if row:
-            return row[0]
-        return default
+        self.connect()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+            return default
 
     def set_setting(self, key: str, value: Any) -> None:
         """Set a setting value.
@@ -1217,6 +1219,7 @@ class Database:
             key: Setting key
             value: Value to set
         """
+        self.connect()
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(

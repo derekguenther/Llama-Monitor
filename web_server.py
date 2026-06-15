@@ -1995,6 +1995,9 @@ def api_reset_settings():
         return jsonify({"error": "Database not available"}), 500
 
     try:
+        # Ensure database connection is open
+        db.connect()
+
         # Delete all settings to reset to defaults
         cursor = db.conn.cursor()
         cursor.execute("DELETE FROM settings")
@@ -2008,6 +2011,33 @@ def api_reset_settings():
         db.conn.commit()
 
         return jsonify({"success": True, "message": "Settings reset to defaults"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/settings/cost_rate", methods=["POST"])
+def api_set_cost_rate():
+    """Update the cost rate setting."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+
+    data = request.get_json()
+    if not data or "cost_rate" not in data:
+        return jsonify({"error": "No cost_rate provided"}), 400
+
+    try:
+        new_rate = float(data["cost_rate"])
+        if new_rate < 0:
+            return jsonify({"error": "Cost rate must be non-negative"}), 400
+
+        db.set_cost_rate(new_rate)
+        return jsonify({"success": True, "message": "Cost rate updated"})
+    except ValueError:
+        return jsonify({"error": "Invalid cost rate value"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
