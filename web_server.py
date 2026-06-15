@@ -839,6 +839,16 @@ def index() -> str:
             document.getElementById('server-gen-rate').textContent =
                 (server.predicted_tokens_seconds || 0).toLocaleString() + '/s';
 
+            // Update active slots
+            const slots = server.slots || [];
+            const totalSlots = slots.length;
+            const activeSlots = slots.filter(s => s.state === 'processing').length;
+            const avgProgress = totalSlots > 0
+                ? slots.reduce((sum, s) => sum + (s.progress || 0), 0) / totalSlots
+                : 0;
+            document.getElementById('server-active-slots').textContent =
+                `${activeSlots}/${totalSlots} (${(avgProgress * 100).toFixed(1)}%)`;
+
             // Update system metrics
             const system = data.system || {};
             const cpuPercent = system.cpu_percent || 0;
