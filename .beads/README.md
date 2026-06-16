@@ -25,9 +25,6 @@ bd show <issue-id>
 # Update issue status
 bd update <issue-id> --claim
 bd update <issue-id> --status done
-
-# Sync with Dolt remote
-bd dolt push
 ```
 
 ### Working with Issues
@@ -71,7 +68,6 @@ bd create "Try out Beads"
 ```
 
 ## Learn More
-
 - **Documentation**: [github.com/steveyegge/beads/docs](https://github.com/steveyegge/beads/tree/main/docs)
 - **Quick Start Guide**: Run `bd quickstart`
 - **Examples**: [github.com/steveyegge/beads/examples](https://github.com/steveyegge/beads/tree/main/examples)
@@ -79,3 +75,22 @@ bd create "Try out Beads"
 ---
 
 *Beads: Issue tracking that moves at the speed of thought* ⚡
+
+## Current Status (as of 2026-06-16)
+
+**Beads Tracker Status**: The embedded Dolt database is currently unavailable due to filesystem permission issues on WSL2. The files in `.beads/embeddeddolt/sandbox/.dolt/` are owned by user `node` but the agent runs as `yolo_agent`.
+
+**Workaround**: Issue data is available in JSONL format at `.beads/issues.jsonl`. You can use the following Python script to query issues:
+
+```python
+# Query beads from JSONL
+grep -v "^Warning:" .beads/issues.jsonl | python3 -c "
+import json, sys
+lines = [l for l in sys.stdin if l.strip()]
+issues = [json.loads(l) for l in lines]
+for i in issues:
+    print(f\"{i['id']}: {i['title']} - {i['status']}\")
+"
+```
+
+**Status**: Open - needs filesystem permission fix or Dolt database recreation.
