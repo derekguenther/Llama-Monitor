@@ -85,6 +85,10 @@ _Add your build and test commands here_
 # npm test
 ```
 
+## Docker Development Notes
+
+When connecting to services running on the Windows host (like Llama Monitor or Chrome for debugging), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. This is because the agent runs inside a Docker container, and `host.docker.internal` resolves to the host machine from within the container.
+
 ## Architecture Overview
 
 _Add a brief overview of your project architecture_
