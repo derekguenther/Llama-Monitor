@@ -368,7 +368,7 @@ def index() -> str:
         <h1>Llama Monitor Dashboard</h1>
         <div class="status">
             <div class="status-indicator">
-                <div class="indicator-dot" id="status-dot"></div>
+                <div class="indicator-dot offline" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
             </div>
             <a href="/settings" class="btn secondary"><i class="fa-solid fa-sliders"></i> Settings</a>
@@ -815,8 +815,9 @@ def index() -> str:
         }
 
         function updateHistoricalMetrics(data) {
+            console.log('[updateHistoricalMetrics] Called with data:', data ? JSON.stringify(data).substring(0, 300) : 'null');
             if (!data || !data.system || data.system.length === 0) {
-                console.log('No historical data available');
+                console.log('[updateHistoricalMetrics] No historical data available');
                 return;
             }
 
@@ -832,9 +833,16 @@ def index() -> str:
                 historicalData.cpu.push(point.cpu_percent || 0);
                 historicalData.power.push((point.gpu_power_w || 0) + (point.cpu_power_w || 0));
 
-                // Convert Unix timestamp to readable format
-                const timestamp = point.timestamp;
-                const date = new Date(timestamp * 1000);
+                // Handle timestamp - can be Unix epoch (number) or ISO string
+                let date;
+                if (typeof point.timestamp === 'number') {
+                    date = new Date(point.timestamp * 1000);
+                } else {
+                    date = new Date(point.timestamp);
+                    if (isNaN(date.getTime())) {
+                        date = new Date();
+                    }
+                }
                 historicalData.timestamps.push(date.toLocaleTimeString('en-US', {
                     hour12: false,
                     hour: '2-digit',
@@ -847,11 +855,30 @@ def index() -> str:
         }
 
         function updateMetrics(data) {
-            if (!data) return;
+            console.log('[updateMetrics] Called with data:', data ? JSON.stringify(data).substring(0, 300) : 'null');
+            if (!data) {
+                console.error('[updateMetrics] No data provided');
+                return;
+            }
+            console.log('[updateMetrics] Data looks valid, proceeding with updates');
 
-            // Convert Unix epoch seconds to hh:mm:ss format
-            const now = new Date();
-            const timestamp = data.timestamp ? new Date(data.timestamp * 1000) : now;
+            // Handle timestamp - can be Unix epoch (number) or ISO string
+            let timestamp;
+            if (data.timestamp) {
+                if (typeof data.timestamp === 'number') {
+                    // Unix epoch seconds
+                    timestamp = new Date(data.timestamp * 1000);
+                } else {
+                    // ISO string or other format
+                    timestamp = new Date(data.timestamp);
+                    // If invalid date, use now
+                    if (isNaN(timestamp.getTime())) {
+                        timestamp = new Date();
+                    }
+                }
+            } else {
+                timestamp = new Date();
+            }
             const timeString = timestamp.toLocaleTimeString('en-US', {
                 hour12: false,
                 hour: '2-digit',
@@ -887,6 +914,7 @@ def index() -> str:
             document.getElementById('cpu-percent').textContent = formatSignificantDigits(cpuPercent) + '%';
             document.getElementById('cpu-bar').style.width = Math.min(cpuPercent, 100) + '%';
 
+            console.log('[updateMetrics] Setting GPU percent to:', gpuPercent);
             document.getElementById('gpu-percent').textContent = formatSignificantDigits(gpuPercent) + '%';
             document.getElementById('gpu-bar').style.width = Math.min(gpuPercent, 100) + '%';
 
@@ -910,9 +938,10 @@ def index() -> str:
             const costRate = cost.cost_rate || 0.12;
             const costUsd = todayWh / 1000 * costRate;
 
+            console.log('[updateMetrics] Cost data - todayWh:', todayWh, 'costRate:', costRate, 'costUsd:', costUsd);
             document.getElementById('cost-value').textContent = '$' + formatSignificantDigits(costUsd);
             document.getElementById('cost-sub').textContent =
-                'Today\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ $' + formatSignificantDigits(costRate) + '/kWh';
+                'Today\\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ $' + formatSignificantDigits(costRate) + '/kWh';
 
             // Update process GPU list
             const processGpu = data.process_gpu || {};
@@ -948,10 +977,12 @@ def index() -> str:
             updateCharts();
 
             // Update status
+            console.log('[updateMetrics] Setting status to Connected and updating refresh time');
             document.getElementById('status-dot').className = 'indicator-dot';
             document.getElementById('status-text').textContent = 'Connected';
             document.getElementById('refresh-time').textContent =
                 'Last update: ' + new Date().toLocaleTimeString();
+            console.log('[updateMetrics] Done updating metrics');
         }
 
         function updateHistory(timestamp, system, server) {
@@ -1019,24 +1050,32 @@ def index() -> str:
             try {
                 // Fetch from web server - it will check metrics_cache first (shared with aggregator),
                 // then fall back to database. This works whether running via main.py or aggregator daemon.
+                console.log('[fetchMetrics] Fetching from /api/metrics/latest...');
                 const response = await fetch('/api/metrics/latest');
+                console.log('[fetchMetrics] Response received, status:', response.status, response.statusText);
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('[fetchMetrics] Data received:', JSON.stringify(data).substring(0, 200) + '...');
                     updateMetrics(data);
                     fetchMonthlyCost();
                 } else {
-                    throw new Error('Bad response');
+                    throw new Error('Bad response: ' + response.status + ' ' + response.statusText);
                 }
             } catch (error) {
+                console.error('[fetchMetrics] Error fetching from /api/metrics/latest:', error);
                 // Fallback to database if web server unavailable
                 try {
+                    console.log('[fetchMetrics] Falling back to /api/metrics/latest-db...');
                     const dbResponse = await fetch('/api/metrics/latest-db');
+                    console.log('[fetchMetrics] DB response:', dbResponse.status, dbResponse.statusText);
                     if (dbResponse.ok) {
                         const data = await dbResponse.json();
+                        console.log('[fetchMetrics] DB data received:', JSON.stringify(data).substring(0, 200) + '...');
                         updateMetrics(data);
                         fetchMonthlyCost();
                     }
                 } catch (dbError) {
+                    console.error('[fetchMetrics] DB fallback also failed:', dbError);
                     document.getElementById('status-dot').className = 'indicator-dot offline';
                     document.getElementById('status-text').textContent = 'Disconnected';
                 }
