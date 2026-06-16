@@ -50,6 +50,23 @@ class ElectricityCostCalculator:
         # Load today's energy from database if it exists
         self._load_today_energy()
 
+        # Load cumulative energy from database if it exists
+        self._load_cumulative_energy()
+
+    def _load_cumulative_energy(self) -> None:
+        """Load cumulative energy from database if available.
+
+        This allows the monitor to continue tracking from where it left off
+        if restarted.
+        """
+        cumulative = self.database.get_cumulative_energy()
+        if cumulative:
+            self.total_energy_wh = cumulative.get("total_wh", 0.0)
+            self.gpu_energy_wh = cumulative.get("gpu_wh", 0.0)
+            self.cpu_energy_wh = cumulative.get("cpu_wh", 0.0)
+            self.session_start = cumulative.get("session_start")
+            self.last_update = cumulative.get("last_update")
+
     def _load_today_energy(self) -> None:
         """Load today's energy from database if available.
 
@@ -68,16 +85,16 @@ class ElectricityCostCalculator:
         """Start a new energy tracking session."""
         self.session_start = datetime.now().isoformat()
         self.last_update = self.session_start
-        self.total_energy_wh = 0.0
-        self.gpu_energy_wh = 0.0
-        self.cpu_energy_wh = 0.0
 
-        # Initialize cumulative energy in database
+        # Don't reset energy - preserve accumulated energy from previous sessions
+        # This ensures Session Energy continues tracking from where it left off
+
+        # Initialize cumulative energy in database with current values
         self.database.update_cumulative_energy(
             session_start=self.session_start,
-            total_wh=0.0,
-            gpu_wh=0.0,
-            cpu_wh=0.0,
+            total_wh=self.total_energy_wh,
+            gpu_wh=self.gpu_energy_wh,
+            cpu_wh=self.cpu_energy_wh,
             session_cost_usd=0.0,
         )
 
@@ -515,6 +532,43 @@ class ElectricityCostCalculator:
         """
         self.database.set_cost_rate(rate)
         self.cost_rate = rate
+
+    def clear_session_energy(self) -> Dict[str, Any]:
+        """Clear all session energy counters and reset to zero.
+
+        Returns:
+            Dictionary with cleared energy values
+        """
+        # Reset all energy counters to zero
+        self.total_energy_wh = 0.0
+        self.gpu_energy_wh = 0.0
+        self.cpu_energy_wh = 0.0
+        self.today_energy_wh = 0.0
+        self.today_gpu_wh = 0.0
+        self.today_cpu_wh = 0.0
+
+        # Update database with zeroed values (use empty string for session_start since NOT NULL)
+        self.database.update_cumulative_energy(
+            session_start='',
+            total_wh=0.0,
+            gpu_wh=0.0,
+            cpu_wh=0.0,
+            session_cost_usd=0.0,
+        )
+        self.database.update_today_energy(
+            total_wh=0.0,
+            gpu_wh=0.0,
+            cpu_wh=0.0,
+        )
+
+        return {
+            "total_wh": 0.0,
+            "gpu_wh": 0.0,
+            "cpu_wh": 0.0,
+            "today_wh": 0.0,
+            "today_gpu_wh": 0.0,
+            "today_cpu_wh": 0.0,
+        }
 
 
 if __name__ == "__main__":
