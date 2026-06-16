@@ -938,7 +938,7 @@
             const cost = data.cost || {};
 
             // Server metrics
-            const serverMetrics = server.server || {};
+            const serverMetrics = server || {};
             document.getElementById('prompt-tokens').textContent = formatNumber(serverMetrics.prompt_tokens_total || 0);
             document.getElementById('generated-tokens').textContent = formatNumber(serverMetrics.tokens_predicted_total || 0);
             document.getElementById('processing-requests').textContent = serverMetrics.requests_processing || 0;
@@ -984,7 +984,7 @@
 
         // Update charts
         function updateCharts(data) {
-            const serverMetrics = data.server?.server || {};
+            const serverMetrics = data.server || {};
             const system = data.system || {};
 
             // Add new data points
@@ -1169,7 +1169,7 @@
         // Update summary
         function updateSummary(data) {
             const energy = data.cost || {};
-            const serverMetrics = data.server?.server || {};
+            const serverMetrics = data.server || {};
 
             document.getElementById('total-tokens').textContent = formatNumber(serverMetrics.prompt_tokens_total || 0);
             document.getElementById('tokens-per-sec').textContent = formatNumber(serverMetrics.predicted_tokens_seconds || 0);

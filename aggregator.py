@@ -107,6 +107,7 @@ class Aggregator:
             "server": server_data,
             "system": system_data,
             "process_gpu": process_gpu,
+            "system_raw": system,  # Keep raw nested system data for store_raw_metrics
         }
 
     def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:

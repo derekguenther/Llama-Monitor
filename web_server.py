@@ -1369,6 +1369,11 @@ def api_historical_metrics():
         server_rows = cursor.fetchall()
         conn.close()
 
+        # Apply limit to results if specified
+        if limit and limit > 0:
+            system_rows = system_rows[-limit:]
+            server_rows = server_rows[-limit:]
+
         # Process system metrics
         system_data = []
         for row in system_rows:

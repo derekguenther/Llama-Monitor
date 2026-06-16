@@ -116,9 +116,9 @@ class TestAggregatorIntegration(unittest.TestCase):
             self.assertIn("server", result)
             self.assertIn("system", result)
 
-            # Verify server metrics - result["server"] contains the output of ServerMetricsCollector.collect()
+            # Verify server metrics - result["server"] contains the parsed metrics from ServerMetricsCollector
             server = result.get("server", {})
-            self.assertEqual(server.get("server", {}).get("prompt_tokens_total"), 1000)
+            self.assertEqual(server.get("prompt_tokens_total"), 1000)
 
             aggregator.close()
 
