@@ -142,6 +142,9 @@ class ServerMetricsCollector:
                     try:
                         # Strip llamacpp: prefix if present
                         clean_name = name.replace("llamacpp:", "")
+                        # Strip labels from metric name (e.g., requests_processing{foo="bar"} -> requests_processing)
+                        if "{" in clean_name:
+                            clean_name = clean_name.split("{")[0]
                         result[clean_name] = float(value)
                     except ValueError:
                         pass
