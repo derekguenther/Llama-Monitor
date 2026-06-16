@@ -11,7 +11,7 @@ class TestPowerChartAutoScale(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Load the web_server.py content to check for chart options
-        with open('/sandbox/.claude/worktrees/wf_60b69a72-e1e-5/.worktrees/llama-monitor-0lq/web_server.py', 'r') as f:
+        with open('/sandbox/web_server.py', 'r') as f:
             self.web_server_content = f.read()
 
     def test_power_chart_has_separate_options_from_usage_chart(self):
@@ -82,7 +82,7 @@ class TestTuiPowerChart(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        with open('/sandbox/.claude/worktrees/wf_60b69a72-e1e-5/.worktrees/llama-monitor-0lq/tui.py', 'r') as f:
+        with open('/sandbox/tui.py', 'r') as f:
             self.tui_content = f.read()
 
     def test_tui_calculates_power_values(self):

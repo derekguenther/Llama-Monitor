@@ -262,7 +262,12 @@ class Monitor:
         print("Starting TUI dashboard...")
 
         # TUI connects to the aggregator daemon via HTTP API
-        self.tui = TUI(aggregator_host="localhost", aggregator_port=8080)
+        # When running via main.py, pass metrics_cache for in-process data sharing
+        self.tui = TUI(
+            aggregator_host="localhost",
+            aggregator_port=8080,
+            metrics_cache=self.metrics_cache,
+        )
 
         try:
             self.tui.run()

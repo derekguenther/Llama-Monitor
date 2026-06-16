@@ -59,15 +59,22 @@ def format_significant_digits(value: float, digits: int = 4) -> str:
 class TUI:
     """Terminal UI for llama-monitor."""
 
-    def __init__(self, aggregator_host: str = "localhost", aggregator_port: int = 8080):
+    def __init__(
+        self,
+        aggregator_host: str = "localhost",
+        aggregator_port: int = 8080,
+        metrics_cache: Any = None,
+    ):
         """Initialize the TUI.
 
         Args:
             aggregator_host: Host of the aggregator daemon
             aggregator_port: Port of the aggregator daemon
+            metrics_cache: Optional shared MetricsCache instance for in-process data sharing
         """
         self.aggregator_host = aggregator_host
         self.aggregator_port = aggregator_port
+        self.metrics_cache = metrics_cache
         self.config = load_config(find_config())
 
         self.running = False
@@ -80,11 +87,24 @@ class TUI:
         self.colors = {}
 
     def _fetch_metrics(self) -> Optional[Dict[str, Any]]:
-        """Fetch latest metrics from aggregator daemon.
+        """Fetch latest metrics from aggregator daemon or shared cache.
+
+        If metrics_cache is provided (in-process mode), use that.
+        Otherwise, fetch from aggregator daemon HTTP API.
 
         Returns:
             Metrics data dictionary or None if fetch failed
         """
+        # Try shared metrics_cache first (in-process mode via main.py)
+        if self.metrics_cache is not None:
+            try:
+                cached = self.metrics_cache.get()
+                if cached:
+                    return cached
+            except Exception:
+                pass
+
+        # Fallback to HTTP API (standalone TUI mode)
         try:
             url = f"http://{self.aggregator_host}:{self.aggregator_port}/api/metrics/latest"
             with urllib.request.urlopen(url, timeout=5) as response:
