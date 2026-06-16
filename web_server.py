@@ -1600,6 +1600,7 @@ def api_restart_server():
         import sys
         import subprocess
         import time
+        import signal
 
         # Get the path to the current Python interpreter and main.py
         python_exec = sys.executable
@@ -1609,12 +1610,16 @@ def api_restart_server():
         def restart_server():
             time.sleep(0.5)  # Small delay to allow response to be sent
             # Start new server process in a new process group
-            subprocess.Popen(
+            new_process = subprocess.Popen(
                 [python_exec, script_path] + sys.argv[1:],
                 start_new_session=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
+            # Give the new process a moment to initialize
+            time.sleep(1)
+            # Terminate the current process
+            os.kill(os.getpid(), signal.SIGTERM)
 
         # Start restart in a thread so the response can be sent first
         threading.Thread(target=restart_server).start()
