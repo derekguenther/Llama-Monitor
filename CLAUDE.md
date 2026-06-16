@@ -138,6 +138,44 @@ Beads has 5 built-in statuses (`open`, `in_progress`, `blocked`, `closed`, `defe
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
+
+### Workflow Best Practices (CRITICAL)
+
+**Beads Must Exist Before Work Starts:**
+- Run `bd ready` or `bd ready --json` to find available work
+- Run `bd show <id>` to verify a bead exists before starting work
+- If a bead doesn't exist, create it with `bd create` first
+- NEVER work on non-existent bead IDs
+
+**Workflow Structure for Parallel Work:**
+```javascript
+export const meta = {
+  name: 'fix-webpage-issues',
+  description: 'Fix multiple webpage issues following beads process',
+  phases: [
+    { title: 'Validate', detail: 'Verify beads exist and are ready' },
+    { title: 'Implement', detail: 'Work in worktrees with proper labels' },
+    { title: 'Review', detail: 'Evaluate and merge with labels' },
+  ],
+}
+```
+
+**Agent Instructions for Bead Work:**
+1. Validate bead exists: `bd show <id>`
+2. Claim work: `bd update <id> --claim`
+3. Set label: `bd update <id> --add-label status:in-worktree`
+4. Create worktree: `git worktree add .worktrees/<id> -b <id>`
+5. Implement fix with tests
+6. Set review label: `bd update <id> --add-label status:needs-review`
+7. Do NOT close - wait for review agent
+
+**Review Agent Instructions:**
+1. Check bead has `status:needs-review` label
+2. Run tests: `python3 -m pytest`
+3. Merge branch to main: `git merge <branch> --no-ff`
+4. Push: `git push`
+5. Remove review label: `bd update <id> --remove-label status:needs-review --add-label status:ready-to-merge`
+6. Close: `bd close <id> --reason "Merged to main"`
 <!-- END BEADS INTEGRATION -->
 
 

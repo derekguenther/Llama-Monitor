@@ -4,3 +4,8 @@
 *.db
 .beads-credential-key
 .agent-memory/
+.pycache/
+__pycache__/
+
+# Beads / Dolt files (added by bd init)
+.beads/proxieddb/
