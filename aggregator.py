@@ -105,6 +105,8 @@ class Aggregator:
         return {
             "timestamp": int(time.time()),
             "server": server_data,
+            "slots": server_metrics.get("slots", []),
+            "props": server_metrics.get("props", {}),
             "system": system_data,
             "process_gpu": process_gpu,
             "system_raw": system,  # Keep raw nested system data for store_raw_metrics
