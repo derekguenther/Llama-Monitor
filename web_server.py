@@ -912,7 +912,7 @@ def index() -> str:
 
             document.getElementById('cost-value').textContent = '$' + formatSignificantDigits(costUsd);
             document.getElementById('cost-sub').textContent =
-                'Today\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ $' + formatSignificantDigits(costRate) + '/kWh';
+                'Today\\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ $' + formatSignificantDigits(costRate) + '/kWh';
 
             // Update process GPU list
             const processGpu = data.process_gpu || {};
