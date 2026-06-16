@@ -460,6 +460,9 @@ def index() -> str:
                 <span class="metric-label">Session Energy</span>
                 <span class="metric-value" id="session-energy">0 Wh</span>
             </div>
+            <div class="metric-row">
+                <button class="btn btn-secondary" id="clear-session-energy" style="margin-top: 5px;">Clear Session Energy</button>
+            </div>
         </div>
 
         <div class="card">
@@ -943,6 +946,10 @@ def index() -> str:
             document.getElementById('cost-sub').textContent =
                 'Today\\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ $' + formatSignificantDigits(costRate) + '/kWh';
 
+            // Update session energy
+            const sessionWh = cost.total_wh || 0;
+            document.getElementById('session-energy').textContent = formatSignificantDigits(sessionWh) + ' Wh';
+
             // Update process GPU list
             const processGpu = data.process_gpu || {};
             const processList = document.getElementById('process-gpu-list');
@@ -1152,6 +1159,29 @@ def index() -> str:
         // Refresh button
         document.getElementById('refresh-btn').addEventListener('click', fetchMetrics);
 
+        // Clear session energy button
+        document.getElementById('clear-session-energy').addEventListener('click', async function() {
+            if (confirm('Clear all session energy counters? This cannot be undone.')) {
+                try {
+                    const response = await fetch('/api/clear-session-energy', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'}
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        alert('Session energy cleared successfully');
+                        // Refresh metrics to update display
+                        fetchMetrics();
+                    } else {
+                        alert('Failed to clear session energy: ' + data.error);
+                    }
+                } catch (error) {
+                    console.error('Error clearing session energy:', error);
+                    alert('Failed to clear session energy: ' + error.message);
+                }
+            }
+        });
+
         // Fetch historical range function (defined after for access to port)
         async function fetchHistoricalRange(start, end) {
             const port = 8080;
@@ -1321,6 +1351,20 @@ def api_monthly_cost():
             "cost_rate": cost_rate,
             "data": monthly_cost_data,
         })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/clear-session-energy", methods=["POST"])
+def api_clear_session_energy():
+    """Clear all session energy counters."""
+    global CALCULATOR
+    try:
+        if CALCULATOR:
+            result = CALCULATOR.clear_session_energy()
+            return jsonify({"success": True, "energy": result})
+        else:
+            return jsonify({"success": False, "error": "Calculator not initialized"}), 500
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

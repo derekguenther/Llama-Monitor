@@ -314,6 +314,7 @@
 ./db.py:    def compress_to_1h(self) -> int:
 ./electricity_cost.py:class ElectricityCostCalculator:
 ./electricity_cost.py:    def __init__(
+./electricity_cost.py:    def _load_cumulative_energy(self) -> None:
 ./electricity_cost.py:    def _load_today_energy(self) -> None:
 ./electricity_cost.py:    def start_session(self) -> None:
 ./electricity_cost.py:    def stop_session(self) -> Dict[str, Any]:
@@ -330,6 +331,7 @@
 ./electricity_cost.py:    def get_session_stats(self) -> Optional[Dict[str, Any]]:
 ./electricity_cost.py:    def get_today_stats(self) -> Optional[Dict[str, Any]]:
 ./electricity_cost.py:    def set_cost_rate(self, rate: float) -> None:
+./electricity_cost.py:    def clear_session_energy(self) -> Dict[str, Any]:
 ./idle_baseline.py:class IdleBaselineTracker:
 ./idle_baseline.py:    def __init__(
 ./idle_baseline.py:    def check_idle(
@@ -659,6 +661,7 @@
 ./web_server.py:def api_latest_metrics_db():
 ./web_server.py:def api_range_metrics():
 ./web_server.py:def api_monthly_cost():
+./web_server.py:def api_clear_session_energy():
 ./web_server.py:def api_metrics_list():
 ./web_server.py:def api_historical_metrics():
 ./web_server.py:def api_historical_range():

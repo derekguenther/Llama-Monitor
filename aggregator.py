@@ -271,6 +271,10 @@ class Aggregator:
         # Add cost rate (needed by frontend)
         result["cost_rate"] = self.cost_calculator.cost_rate
 
+        # Add total_wh for session energy display
+        if session_stats:
+            result["total_wh"] = session_stats["total_wh"]
+
         return result
 
     def calculate_today_cost(self) -> Dict[str, Any]:
