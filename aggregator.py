@@ -84,7 +84,7 @@ class Aggregator:
             "cpu_percent": cpu_percent,
             "cpu_cores": cpu.get("cores", []),
             "cpu_count": cpu.get("count", 0),
-            "cpu_power_w": cpu.get("cpu_power_w", 0),
+            "cpu_power_w": system.get("system", {}).get("cpu_power_w", 0),
             "gpu_usage": gpu.get("usage", 0),
             "gpu_memory_used": gpu.get("memory_used", 0),
             "gpu_memory_total": gpu.get("memory_total", 0),
