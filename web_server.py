@@ -1594,10 +1594,32 @@ def api_stop_server():
 
 @app.route("/api/server/restart", methods=["POST"])
 def api_restart_server():
-    """Restart the web server."""
+    """Restart the web server by spawning a new process and shutting down the current one."""
     try:
-        # Return success - actual restart handled by client reload
-        return jsonify({"success": True, "message": "Server will restart"})
+        import os
+        import sys
+        import subprocess
+        import time
+
+        # Get the path to the current Python interpreter and main.py
+        python_exec = sys.executable
+        script_path = os.path.abspath(sys.argv[0])
+
+        # Create a new process group and start the server in a new process
+        def restart_server():
+            time.sleep(0.5)  # Small delay to allow response to be sent
+            # Start new server process in a new process group
+            subprocess.Popen(
+                [python_exec, script_path] + sys.argv[1:],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+        # Start restart in a thread so the response can be sent first
+        threading.Thread(target=restart_server).start()
+
+        return jsonify({"success": True, "message": "Server is restarting..."})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
