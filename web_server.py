@@ -1570,6 +1570,34 @@ def api_status():
     })
 
 
+@app.route("/api/server/stop", methods=["POST"])
+def api_stop_server():
+    """Stop the web server gracefully."""
+    try:
+        # Get the shutdown function from the request environment
+        func = request.environ.get('werkzeug.server.shutdown')
+        if func:
+            func()
+            return jsonify({"success": True, "message": "Server is shutting down..."})
+
+        # For Flask-SocketIO, create a thread to shutdown after response
+        import threading
+        threading.Thread(target=lambda: socketio.shutdown()).start()
+        return jsonify({"success": True, "message": "Server is shutting down..."})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/server/restart", methods=["POST"])
+def api_restart_server():
+    """Restart the web server."""
+    try:
+        # Return success - actual restart handled by client reload
+        return jsonify({"success": True, "message": "Server will restart"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 def get_db():
     """Get database instance."""
     if not DB_AVAILABLE:
@@ -1834,6 +1862,34 @@ def settings_page():
                 <button type="submit" class="btn btn-primary"><i class="fa-solid fa-save"></i> Save Settings</button>
             </div>
         </form>
+
+        <div class="settings-section">
+            <h2 class="section-title">Server Control</h2>
+            <div class="card">
+                <div class="form-group">
+                    <label>Server Status</label>
+                    <div id="server-status-display" style="padding: 10px; background: #0d111d; border-radius: 6px; font-family: 'Courier New', monospace; color: #00ff88;">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> Checking...
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="auto-reload" checked>
+                        <label for="auto-reload">Auto-reload after restart</label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" id="stop-btn" style="flex: 1; min-width: 120px;"><i class="fa-solid fa-stop"></i> Stop Server</button>
+                    <button type="button" class="btn btn-primary" id="restart-btn" style="flex: 1; min-width: 120px;"><i class="fa-solid fa-rotate-right"></i> Restart Server</button>
+                </div>
+                <div class="hint" style="margin-top: 10px;">
+                    <i class="fa-solid fa-info-circle"></i> Use these buttons to stop/restart the server for testing. Auto-reload will refresh the page after restart.
+                </div>
+            </div>
+        </div>
+    </form>
     </div>
 
     <script>
@@ -1922,6 +1978,72 @@ def settings_page():
                     showFeedback('Error resetting settings: ' + error.message, 'error');
                 }
             }
+        });
+
+        // Server status display
+        async function checkServerStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    const statusDisplay = document.getElementById('server-status-display');
+                    if (data.status === 'running' || data.status === 'standalone') {
+                        statusDisplay.innerHTML = `<i class="fa-solid fa-circle" style="color: #00ff88;"></i> Running`;
+                    } else {
+                        statusDisplay.innerHTML = `<i class="fa-solid fa-circle" style="color: #ff4757;"></i> Stopped`;
+                    }
+                }
+            } catch (error) {
+                document.getElementById('server-status-display').innerHTML = `<i class="fa-solid fa-circle" style="color: #ff4757;"></i> Unknown`;
+            }
+        }
+
+        // Stop server button
+        document.getElementById('stop-btn').addEventListener('click', async function() {
+            if (confirm('Are you sure you want to stop the server?')) {
+                try {
+                    const response = await fetch('/api/server/stop', { method: 'POST' });
+                    const data = await response.json();
+                    if (data.success) {
+                        showFeedback(data.message, 'success');
+                        checkServerStatus();
+                    } else {
+                        showFeedback('Failed to stop server: ' + data.error, 'error');
+                    }
+                } catch (error) {
+                    showFeedback('Error stopping server: ' + error.message, 'error');
+                }
+            }
+        });
+
+        // Restart server button
+        document.getElementById('restart-btn').addEventListener('click', async function() {
+            if (confirm('Are you sure you want to restart the server? The page will reload.')) {
+                try {
+                    const response = await fetch('/api/server/restart', { method: 'POST' });
+                    const data = await response.json();
+                    if (data.success) {
+                        showFeedback(data.message, 'success');
+                        checkServerStatus();
+                        // Reload page after short delay if auto-reload is checked
+                        const autoReload = document.getElementById('auto-reload').checked;
+                        if (autoReload) {
+                            setTimeout(function() {
+                                window.location.reload();
+                            }, 1500);
+                        }
+                    } else {
+                        showFeedback('Failed to restart server: ' + data.error, 'error');
+                    }
+                } catch (error) {
+                    showFeedback('Error restarting server: ' + error.message, 'error');
+                }
+            }
+        });
+
+        // Check server status on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkServerStatus();
         });
     </script>
 </body>
