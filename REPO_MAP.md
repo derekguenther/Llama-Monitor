@@ -661,7 +661,6 @@
 ./web_server.py:def api_latest_metrics_db():
 ./web_server.py:def api_range_metrics():
 ./web_server.py:def api_monthly_cost():
-./web_server.py:def api_clear_session_energy():
 ./web_server.py:def api_metrics_list():
 ./web_server.py:def api_historical_metrics():
 ./web_server.py:def api_historical_range():
