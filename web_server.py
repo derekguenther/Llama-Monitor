@@ -1580,7 +1580,7 @@ def api_stop_server():
             func()
             return jsonify({"success": True, "message": "Server is shutting down..."})
 
-        # If werkzeug shutdown is not available, try alternative approach
+       # If werkzeug shutdown is not available, try alternative approach
         # Note: Flask-SocketIO doesn't have a clean shutdown method
         # The server will stop when the main process terminates
         import os
