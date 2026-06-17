@@ -371,6 +371,7 @@ def index() -> str:
                 <div class="indicator-dot" id="status-dot"></div>
                 <span id="status-text">Connecting...</span>
             </div>
+            <a href="/cost-comparison" class="btn secondary"><i class="fa-solid fa-exchange-alt"></i> Cost Comparison</a>
             <a href="/settings" class="btn secondary"><i class="fa-solid fa-sliders"></i> Settings</a>
             <button class="btn secondary" id="refresh-btn">Refresh</button>
         </div>
@@ -2083,6 +2084,359 @@ def settings_page():
         document.addEventListener('DOMContentLoaded', function() {
             checkServerStatus();
         });
+    </script>
+</body>
+</html>"""
+    return render_template_string(html)
+
+
+
+
+@app.route("/cost-comparison")
+def cost_comparison_page():
+    """Serve the cost comparison page HTML."""
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Llama Monitor - Cost Comparison</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            color: #00d9ff;
+        }
+
+        .card {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            color: #00d9ff;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #333;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #2a2a4a;
+        }
+
+        .comparison-table th {
+            background: #0d111d;
+            color: #00d9ff;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .comparison-table td {
+            font-size: 0.95rem;
+        }
+
+        .comparison-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .cost-value {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .rate-value {
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #00d9ff;
+        }
+
+        .token-count {
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #ffbb55;
+        }
+
+        .local-server-row {
+            background: rgba(0, 255, 136, 0.1);
+            border-left: 3px solid #00ff88;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        .empty-state i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: #00d9ff;
+            color: #1a1a2e;
+        }
+
+        .btn-primary:hover {
+            background: #00b8d9;
+        }
+
+        .btn-secondary {
+            background: #2a3b5c;
+            color: #eee;
+        }
+
+        .btn-secondary:hover {
+            background: #3a4b6c;
+        }
+
+        .metrics-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .summary-card {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            border: 1px solid #333;
+        }
+
+        .summary-card h3 {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 10px;
+        }
+
+        .summary-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #00ff88;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .summary-label {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .refresh-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .refresh-section .btn {
+            flex: 1;
+        }
+
+        @media (max-width: 600px) {
+            .metrics-summary {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fa-solid fa-exchange-alt"></i> Cost Comparison</h1>
+        <a href="/" class="btn btn-secondary"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a>
+    </div>
+
+    <div class="refresh-section">
+        <button class="btn btn-primary" id="refresh-btn"><i class="fa-solid fa-sync"></i> Refresh Data</button>
+    </div>
+
+    <div class="metrics-summary">
+        <div class="summary-card">
+            <h3>Total Tokens</h3>
+            <div class="summary-value" id="total-tokens">0</div>
+            <div class="summary-label">Tokens processed today</div>
+        </div>
+        <div class="summary-card">
+            <h3>Local Server Rate</h3>
+            <div class="summary-value" id="local-rate">$0.0000</div>
+            <div class="summary-label">per token (electricity cost)</div>
+        </div>
+        <div class="summary-card">
+            <h3>Best Value</h3>
+            <div class="summary-value" id="best-value">-</div>
+            <div class="summary-label">lowest cost per token</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Vendor Cost Comparison</h2>
+        <div id="comparison-container">
+            <div class="empty-state">
+                <i class="fa-solid fa-server"></i>
+                <p>Loading vendor comparison data...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchComparisonData() {
+            try {
+                const response = await fetch('/api/vendor/comparison');
+                if (!response.ok) {
+                    throw new Error('Bad response');
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    updateComparisonDisplay(data);
+                } else {
+                    throw new Error(data.error || 'Failed to fetch comparison data');
+                }
+            } catch (error) {
+                console.error('Error fetching comparison data:', error);
+                document.getElementById('comparison-container').innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-exclamation-triangle"></i>
+                        <p>Error loading comparison data: ${error.message}</p>
+                        <p style="font-size: 0.85rem; color: #666; margin-top: 10px;">
+                            Make sure the database has vendor rates configured.
+                        </p>
+                    </div>
+                `;
+            }
+        }
+
+        function updateComparisonDisplay(data) {
+            const totalTokens = data.total_tokens || 0;
+            const localRate = data.local_server_rate || 0;
+            const comparison = data.comparison || [];
+
+            // Update summary cards
+            document.getElementById('total-tokens').textContent = totalTokens.toLocaleString();
+            document.getElementById('local-rate').textContent = '$' + formatRate(localRate) + '/token';
+
+            // Find best value (lowest cost per token)
+            if (comparison.length > 0) {
+                // Sort by cost to find best value
+                const sorted = [...comparison].sort((a, b) => a.cost_usd - b.cost_usd);
+                const bestValue = sorted[0];
+                document.getElementById('best-value').textContent = bestValue.vendor_name;
+            }
+
+            // Generate comparison table
+            if (comparison.length === 0) {
+                document.getElementById('comparison-container').innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-list"></i>
+                        <p>No vendor rates configured</p>
+                        <p style="font-size: 0.85rem; color: #666; margin-top: 10px;">
+                            Add vendor rates in Settings to see cost comparisons.
+                        </p>
+                        <a href="/settings" class="btn btn-primary" style="margin-top: 15px;">
+                            <i class="fa-solid fa-sliders"></i> Go to Settings
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            let tableHTML = `
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Vendor</th>
+                            <th>Rate ($/token)</th>
+                            <th>Tokens</th>
+                            <th>Total Cost</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            comparison.forEach(vendor => {
+                const isLocal = vendor.is_local_server ? 'local-server-row' : '';
+                const rateDisplay = vendor.is_local_server ? '$' + formatRate(vendor.rate_usd_per_token) + '/token' : '$' + formatRate(vendor.rate_usd_per_token) + '/token';
+                const costDisplay = '$' + vendor.cost_usd.toFixed(4);
+
+                tableHTML += `
+                    <tr class="${isLocal}">
+                        <td>${vendor.vendor_name} ${vendor.is_local_server ? '<i class="fa-solid fa-server" title="Local server"></i>' : ''}</td>
+                        <td class="rate-value">${rateDisplay}</td>
+                        <td class="token-count">${totalTokens.toLocaleString()}</td>
+                        <td class="cost-value">${costDisplay}</td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += '</tbody></table>';
+            document.getElementById('comparison-container').innerHTML = tableHTML;
+        }
+
+        function formatRate(rate) {
+            if (rate === 0) return '0.0000';
+            if (rate < 0.0001) return rate.toFixed(6);
+            if (rate < 0.01) return rate.toFixed(4);
+            return rate.toFixed(2);
+        }
+
+        // Initial load
+        fetchComparisonData();
+
+        // Refresh button
+        document.getElementById('refresh-btn').addEventListener('click', fetchComparisonData);
     </script>
 </body>
 </html>"""
