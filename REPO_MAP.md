@@ -671,7 +671,6 @@
 ./web_server.py:        def restart_server():
 ./web_server.py:def get_db():
 ./web_server.py:def settings_page():
-./web_server.py:def cost_comparison_page():
 ./web_server.py:def api_get_settings():
 ./web_server.py:def api_set_settings():
 ./web_server.py:def api_reset_settings():
