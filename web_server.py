@@ -867,6 +867,8 @@ def index() -> str:
                 (server.tokens_predicted_total || 0).toLocaleString();
             document.getElementById('server-gen-rate').textContent =
                 (server.predicted_tokens_seconds || 0).toLocaleString() + '/s';
+            document.getElementById('server-processing').textContent =
+                (server.requests_processing || 0).toLocaleString();
 
             // Update active slots
             const slots = server.slots || [];
