@@ -206,7 +206,9 @@ class TUI:
             stdscr.attroff(self.colors.get("cost", curses.A_BOLD))
 
             row += 1
-            sub_str = f" Energy: {format_significant_digits(total_wh)} Wh @ ${format_significant_digits(cost_rate)}/kWh "
+            # Display cost rate in cents to show fractional cent precision
+            cost_rate_cents = cost_rate * 100
+            sub_str = f" Energy: {format_significant_digits(total_wh)} Wh @ {cost_rate_cents:.2f} cents/kWh "
             stdscr.addstr(row, 2, sub_str[:section_width-4], curses.A_DIM)
         else:
             stdscr.addstr(row, 2, " No cost data available ", curses.A_DIM)

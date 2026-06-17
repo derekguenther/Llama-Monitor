@@ -355,7 +355,9 @@ class ElectricityCostCalculator:
         else:
             time_str = f"{duration_seconds:.0f} seconds"
 
-        return f"${cost:.4f} ({time_str} @ ${rate:.2f}/kWh)"
+        # Display rate in cents to show fractional cent precision
+        rate_cents = rate * 100
+        return f"${cost:.4f} ({time_str} @ {rate_cents:.2f} cents/kWh)"
 
     # Token tracking methods
     # ======================================================================

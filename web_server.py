@@ -913,8 +913,10 @@ def index() -> str:
             const costUsd = todayWh / 1000 * costRate;
 
             document.getElementById('cost-value').textContent = '$' + formatSignificantDigits(costUsd);
+            // Display cost rate in cents to show fractional cent precision
+            const costRateCents = (costRate * 100).toFixed(2);
             document.getElementById('cost-sub').textContent =
-                'Today\\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ $' + formatSignificantDigits(costRate) + '/kWh';
+                'Today\\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ ' + costRateCents + ' cents/kWh';
 
             // Update session energy display
             const sessionTotalWh = cost.session_total_wh || 0;
@@ -1953,7 +1955,7 @@ def settings_page():
                     <div><strong>Refresh Rate:</strong> <span class="value-display">${settings.web_refresh_rate || 1}s</span></div>
                     <div><strong>Cost Display:</strong> <span class="value-display">${settings.show_cost !== false ? 'Enabled' : 'Disabled'}</span></div>
                     <div><strong>Temp Display:</strong> <span class="value-display">${settings.show_temps !== false ? 'Enabled' : 'Disabled'}</span></div>
-                    <div><strong>Electricity Cost:</strong> <span class="value-display">$${parseFloat(settings.cost_rate || 0.12).toFixed(2)}/kWh</span></div>
+                    <div><strong>Electricity Cost:</strong> <span class="value-display">${(parseFloat(settings.cost_rate || 0.12) * 100).toFixed(2)} cents/kWh</span></div>
                 `;
             } catch (error) {
                 showFeedback('Error loading settings: ' + error.message, 'error');
