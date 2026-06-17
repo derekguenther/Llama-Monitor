@@ -668,6 +668,7 @@
 ./web_server.py:def api_stop_server():
 ./web_server.py:        func = request.environ.get('werkzeug.server.shutdown')
 ./web_server.py:def api_restart_server():
+./web_server.py:        def restart_server():
 ./web_server.py:def get_db():
 ./web_server.py:def settings_page():
 ./web_server.py:def api_get_settings():

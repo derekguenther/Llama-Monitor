@@ -398,6 +398,10 @@ def index() -> str:
                 <span class="metric-value metric-rate" id="server-gen-rate">0/s</span>
             </div>
             <div class="metric-row">
+                <span class="metric-label">Prompt Processing Rate</span>
+                <span class="metric-value metric-rate" id="server-prompt-rate">0/s</span>
+            </div>
+            <div class="metric-row">
                 <span class="metric-label">Active Slots</span>
                 <span class="metric-value" id="server-active-slots">0/0</span>
             </div>
@@ -867,6 +871,8 @@ def index() -> str:
                 (server.tokens_predicted_total || 0).toLocaleString();
             document.getElementById('server-gen-rate').textContent =
                 (server.predicted_tokens_seconds || 0).toLocaleString() + '/s';
+            document.getElementById('server-prompt-rate').textContent =
+                (server.prompt_tokens_seconds || 0).toLocaleString() + '/s';
 
             // Update active slots
             const slots = server.slots || [];
