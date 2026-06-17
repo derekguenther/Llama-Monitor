@@ -401,6 +401,9 @@
 ./test_active_slots_fix.py:    def test_javascript_updates_active_slots(self):
 ./test_active_slots_fix.py:    def test_javascript_has_slots_filter_logic(self):
 ./test_active_slots_fix.py:    def test_javascript_has_slots_reduce_logic(self):
+./test_active_slots_fix.py:class TestRequestsProcessingDisplay(unittest.TestCase):
+./test_active_slots_fix.py:    def test_html_has_server_processing_element(self):
+./test_active_slots_fix.py:    def test_javascript_updates_server_processing(self):
 ./test_aggregator_integration.py:class TestAggregatorIntegration(unittest.TestCase):
 ./test_aggregator_integration.py:    def setUp(self):
 ./test_aggregator_integration.py:    def tearDown(self):

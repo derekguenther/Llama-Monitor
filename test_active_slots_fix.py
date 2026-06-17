@@ -228,3 +228,32 @@ class TestWebServerSlotsUpdate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRequestsProcessingDisplay(unittest.TestCase):
+    """Tests for Requests Processing display functionality."""
+
+    def test_html_has_server_processing_element(self):
+        """Test that the HTML contains the server-processing element."""
+        from web_server import app
+
+        with app.test_client() as client:
+            response = client.get("/")
+            html = response.get_data(as_text=True)
+
+        # Check for the element
+        self.assertIn('id="server-processing"', html)
+
+    def test_javascript_updates_server_processing(self):
+        """Test that JavaScript code updates the server-processing element."""
+        from web_server import app
+
+        with app.test_client() as client:
+            response = client.get("/")
+            html = response.get_data(as_text=True)
+
+        # Check that the JavaScript updates server-processing
+        # The fix should include code like:
+        # document.getElementById('server-processing').textContent = ...
+        self.assertIn("server-processing", html)
+        self.assertIn("requests_processing", html)
