@@ -173,7 +173,7 @@ class ElectricityCostCalculator:
         Returns:
             Dictionary with power and cost data
         """
-        # Calculate energy in watt-hours
+        # Calculate energy in watt-hours for this interval
         duration_hours = duration_seconds / 3600.0
         gpu_energy_wh = gpu_power_w * duration_hours
         cpu_energy_wh = cpu_power_w * duration_hours
@@ -191,6 +191,14 @@ class ElectricityCostCalculator:
             "cpu_wh": cpu_energy_wh,
             "total_wh": total_energy_wh,
             "cost_usd": cost_usd,
+            # Include session totals for display
+            "session_gpu_wh": self.gpu_energy_wh,
+            "session_cpu_wh": self.cpu_energy_wh,
+            "session_total_wh": self.total_energy_wh,
+            # Include today's totals for display
+            "today_gpu_wh": self.today_gpu_wh,
+            "today_cpu_wh": self.today_cpu_wh,
+            "today_wh": self.today_energy_wh,
         }
 
     def calculate_cost(self, energy_wh: float) -> float:
