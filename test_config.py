@@ -40,7 +40,7 @@ class TestConfigDefaults(unittest.TestCase):
         """Test default tracked processes."""
         self.assertEqual(
             self.config.get("metrics_collection.tracked_processes", ["llama.cpp"]),
-            ["llama.cpp"]
+            ["llama-server.exe"]
         )
 
     def test_compression_enabled_default(self):
