@@ -924,6 +924,11 @@ def index() -> str:
             document.getElementById('cost-sub').textContent =
                 'Today\\'s energy: ' + formatSignificantDigits(todayWh) + ' Wh @ $' + formatSignificantDigits(costRate) + '/kWh';
 
+            // Update session energy
+            const sessionWh = cost.total_wh || 0;
+            document.getElementById('session-energy').textContent =
+                formatSignificantDigits(sessionWh) + ' Wh';
+
             // Update process GPU list
             const processGpu = data.process_gpu || {};
             const processList = document.getElementById('process-gpu-list');
