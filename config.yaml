@@ -96,7 +96,7 @@ logging:
   file: "llama_monitor.log"
 
 # Per-process tracking settings
-tracking:
+metrics_collection:
   # Track specific processes by name (exact match)
   tracked_processes:
     - "llama-server.exe"

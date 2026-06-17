@@ -32,7 +32,7 @@ class Config:
         "metrics_collection": {
             "interval_seconds": 1.0,
             "collect_metrics": True,
-            "tracked_processes": ["llama.cpp"],
+            "tracked_processes": ["llama-server.exe"],
         },
         "database": {
             "path": "llama-monitor.db",
