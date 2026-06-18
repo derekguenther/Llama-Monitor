@@ -1,0 +1,79 @@
+#!/bin/bash
+# Verification script that runs before merge in finish-bead
+# Returns 0 if verification passes, non-zero if it fails
+
+# Allow skipping verification with SKIP_VERIFICATION=1
+if [ "$SKIP_VERIFICATION" = "1" ]; then
+    echo "=== Verification skipped (SKIP_VERIFICATION=1) ==="
+    exit 0
+fi
+
+set -e
+
+TASK_NAME="$1"
+WORKTREE_PATH="/sandbox/.worktrees/$TASK_NAME"
+
+echo "=== Verification before merge ==="
+echo "Task: $TASK_NAME"
+echo "Worktree: $WORKTREE_PATH"
+
+# Check 1: Is Llama Monitor running on Windows?
+# We check by looking for the process and the lock file
+echo ""
+echo "Check 1: Llama Monitor running on Windows..."
+
+# Try to detect if Llama Monitor is running via host.docker.internal
+# The webserver runs on port 8000
+if command -v curl >/dev/null 2>&1; then
+    # Try to connect to the Windows host's Llama Monitor
+    if curl -s --connect-timeout 2 "http://host.docker.internal:8000/metrics" >/dev/null 2>&1; then
+        echo "  WARNING: Llama Monitor appears to be running on Windows!"
+        echo "  The database may be corrupted if we proceed with the merge."
+
+        # Check for lock file
+        LOCK_FILE="/c/Users/ClaudeCode/Documents/llama-monitor/.llama-monitor.lock"
+        if curl -s --connect-timeout 2 "http://host.docker.internal:8000/lock" 2>/dev/null | grep -q "locked"; then
+            echo "  Database is locked - safe to proceed"
+        else
+            echo "  ERROR: Database is NOT locked. Aborting merge."
+            echo "  Please stop Llama Monitor on Windows before merging."
+            exit 1
+        fi
+    else
+        echo "  OK: Llama Monitor is not running on Windows"
+    fi
+else
+    echo "  WARNING: curl not available, cannot check Llama Monitor status"
+fi
+
+# Check 2: Run unit tests in Docker
+echo ""
+echo "Check 2: Running verification tests..."
+
+if [ -f "$WORKTREE_PATH/test_llama-monitor.py" ]; then
+    echo "  Found test file, running tests..."
+    cd "$WORKTREE_PATH"
+    python3 test_llama-monitor.py 2>&1 || {
+        echo "  ERROR: Tests failed"
+        exit 1
+    }
+    echo "  OK: Tests passed"
+else
+    echo "  No test file found, skipping tests"
+fi
+
+# Check 3: Syntax check Python files
+echo ""
+echo "Check 3: Syntax check..."
+cd "$WORKTREE_PATH"
+for file in $(find . -name "*.py" -not -path "./.git/*" -not -path "./node_modules/*"); do
+    python3 -m py_compile "$file" 2>&1 || {
+        echo "  ERROR: Syntax error in $file"
+        exit 1
+    }
+done
+echo "  OK: All Python files have valid syntax"
+
+echo ""
+echo "=== All verification checks passed ==="
+exit 0

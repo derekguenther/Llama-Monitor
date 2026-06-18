@@ -1,0 +1,40 @@
+#!/bin/bash
+if [ "$#" -ne 1 ]; then
+  echo "ERROR: You must provide a commit message. Example: finish-bead \"Fixed the bug\""
+  exit 1
+fi
+if [[ "$PWD" != *".worktrees"* ]]; then
+  echo "ERROR: You are not inside a worktree! cd into your worktree first."
+  exit 1
+fi
+TASK_NAME=$(basename "$PWD")
+echo "Generating Repository Map..."
+grep -r -E "^[[:space:]]*(class|def|func)[[:space:]]" --include="*.py" --include="*.gd" --include="*.js" --include="*.sh" --exclude-dir=".git" --exclude-dir="node_modules" --exclude-dir=".worktrees" . > REPO_MAP.md
+git add .
+git commit -m "$1"
+cd /sandbox
+
+# Run verification before merge
+echo ""
+echo "Running verification before merge..."
+if [ -x "/sandbox/.beads/hooks/verify-before-merge" ]; then
+    /sandbox/.beads/hooks/verify-before-merge "$TASK_NAME" || {
+        echo ""
+        echo "============================================"
+        echo "VERIFICATION FAILED - Merge aborted"
+        echo "============================================"
+        echo ""
+        echo "Fix the issues above and try again."
+        echo "To skip verification (not recommended), run:"
+        echo "  SKIP_VERIFICATION=1 finish-bead \"message\""
+        exit 1
+    }
+else
+    echo "WARNING: verify-before-merge hook not found, skipping verification"
+fi
+
+echo ""
+git merge $TASK_NAME --no-edit
+git worktree remove ".worktrees/$TASK_NAME" --force
+git branch -d $TASK_NAME
+echo "SUCCESS: Bead merged, Map updated, and worktree destroyed."

@@ -96,3 +96,26 @@ _Add a brief overview of your project architecture_
 ## Conventions & Patterns
 
 _Add your project-specific conventions here_
+
+## Git Operations Checklist (CRITICAL)
+
+Before ANY git operation, run this checklist:
+
+### BEFORE ANY GIT OPERATION:
+1. What files does this operation affect?
+2. What changes exist in those files right now?
+3. What does the other branch/commit actually change?
+4. Are these changes compatible or conflicting?
+5. What is the MINIMUM safe action here?
+6. Is it destructive in any way? Get permission from user.
+
+### FOR MERGES SPECIFICALLY:
+1. `git diff base..feature -- file` for each modified file
+2. Read the actual code changes, not just commit messages
+3. Identify conflicts BEFORE attempting merge
+4. If conflicts exist: decide to stash, rebase, or resolve
+
+### BEFORE DELETIONS:
+1. Is it a completed worktree which has been merged? Safe to delete.
+2. Is it a worktree of unknown status? NOT safe to delete - ask user for guidance.
+3. All other deletions: Get permission from user.
