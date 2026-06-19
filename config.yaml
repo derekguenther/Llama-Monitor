@@ -4,7 +4,7 @@
 # Server connection settings
 server:
   # URL of your llama.cpp server
-  url: "http://localhost:8000"
+  url: "http://host.docker.internal:8000"
 
   # Model alias (for display purposes)
   model_id: "qwen3-coder-next"
