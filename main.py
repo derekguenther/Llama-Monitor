@@ -16,6 +16,46 @@ from config import Config, get_config, reload_config
 from db import Database
 
 
+def transform_system_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform flat system metrics keys to nested structure for frontend.
+
+    The aggregator returns system metrics with flat keys (cpu_percent, gpu_usage, etc.)
+    but the frontend expects nested structure (system.cpu.percent, system.gpu.usage).
+
+    Args:
+        data: System metrics dictionary with flat keys
+
+    Returns:
+        System metrics dictionary with nested structure
+    """
+    return {
+        "cpu": {
+            "percent": data.get("cpu_percent", 0),
+            "cores": data.get("cpu_cores", []),
+            "count": data.get("cpu_count", 0),
+            "power_w": data.get("cpu_power_w", 0),
+        },
+        "gpu": {
+            "usage": data.get("gpu_usage", 0),
+            "memory_used": data.get("gpu_memory_used", 0),
+            "memory_total": data.get("gpu_memory_total", 0),
+            "temperature_c": data.get("gpu_temperature_c", 0),
+            "fan_speed_rpm": data.get("gpu_fan_speed_rpm", 0),
+            "power_w": data.get("gpu_power_w", 0),
+        },
+        "memory": {
+            "used": data.get("memory_used", 0),
+            "total": data.get("memory_total", 0),
+            "percent": data.get("memory_percent", 0),
+            "available": data.get("memory_available", 0),
+        },
+        "system": {
+            "power_w": data.get("system_power_w", 0),
+        },
+        "timestamp": data.get("timestamp", ""),
+    }
+
+
 def format_significant_digits(value: float, digits: int = 4) -> str:
     """Format a value with the specified number of significant digits.
 
@@ -172,6 +212,11 @@ class Monitor:
                 cost = self.aggregator.calculate_cost()
                 metrics["cost"] = cost
 
+                # Transform system metrics from flat to nested structure for frontend
+                system_flat = metrics.get("system", {})
+                if system_flat:
+                    metrics["system"] = transform_system_metrics(system_flat)
+
                 # Update shared cache
                 self.metrics_cache.update(metrics)
 
@@ -284,6 +329,13 @@ class Monitor:
         metrics = self.aggregator.collect_all_metrics()
         cost = self.aggregator.calculate_cost()
 
+        # Transform system metrics from flat to nested structure
+        system_raw = metrics.get("system_raw", {})
+        if system_raw:
+            system = transform_system_metrics(system_raw)
+        else:
+            system = metrics.get("system", {})
+
         print("\n=== Llama Monitor Statistics ===\n")
 
         # Server metrics
@@ -294,7 +346,6 @@ class Monitor:
         print(f"  Requests:         {server.get('requests_processing', 0)} processing")
 
         # System metrics
-        system = metrics.get("system", {})
         cpu = system.get("cpu", {})
         gpu = system.get("gpu", {})
         mem = system.get("memory", {})

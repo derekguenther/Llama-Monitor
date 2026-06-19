@@ -266,7 +266,7 @@ class Aggregator:
             result["today_wh"] = today_stats["total_wh"]
             result["today_gpu_wh"] = today_stats["gpu_wh"]
             result["today_cpu_wh"] = today_stats["cpu_wh"]
-            result["total_cost"] = today_stats["total_cost_usd"]
+            result["today_cost"] = today_stats["total_cost_usd"]
 
         # Add cost rate (needed by frontend)
         result["cost_rate"] = self.cost_calculator.cost_rate
@@ -274,6 +274,9 @@ class Aggregator:
         # Add total_wh for session energy display
         if session_stats:
             result["total_wh"] = session_stats["total_wh"]
+        else:
+            # Fallback to cumulative energy from calculator
+            result["total_wh"] = self.cost_calculator.total_energy_wh
 
         return result
 

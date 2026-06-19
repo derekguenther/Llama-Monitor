@@ -13,10 +13,17 @@ server:
   metrics_endpoint: "/metrics"
 
 # Data collection settings
-data:
+metrics_collection:
   # How often to poll for metrics (seconds)
   # Valid values: 1, 2, 5, 10, 15, 20, 30
-  polling_interval: 1
+  interval_seconds: 1
+
+  # Track specific processes by name (exact match)
+  tracked_processes:
+    - "llama-server.exe"
+
+  # Minimum GPU utilization to track (0-100)
+  min_gpu_utilization: 1
 
   # First compression level (raw -> 1-minute buckets)
   compression_level_1:
@@ -95,14 +102,7 @@ logging:
   # Log file path (empty string = no file logging)
   file: "llama_monitor.log"
 
-# Per-process tracking settings
-tracking:
-  # Track specific processes by name (exact match)
-  tracked_processes:
-    - "llama-server.exe"
 
-  # Minimum GPU utilization to track (0-100)
-  min_gpu_utilization: 1
 
 # Web server settings (for --web mode)
 web:

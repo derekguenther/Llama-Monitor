@@ -209,11 +209,25 @@ class Aggregator:
         # Use a fixed duration for each calculation (1 second since we poll frequently)
         duration = 1.0
 
-        return self.cost_calculator.calculate_power_cost(
+        # Get base cost calculation from calculate_power_cost
+        base_cost = self.cost_calculator.calculate_power_cost(
             gpu_power_w=gpu_power,
             cpu_power_w=cpu_power,
             duration_seconds=duration
         )
+
+        # Add today's energy stats from database for display
+        today_stats = self.cost_calculator.get_today_stats()
+        if today_stats:
+            base_cost["today_wh"] = today_stats["total_wh"]
+            base_cost["today_gpu_wh"] = today_stats["gpu_wh"]
+            base_cost["today_cpu_wh"] = today_stats["cpu_wh"]
+            base_cost["today_cost"] = today_stats["total_cost_usd"]
+
+        # Add session cumulative energy (total_wh from cost_calculator)
+        base_cost["total_wh"] = self.cost_calculator.total_energy_wh
+
+        return base_cost
 
     def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:
         """Store raw metrics in database.
@@ -676,8 +690,8 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
         self.send_json_response({
             "status": "running" if self.aggregator.running else "stopped",
-            "polling_interval": self.aggregator.config.polling_interval,
-            "server_url": self.aggregator.config.server_url,
+            "polling_interval": self.aggregator.config.get("metrics_collection.interval_seconds", 1.0),
+            "server_url": self.aggregator.config.get("server.url", "http://localhost:8080"),
             "last_metrics": self.aggregator.last_metrics.get("timestamp") if self.aggregator.last_metrics else None,
             "last_timestamp": last_timestamp,
             "metrics_counts": {

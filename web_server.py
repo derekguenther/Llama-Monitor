@@ -87,6 +87,46 @@ def fetch_metrics_from_aggregator() -> Optional[Dict[str, Any]]:
         return None
 
 
+def transform_system_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform flat system metrics keys to nested structure for frontend.
+
+    The database stores system metrics with flat keys (cpu_percent, gpu_usage, etc.)
+    but the frontend expects nested structure (system.cpu.percent, system.gpu.usage).
+
+    Args:
+        data: System metrics dictionary with flat keys
+
+    Returns:
+        System metrics dictionary with nested structure
+    """
+    return {
+        "cpu": {
+            "percent": data.get("cpu_percent", 0),
+            "cores": data.get("cpu_cores", []),
+            "count": data.get("cpu_count", 0),
+            "power_w": data.get("cpu_power_w", 0),
+        },
+        "gpu": {
+            "usage": data.get("gpu_usage", 0),
+            "memory_used": data.get("gpu_memory_used", 0),
+            "memory_total": data.get("gpu_memory_total", 0),
+            "temperature_c": data.get("gpu_temperature_c", 0),
+            "fan_speed_rpm": data.get("gpu_fan_speed_rpm", 0),
+            "power_w": data.get("gpu_power_w", 0),
+        },
+        "memory": {
+            "used": data.get("memory_used", 0),
+            "total": data.get("memory_total", 0),
+            "percent": data.get("memory_percent", 0),
+            "available": data.get("memory_available", 0),
+        },
+        "system": {
+            "power_w": data.get("system_power_w", 0),
+        },
+        "timestamp": data.get("timestamp", ""),
+    }
+
+
 def fetch_metrics_from_database(db_path: str) -> Optional[Dict[str, Any]]:
     """Fetch latest metrics from SQLite database.
 
@@ -115,10 +155,11 @@ def fetch_metrics_from_database(db_path: str) -> Optional[Dict[str, Any]]:
         conn.close()
 
         if row:
+            system_data = json.loads(row["system_data"])
             return {
                 "timestamp": row["timestamp"],
                 "server": json.loads(row["server_data"]),
-                "system": json.loads(row["system_data"]),
+                "system": transform_system_metrics(system_data),
                 "cost": json.loads(row["cost_data"]),
             }
     except Exception:
@@ -178,6 +219,12 @@ def api_latest_metrics():
         "cost": None,
         "timestamp": datetime.now().isoformat()
     })
+
+
+@app.route("/api/metrics")
+def api_metrics():
+    """Alias for /api/metrics/latest for backwards compatibility."""
+    return api_latest_metrics()
 
 
 @app.route("/api/metrics/latest-db")
