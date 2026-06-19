@@ -65,7 +65,8 @@ class Aggregator:
         # Flatten system metrics for cache/web usage
         # system_metrics from collector has nested structure:
         # { "timestamp": "...", "cpu": {...}, "gpu": {...}, "memory": {...}, ... }
-        # The frontend expects flattened keys, so we extract the nested values
+        # The frontend expects nested keys (system.cpu.percent, system.gpu.usage),
+        # so we keep both flat keys (for DB storage) and nested keys (for frontend).
         system = system_metrics
         cpu = system.get("cpu", {})
         gpu = system.get("gpu", {})
@@ -75,12 +76,13 @@ class Aggregator:
         process_cpu = cpu.get("process_cpu", {})
         if process_cpu:
             # Sum all tracked process CPU percentages
-            cpu_percent = sum(data.get("cpu_percent", 0) for data in process_cpu.values())
+            cpu_percent = sum(p.get("cpu_percent", 0) for p in process_cpu.values())
         else:
             # Fall back to total OS CPU
             cpu_percent = cpu.get("percent", 0)
 
         system_data = {
+            # Flat keys for DB storage
             "cpu_percent": cpu_percent,
             "cpu_cores": cpu.get("cores", []),
             "cpu_count": cpu.get("count", 0),
@@ -97,16 +99,42 @@ class Aggregator:
             "memory_available": memory.get("available", 0),
             "system_power_w": system.get("system", {}).get("system_power_w", 0),
             "timestamp": system.get("timestamp", int(time.time())),
+            # Nested keys for frontend display (system.cpu.percent, system.gpu.usage, etc.)
+            "cpu": {
+                "percent": cpu_percent,
+                "cores": cpu.get("cores", []),
+                "count": cpu.get("count", 0),
+                "power_w": system.get("system", {}).get("cpu_power_w", 0),
+            },
+            "gpu": {
+                "usage": gpu.get("usage", 0),
+                "memory_used": gpu.get("memory_used", 0),
+                "memory_total": gpu.get("memory_total", 0),
+                "temperature_c": gpu.get("temperature_c", 0),
+                "fan_speed_rpm": gpu.get("fan_speed_rpm", 0),
+                "power_w": gpu.get("power_w", 0),
+            },
+            "memory": {
+                "used": memory.get("used", 0),
+                "total": memory.get("total", 0),
+                "percent": memory.get("percent", 0),
+                "available": memory.get("available", 0),
+            },
         }
 
         # Include process GPU metrics if available
         process_gpu = system.get("process_gpu", {})
 
-        return {
-            "timestamp": int(time.time()),
-            "server": server_data,
+        # Build server data with slots nested inside (frontend expects data.server.slots)
+        server_data_with_slots = {
+            **server_data,
             "slots": server_metrics.get("slots", []),
             "props": server_metrics.get("props", {}),
+        }
+
+        return {
+            "timestamp": int(time.time()),
+            "server": server_data_with_slots,
             "system": system_data,
             "process_gpu": process_gpu,
             "system_raw": system,  # Keep raw nested system data for store_raw_metrics

@@ -167,6 +167,7 @@ class Aggregator:
         system = system_data.get("system", {})
 
         return {
+            # Flat keys for DB storage
             "cpu_percent": cpu.get("percent"),
             "cpu_cores_percent": json.dumps(cpu.get("cores", [])),
             "cpu_temperature_c": json.dumps(cpu.get("temperature_c", [])),
@@ -181,6 +182,27 @@ class Aggregator:
             "memory_total_mb": memory.get("total"),
             "memory_percent": memory.get("percent"),
             "system_power_w": system.get("power_w"),
+            # Nested keys for frontend display
+            "cpu": {
+                "percent": cpu.get("percent"),
+                "cores": cpu.get("cores", []),
+                "count": cpu.get("count", 0),
+                "power_w": cpu.get("power_w"),
+            },
+            "gpu": {
+                "usage": gpu.get("usage"),
+                "memory_used": gpu.get("memory_used"),
+                "memory_total": gpu.get("memory_total"),
+                "temperature_c": gpu.get("temperature_c"),
+                "fan_speed_rpm": gpu.get("fan_speed_rpm"),
+                "power_w": gpu.get("power_w"),
+            },
+            "memory": {
+                "used": memory.get("used"),
+                "total": memory.get("total"),
+                "percent": memory.get("percent"),
+                "available": memory.get("available"),
+            },
         }
 
     def _extract_process_gpu_metrics(self, system_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -226,6 +248,12 @@ class Aggregator:
 
         # Add session cumulative energy (total_wh from cost_calculator)
         base_cost["total_wh"] = self.cost_calculator.total_energy_wh
+
+        # Add session cost for frontend display
+        base_cost["session_cost_usd"] = self.cost_calculator.calculate_cost(
+            self.cost_calculator.total_energy_wh
+        )
+        base_cost["total_cost"] = base_cost["session_cost_usd"]
 
         return base_cost
 
@@ -542,7 +570,7 @@ class MetricsHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = parse_qs(parsed.query)
 
-        if path == "/api/metrics/latest":
+        if path == "/api/metrics" or path == "/api/metrics/latest":
             self._handle_latest_metrics()
         elif path == "/api/metrics/range":
             self._handle_range_metrics(query)

@@ -2,29 +2,31 @@
 You must never edit files in the root directory.
 
 **To Start a Bead:**
-1. Read the `REPO_MAP.md` file in the root directory to understand the project architecture and locate the functions you need.
+1. Read `REPO_MAP.md` to understand architecture and locate functions.
 2. `git worktree add .worktrees/<task-name> -b <task-name>`
 3. `cd .worktrees/<task-name>`
-4. Do all your coding inside this folder.
+4. Code inside this folder only.
 
 **To Finish a Bead:**
-1. From inside your worktree, run: `finish-bead "Brief description of what you did"`
+1. From inside your worktree: `finish-bead "Brief description of what you did"`
 2. Close the bead in the tracker and `/exit`
 
-Never leave a completed worktree behind. Never push to a remote repository.
-
+**CRITICAL: Worktree Merge Protocol**
+- Worktrees are NEVER merged automatically.
+- User must review and explicitly approve merge before any merge operation.
+- Worktree remains in place for user review after finishing.
+- Never push to a remote repository.
 
 # Project Instructions for AI Agents
 
-This file provides instructions and context for AI coding agents working on this project.
+This file provides instructions for AI coding agents working on this project.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+This project uses **bd (beads)** for issue tracking. Run `bd prime` for full context.
 
 ### Quick Reference
-
 ```bash
 bd ready              # Find available work
 bd show <id>          # View issue details
@@ -33,28 +35,30 @@ bd close <id>         # Complete work
 ```
 
 ### Rules
+- Use `bd` for ALL task tracking — no TodoWrite, TaskCreate, or markdown TODO lists.
+- Use `bd remember` for persistent knowledge — no MEMORY.md files.
 
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+**Architecture:** Issues live in a local Dolt DB; sync uses `refs/dolt/data` on git remote; `.beads/issues.jsonl` is a passive export.
 
 ## Agent Context Profiles
 
-The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
-
-- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
-- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
-- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
+- **Conservative (default)**: Use `bd` for task tracking. No git commits/pushes/sync unless asked. Perform initial review (code completeness, adherence to bead instructions) at handoff. Report changed files, validation, and suggested commands. Worktree merge requires user approval.
+- **Minimal**: Keep tool instruction files as pointers to `bd prime`. Same conservative git policy unless active instructions say otherwise. Perform initial review before handoff.
+- **Team-maintainer**: Only when repository explicitly opts in. May close beads, run quality gates, commit, and push. "Do not commit/push" instructions still win. Worktree merge requires user approval unless explicitly waived.
 
 ## Session Completion
 
-This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
+This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, or orchestrator instructions.
 
-1. **File issues for remaining work** - Create beads for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
+### Pre-Handoff Checklist (Your Responsibility)
+1. **Code completeness** — Does implementation look complete?
+2. **Adherence to bead instructions** — Has work strayed from original requirements?
+3. **Quality gates** — Run tests, linters, builds if relevant.
+
+### Handoff Protocol
+1. **File issues for remaining work** — Create beads for follow-up items.
+2. **Run quality gates** (if code changed) — Tests, linters, builds.
+3. **Update issue status** — Mark finished work complete (do NOT close bead yet).
 4. **Handle git/sync by active profile**:
    ```bash
    # Conservative/minimal/default: report status and proposed commands; wait for approval.
@@ -66,19 +70,21 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
    git push
    git status
    ```
-5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
+5. **Hand off to user** — Summarize changes, validation, issue status, and any blocked sync/commit/push step.
+
+### User Review & Merge Protocol
+- User reviews worktree changes before merge.
+- Worktree is NEVER merged without explicit user approval.
+- After finishing a bead, worktree remains in place for user review.
+- User must explicitly approve merge before any merge operation occurs.
 
 **Critical rules:**
 - Explicit user or orchestrator instructions override this Beads block.
-- Do not commit or push without clear authority from the active profile or the current user request.
-- If a required sync or push is blocked, stop and report the exact command and error.
+- Do not commit or push without clear authority from active profile or current request.
+- If sync/push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
 
-
 ## Build & Test
-
-_Add your build and test commands here_
-
 ```bash
 # Example:
 # npm install
@@ -87,7 +93,7 @@ _Add your build and test commands here_
 
 ## Docker Development Notes
 
-When connecting to services running on the Windows host (like Llama Monitor or Chrome for debugging), use `host.docker.internal` instead of `127.0.0.1` or `localhost`. This is because the agent runs inside a Docker container, and `host.docker.internal` resolves to the host machine from within the container.
+When connecting to services on the Windows host (like Llama Monitor or Chrome for debugging), use `host.docker.internal` instead of `127.0.0.1` or `localhost`.
 
 ## Architecture Overview
 
@@ -107,15 +113,15 @@ Before ANY git operation, run this checklist:
 3. What does the other branch/commit actually change?
 4. Are these changes compatible or conflicting?
 5. What is the MINIMUM safe action here?
-6. Is it destructive in any way? Get permission from user.
+6. Is it potentially destructive in any way? Get permission from user.
 
 ### FOR MERGES SPECIFICALLY:
-1. `git diff base..feature -- file` for each modified file
-2. Read the actual code changes, not just commit messages
-3. Identify conflicts BEFORE attempting merge
-4. If conflicts exist: decide to stash, rebase, or resolve
+1. `git diff base..feature -- file` for each modified file.
+2. Read actual code changes, not just commit messages.
+3. Identify conflicts BEFORE attempting merge.
+4. If conflicts exist: decide to stash, rebase, or resolve.
 
 ### BEFORE DELETIONS:
 1. Is it a completed worktree which has been merged? Safe to delete.
-2. Is it a worktree of unknown status? NOT safe to delete - ask user for guidance.
+2. Is it a worktree of unknown status? NOT safe to delete — ask user for guidance.
 3. All other deletions: Get permission from user.
