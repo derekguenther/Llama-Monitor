@@ -882,7 +882,7 @@ def settings_page():
 
                 <div class="form-group">
                     <label for="cost_rate">Electricity Cost ($/kWh)</label>
-                    <input type="number" id="cost_rate" name="cost_rate" step="0.01" min="0">
+                    <input type="number" id="cost_rate" name="cost_rate" step="0.001" min="0">
                     <div class="hint">Current electricity rate for cost calculations</div>
                 </div>
             </div>
