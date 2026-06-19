@@ -143,8 +143,8 @@ class SystemMetricsCollector:
         if psutil is None:
             return {"error": "psutil not installed"}
 
-        cpu_percent = psutil.cpu_percent(interval=0.1)
-        cpu_cores = psutil.cpu_percent(interval=0.1, percpu=True)
+        cpu_percent = psutil.cpu_percent()
+        cpu_cores = psutil.cpu_percent(percpu=True)
         cpu_count = psutil.cpu_count(logical=True)
 
         # Get per-process CPU usage
