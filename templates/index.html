@@ -240,7 +240,7 @@
             background: linear-gradient(90deg, #00d4ff, #0099cc);
         }
 
-        .context-remaining-fill {
+        .context-used-fill {
             background: linear-gradient(90deg, #00ff88, #00cc6a);
         }
 
@@ -253,6 +253,43 @@
         }
 
         /* Stats Summary */
+        /* Key Metrics */
+        .key-metrics {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+
+        .key-metric-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .key-metric-label {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .key-metric-value {
+            line-height: 1;
+            font-size: 6rem;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+
+        .key-metric-value.energy {
+            color: #ffd93d;
+        }
+
+        .stats-summary h2 {
+            font-size: 1rem;
+            color: #00d4ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a3b5c;
+        }
+
         .stats-summary {
             background: #16213e;
             border-radius: 10px;
@@ -512,44 +549,18 @@
             </div>
         </div>
 
-        <!-- Slot Progress and Context Remaining Bar Graphs -->
-        <div class="card">
-            <h2>Slot Progress & Context</h2>
-            <!-- Slot Progress Bar Graph -->
-            <div class="graph-container" style="height: 80px; margin-bottom: 15px;">
-                <div class="graph-label">Slot Progress (0-100% completion)</div>
-                <canvas id="slot-progress-graph" class="graph-canvas"></canvas>
+
+        <!-- Key Metrics -->
+        <div class="key-metrics">
+            <div class="key-metric-item">
+                <div class="key-metric-label">Today's Cost</div>
+                <div class="key-metric-value" id="today-cost">$0.00</div>
             </div>
-            <!-- Context Remaining Bar Graph -->
-            <div class="graph-container" style="height: 80px;">
-                <div class="graph-label">Context Remaining (tokens before compaction)</div>
-                <canvas id="context-remaining-graph" class="graph-canvas"></canvas>
+            <div class="key-metric-item">
+                <div class="key-metric-label">Today's Energy</div>
+                <div class="key-metric-value energy" id="today-energy">0 Wh</div>
             </div>
         </div>
-
-        <!-- Stats Summary -->
-        <div class="stats-summary">
-            <h2>Summary</h2>
-            <div class="stats-grid">
-                <div class="stat-item token-accumulator" id="token-accumulator">
-                    <div class="stat-value" id="total-tokens">0</div>
-                    <div class="stat-label">Total Tokens</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="tokens-per-sec">0</div>
-                    <div class="stat-label">Tokens/Sec</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="session-cost">$0.00</div>
-                    <div class="stat-label">Session Cost</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="total-energy">0</div>
-                    <div class="stat-label">Total Energy (Wh)</div>
-                </div>
-            </div>
-        </div>
-
         <!-- Vendor Comparison Modal -->
         <div class="modal-overlay" id="vendor-modal">
             <div class="modal-content">
@@ -590,7 +601,6 @@
             </div>
         </div>
 
-        <!-- Dashboard Grid -->
 
         <!-- Dashboard Grid -->
         <div class="dashboard-grid">
@@ -607,7 +617,7 @@
                         <span class="metric-value" id="generated-tokens">0</span>
                     </div>
                     <div class="metric-row">
-                        <span class="metric-label">Processing Requests</span>
+                        <span class="metric-label">Active Requests Being Processed</span>
                         <span class="metric-value" id="processing-requests">0</span>
                     </div>
                     <div class="metric-row">
@@ -620,6 +630,43 @@
                     </div>
                 </div>
             </div>
+            <!-- Summary -->
+            <div class="card">
+                <h2>Summary</h2>
+                <div id="summary-metrics">
+                    <div class="metric-row">
+                        <span class="metric-label">Total Tokens</span>
+                        <span class="metric-value" id="total-tokens">0</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Tokens/Sec</span>
+                        <span class="metric-value" id="tokens-per-sec">0</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Session Cost</span>
+                        <span class="metric-value" id="session-cost">$0.00</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Total Energy</span>
+                        <span class="metric-value" id="total-energy">0 Wh</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Slot Progress and Context Used Bar Graphs -->
+            <div class="card">
+                <h2>Slot Progress & Context</h2>
+                <!-- Slot Progress Bar Graph -->
+                <div class="graph-container" style="height: 80px; margin-bottom: 15px;">
+                    <div class="graph-label">Slot Progress (0-100% completion)</div>
+                    <canvas id="slot-progress-graph" class="graph-canvas"></canvas>
+                </div>
+                <!-- Context Used Bar Graph -->
+                <div class="graph-container" style="height: 80px;">
+                    <div class="graph-label">Context Used (tokens in context)</div>
+                    <canvas id="context-used-graph" class="graph-canvas"></canvas>
+                </div>
+            </div>
+
 
             <!-- System Resources -->
             <div class="card">
@@ -765,7 +812,7 @@
 
         // Chart instances
         let combinedUsageChart, tokensChart, monthlyCostChart;
-        let slotProgressChart, contextRemainingChart;
+        let slotProgressChart, contextUsedChart;
 
         // Initialize charts
         function initCharts() {
@@ -1026,9 +1073,9 @@
                 slotProgressChart.data.datasets[0].data = [];
                 slotProgressChart.update('none');
 
-                contextRemainingChart.data.labels = [];
-                contextRemainingChart.data.datasets[0].data = [];
-                contextRemainingChart.update('none');
+                contextUsedChart.data.labels = [];
+                contextUsedChart.data.datasets[0].data = [];
+                contextUsedChart.update('none');
                 return;
             }
 
@@ -1046,31 +1093,32 @@
             slotProgressChart.data.datasets[0].data = slotProgress;
             slotProgressChart.update('none');
 
-            // Extract context remaining data
-            // Context remaining is calculated as: total context - (n_prompt_tokens + n_gen_tokens)
+            // Extract context used data
+            // Context used is the number of tokens currently in context
             // We need to get the context limit from the props or use a default
             const props = data.server?.props || {};
             const contextLimit = props.n_ctx || 4096; // Default to 4096 if not available
 
-            const contextRemaining = slots.map(slot => {
+            const contextUsed = slots.map(slot => {
                 const n_prompt_tokens = slot.n_prompt_tokens || 0;
                 const n_gen_tokens = slot.n_gen_tokens || 0;
                 const n_tokens = slot.n_tokens || 0;
-                // Context remaining = total context - current tokens in context
+                // Context used is n_tokens (tokens currently in context)
                 // The 'n_tokens' represents tokens currently in the context
-                return Math.max(0, contextLimit - n_tokens);
+                return n_tokens;
             });
 
-            // Update context remaining chart
-            contextRemainingChart.data.labels = slotLabels;
-            contextRemainingChart.data.datasets[0].data = contextRemaining;
-            contextRemainingChart.update('none');
+            // Update context used chart
+            contextUsedChart.options.scales.x.max = contextLimit;
+            contextUsedChart.data.labels = slotLabels;
+            contextUsedChart.data.datasets[0].data = contextUsed;
+            contextUsedChart.update('none');
         }
 
-        // Initialize slot progress and context remaining charts
+        // Initialize slot progress and context used charts
         function initSlotCharts() {
             const slotProgressCtx = document.getElementById('slot-progress-graph').getContext('2d');
-            const contextRemainingCtx = document.getElementById('context-remaining-graph').getContext('2d');
+            const contextUsedCtx = document.getElementById('context-used-graph').getContext('2d');
 
             // Slot Progress Chart (horizontal bar)
             slotProgressChart = new Chart(slotProgressCtx, {
@@ -1119,13 +1167,13 @@
                 }
             });
 
-            // Context Remaining Chart (horizontal bar)
-            contextRemainingChart = new Chart(contextRemainingCtx, {
+            // Context Used Chart (horizontal bar)
+            contextUsedChart = new Chart(contextUsedCtx, {
                 type: 'bar',
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Context Remaining',
+                        label: 'Context Used',
                         data: [],
                         backgroundColor: '#00ff88',
                         borderColor: '#00cc6a',
@@ -1145,7 +1193,7 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return context.parsed.x + ' tokens remaining';
+                                    return context.parsed.x + ' tokens';
                                 }
                             }
                         }
@@ -1153,6 +1201,7 @@
                     scales: {
                         x: {
                             min: 0,
+                            max: 4096,
                             grid: { color: '#2a3b5c' },
                             ticks: { color: '#888' },
                             title: { display: false }
@@ -1170,10 +1219,44 @@
         function updateSummary(data) {
             const energy = data.cost || {};
             const serverMetrics = data.server || {};
+            const cost = data.cost || {};
+            const costRate = CONFIG.costRate || 0.12;
 
-            document.getElementById('total-tokens').textContent = formatNumber(serverMetrics.prompt_tokens_total || 0);
-            document.getElementById('tokens-per-sec').textContent = formatNumber(serverMetrics.predicted_tokens_seconds || 0);
-            document.getElementById('total-energy').textContent = energy.total_wh?.toFixed(1) || '0';
+            // Only update if value is valid (>= 0), leave -1 as-is to indicate "not updated"
+            if (serverMetrics.prompt_tokens_total !== undefined && serverMetrics.prompt_tokens_total >= 0) {
+                document.getElementById('total-tokens').textContent = formatNumber(serverMetrics.prompt_tokens_total);
+            }
+            if (serverMetrics.predicted_tokens_seconds !== undefined && serverMetrics.predicted_tokens_seconds >= 0) {
+                document.getElementById('tokens-per-sec').textContent = formatNumber(serverMetrics.predicted_tokens_seconds);
+            }
+            // Use today_wh for total-energy display (session total_wh may be 0)
+            if (energy.today_wh !== undefined && energy.today_wh >= 0) {
+                document.getElementById('total-energy').textContent = energy.today_wh.toFixed(1) + ' Wh';
+            } else if (energy.total_wh !== undefined && energy.total_wh >= 0) {
+                document.getElementById('total-energy').textContent = energy.total_wh.toFixed(1) + ' Wh';
+            }
+            if (cost.session_cost_usd !== undefined && cost.session_cost_usd >= 0) {
+                document.getElementById('session-cost').textContent = '$' + cost.session_cost_usd.toFixed(4);
+            }
+
+            // Update Key Metrics: today's energy
+            const todayEnergyEl = document.getElementById('today-energy');
+            if (todayEnergyEl) {
+                const todayEnergy = energy.today_wh;
+                if (todayEnergy !== undefined && todayEnergy >= 0) {
+                    todayEnergyEl.textContent = todayEnergy.toFixed(1) + ' Wh';
+                }
+            }
+
+            // Update Key Metrics: today's cost from energy * rate / 1000
+            const todayCostEl = document.getElementById('today-cost');
+            if (todayCostEl) {
+                const todayEnergy = energy.today_wh;
+                if (todayEnergy !== undefined && todayEnergy >= 0) {
+                    const todayCost = (todayEnergy * costRate / 1000).toFixed(2);
+                    todayCostEl.textContent = '$' + todayCost;
+                }
+            }
         }
 
         // Update last updated timestamp
