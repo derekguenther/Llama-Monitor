@@ -9,3 +9,10 @@ __pycache__/
 
 # Beads / Dolt files (added by bd init)
 .beads/proxieddb/
+.worktrees/
+.claude/worktrees/
+llama.log
+_backups/
+CLAUDE.md.backup
+CLAUDE.md.backup2
+CLAUDE.md.bak
