@@ -656,12 +656,12 @@
             <div class="card">
                 <h2>Slot Progress & Context</h2>
                 <!-- Slot Progress Bar Graph -->
-                <div class="graph-container" style="height: 80px; margin-bottom: 15px;">
+                <div class="graph-container" id="slot-progress-container" style="margin-bottom: 15px;">
                     <div class="graph-label">Slot Progress (0-100% completion)</div>
                     <canvas id="slot-progress-graph" class="graph-canvas"></canvas>
                 </div>
                 <!-- Context Used Bar Graph -->
-                <div class="graph-container" style="height: 80px;">
+                <div class="graph-container" id="context-used-container">
                     <div class="graph-label">Context Used (tokens in context)</div>
                     <canvas id="context-used-graph" class="graph-canvas"></canvas>
                 </div>
@@ -1113,6 +1113,15 @@
             contextUsedChart.data.labels = slotLabels;
             contextUsedChart.data.datasets[0].data = contextUsed;
             contextUsedChart.update('none');
+
+            // Scale graph container heights based on number of slots
+            const slotContainer = document.getElementById('slot-progress-container');
+            const contextContainer = document.getElementById('context-used-container');
+            const heightPerSlot = 20;
+            const baseHeight = 40;
+            const slotHeight = Math.max(baseHeight, slots.length * heightPerSlot);
+            if (slotContainer) slotContainer.style.height = slotHeight + 'px';
+            if (contextContainer) contextContainer.style.height = slotHeight + 'px';
         }
 
         // Initialize slot progress and context used charts
