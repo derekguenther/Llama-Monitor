@@ -149,6 +149,7 @@
         .power-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: auto auto;
             gap: 10px;
         }
 
@@ -725,16 +726,28 @@
                     <h2>Power & Cost</h2>
                     <div class="power-grid">
                         <div class="power-item">
-                            <div class="power-value" id="gpu-power">-1 W</div>
+                            <div class="power-value" id="gpu-power-1">-1 W</div>
                             <div class="power-label">GPU Power</div>
                         </div>
                         <div class="power-item">
-                            <div class="power-value" id="cpu-power">-1 W</div>
+                            <div class="power-value" id="cpu-power-1">-1 W</div>
                             <div class="power-label">CPU Power</div>
                         </div>
                         <div class="power-item">
-                            <div class="power-value" id="total-power">-1 W</div>
-                            <div class="power-label">Total System</div>
+                            <div class="power-value" id="sys-power-1">-1 W</div>
+                            <div class="power-label">System (Filtered)</div>
+                        </div>
+                        <div class="power-item">
+                            <div class="power-value" id="gpu-power-2">-1 W</div>
+                            <div class="power-label">GPU Power</div>
+                        </div>
+                        <div class="power-item">
+                            <div class="power-value" id="cpu-power-2">-1 W</div>
+                            <div class="power-label">CPU Power</div>
+                        </div>
+                        <div class="power-item">
+                            <div class="power-value" id="sys-power-2">-1 W</div>
+                            <div class="power-label">System (Total)</div>
                         </div>
                     </div>
                     <div class="cost-rate-control">
@@ -1038,11 +1051,15 @@
             // Power - only update if valid (>= 0)
             const gpuPower = gpu.power_w !== undefined && gpu.power_w >= 0 ? gpu.power_w : null;
             const cpuPower = cpu.power_w !== undefined && cpu.power_w >= 0 ? cpu.power_w : null;
+            const sysPowerTotal = system.system_power_w !== undefined && system.system_power_w >= 0 ? system.system_power_w : null;
             if (gpuPower !== null || cpuPower !== null) {
-                const totalPower = (gpuPower || 0) + (cpuPower || 0);
-                document.getElementById('gpu-power').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-1') + ' W';
-                document.getElementById('cpu-power').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-1') + ' W';
-                document.getElementById('total-power').textContent = totalPower.toFixed(0) + ' W';
+                const filteredPower = (gpuPower || 0) + (cpuPower || 0);
+                document.getElementById('gpu-power-1').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-1') + ' W';
+                document.getElementById('cpu-power-1').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-1') + ' W';
+                document.getElementById('sys-power-1').textContent = filteredPower.toFixed(0) + ' W';
+                document.getElementById('gpu-power-2').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-1') + ' W';
+                document.getElementById('cpu-power-2').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-1') + ' W';
+                document.getElementById('sys-power-2').textContent = (sysPowerTotal !== null ? sysPowerTotal.toFixed(0) : '-1') + ' W';
             }
 
             // Cost - only update if valid (>= 0)
