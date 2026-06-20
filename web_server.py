@@ -960,7 +960,7 @@ def settings_page():
                 <div class="form-group">
                     <div class="checkbox-group">
                         <input type="checkbox" id="auto-reload" checked>
-                        <label for="auto-reload">Auto-reload after restart</label>
+                        <label for="auto-reload">Auto-refresh page after restart</label>
                     </div>
                 </div>
 
@@ -969,7 +969,7 @@ def settings_page():
                     <button type="button" class="btn btn-primary" id="restart-btn" style="flex: 1; min-width: 120px;"><i class="fa-solid fa-rotate-right"></i> Restart Server</button>
                 </div>
                 <div class="hint" style="margin-top: 10px;">
-                    <i class="fa-solid fa-info-circle"></i> Use these buttons to stop/restart the server for testing. Auto-reload will refresh the page after restart.
+                    <i class="fa-solid fa-info-circle"></i> Use these buttons to stop/restart the server for testing. Auto-refresh will reload the page after restart.
                 </div>
             </div>
         </div>

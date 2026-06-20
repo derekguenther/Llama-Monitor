@@ -369,56 +369,6 @@
             color: #1a1a2e;
         }
 
-        /* Loading */
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 40px;
-        }
-
-        .loading.active {
-            display: block;
-        }
-
-        .spinner {
-            border: 3px solid #2a3b5c;
-            border-top: 3px solid #00d4ff;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Cost rate input */
-        .cost-rate-control {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #2a3b5c;
-        }
-
-        .cost-rate-control label {
-            display: block;
-            font-size: 0.8rem;
-            color: #888;
-            margin-bottom: 5px;
-        }
-
-        .cost-rate-control input {
-            width: 100px;
-            padding: 5px 10px;
-            background: #0d111d;
-            border: 1px solid #2a3b5c;
-            color: #eee;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-        }
-
         /* Token Accumulator */
         .token-accumulator {
             cursor: pointer;
@@ -750,10 +700,6 @@
                             <div class="power-label">System (Total)</div>
                         </div>
                     </div>
-                    <div class="cost-rate-control">
-                        <label>Electricity Rate ($/kWh)</label>
-                        <input type="number" id="cost-rate" value="{{ cost_rate }}" step="0.01" min="0">
-                    </div>
                 </div>
             </div>
 
@@ -770,7 +716,6 @@
             <div class="card">
                 <h2>Monthly Cost</h2>
                 <div class="graph-container">
-                    <div class="graph-label">Cost by Day (MM/dd/yyyy)</div>
                     <canvas id="monthly-cost-graph" class="graph-canvas"></canvas>
                 </div>
                 <div class="cost-value" id="monthly-total-cost" style="margin-top: 15px; font-size: 1.2rem;">-$1.00</div>
@@ -785,12 +730,6 @@
             <span style="align-self: center; color: #888; font-size: 0.9rem;">
                 Last updated: <span id="last-updated">Never</span>
             </span>
-        </div>
-
-        <!-- Loading Spinner -->
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <div>Collecting metrics...</div>
         </div>
     </div>
 
@@ -904,10 +843,14 @@
                         y: {
                             beginAtZero: true,
                             grid: { color: '#2a3b5c' },
-                            ticks: { color: '#888' }
+                            ticks: {
+                                color: '#888',
+                                callback: function(value) { return '$' + value; }
+                            }
                         },
                         x: {
-                            display: false
+                            grid: { display: false },
+                            ticks: { color: '#888' }
                         }
                     }
                 }
@@ -971,8 +914,6 @@
 
         // Fetch metrics
         async function fetchMetrics() {
-            document.getElementById('loading').classList.add('active');
-
             try {
                 const response = await fetch('/api/metrics');
                 if (!response.ok) throw new Error('Failed to fetch metrics');
@@ -986,8 +927,6 @@
                 fetchMonthlyCost();
             } catch (error) {
                 console.error('Error fetching metrics:', error);
-            } finally {
-                document.getElementById('loading').classList.remove('active');
             }
         }
 
@@ -1342,21 +1281,6 @@
         document.getElementById('toggle-temps-btn').addEventListener('click', function() {
             this.classList.toggle('active');
             // Temp toggle logic would go here
-        });
-
-        document.getElementById('cost-rate').addEventListener('change', async function() {
-            const newRate = parseFloat(this.value);
-            if (!isNaN(newRate) && newRate >= 0) {
-                try {
-                    await fetch('/api/settings/cost_rate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ cost_rate: newRate })
-                    });
-                } catch (error) {
-                    console.error('Error updating cost rate:', error);
-                }
-            }
         });
 
         // Token Accumulator and Vendor Comparison Modal
