@@ -17,3 +17,5 @@ CLAUDE.md.backup
 CLAUDE.md.backup2
 CLAUDE.md.bak
 .beads/interactions.jsonl
+llama-monitor.db-shm
+llama-monitor.db-wal

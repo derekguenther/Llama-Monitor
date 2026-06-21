@@ -179,7 +179,7 @@ def index() -> str:
 
     return render_template(
         "index.html",
-        server_url=f"http://localhost:{port}",
+        server_url=config.get("server.url", f"http://localhost:{port}"),
         cost_rate=cost_rate,
         refresh_rate=refresh_rate,
         show_cost=show_cost
