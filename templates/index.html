@@ -1293,10 +1293,12 @@
         const localServerInfo = document.getElementById('local-server-info');
 
         // Open vendor comparison modal
-        tokenAccumulator.addEventListener('click', async function() {
-            await loadVendorComparison();
-            vendorModal.classList.add('active');
-        });
+        if (tokenAccumulator) {
+            tokenAccumulator.addEventListener('click', async function() {
+                await loadVendorComparison();
+                vendorModal.classList.add('active');
+            });
+        }
 
         // Close modal
         closeModalBtn.addEventListener('click', function() {
