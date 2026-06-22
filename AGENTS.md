@@ -12,6 +12,15 @@ bd close <id>         # Complete work
 bd dolt push          # Push beads data to remote
 ```
 
+## Background Processes
+
+**NEVER use `&` to run commands in the background** — it is blocked by a plugin that gives a helpful error message.
+
+Use the `createBackgroundProcess` tool (or `@zenobius/opencode-background` plugin) instead:
+```
+createBackgroundProcess: { command: "long-running-task", name: "task-name" }
+```
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
