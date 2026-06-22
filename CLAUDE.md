@@ -21,12 +21,13 @@ You must never edit files in the root directory.
 
 This file provides instructions for AI coding agents working on this project.
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ccf33ec3 -->
 ## Beads Issue Tracker
 
-This project uses **bd (beads)** for issue tracking. Run `bd prime` for full context.
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
 
 ### Quick Reference
+
 ```bash
 bd ready              # Find available work
 bd show <id>          # View issue details
@@ -35,53 +36,38 @@ bd close <id>         # Complete work
 ```
 
 ### Rules
-- Use `bd` for ALL task tracking — no TodoWrite, TaskCreate, or markdown TODO lists.
-- Use `bd remember` for persistent knowledge — no MEMORY.md files.
 
-**Architecture:** Issues live in a local Dolt DB; sync uses `refs/dolt/data` on git remote; `.beads/issues.jsonl` is a passive export.
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
-## Agent Context Profiles
-
-- **Conservative (default)**: Use `bd` for task tracking. No git commits/pushes/sync unless asked. Perform initial review (code completeness, adherence to bead instructions) at handoff. Report changed files, validation, and suggested commands. Worktree merge requires user approval.
-- **Minimal**: Keep tool instruction files as pointers to `bd prime`. Same conservative git policy unless active instructions say otherwise. Perform initial review before handoff.
-- **Team-maintainer**: Only when repository explicitly opts in. May close beads, run quality gates, commit, and push. "Do not commit/push" instructions still win. Worktree merge requires user approval unless explicitly waived.
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
 
 ## Session Completion
 
-This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, or orchestrator instructions.
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
 
-### Pre-Handoff Checklist (Your Responsibility)
-1. **Code completeness** — Does implementation look complete?
-2. **Adherence to bead instructions** — Has work strayed from original requirements?
-3. **Quality gates** — Run tests, linters, builds if relevant.
+**MANDATORY WORKFLOW:**
 
-### Handoff Protocol
-1. **File issues for remaining work** — Create beads for follow-up items.
-2. **Run quality gates** (if code changed) — Tests, linters, builds.
-3. **Update issue status** — Mark finished work complete (do NOT close bead yet).
-4. **Handle git/sync by active profile**:
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
-   # Conservative/minimal/default: report status and proposed commands; wait for approval.
-   git status
-
-   # Team-maintainer opt-in only, unless current instructions forbid it:
    git pull --rebase
    bd dolt push
    git push
-   git status
+   git status  # MUST show "up to date with origin"
    ```
-5. **Hand off to user** — Summarize changes, validation, issue status, and any blocked sync/commit/push step.
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
 
-### User Review & Merge Protocol
-- User reviews worktree changes before merge.
-- Worktree is NEVER merged without explicit user approval.
-- After finishing a bead, worktree remains in place for user review.
-- User must explicitly approve merge before any merge operation occurs.
-
-**Critical rules:**
-- Explicit user or orchestrator instructions override this Beads block.
-- Do not commit or push without clear authority from active profile or current request.
-- If sync/push is blocked, stop and report the exact command and error.
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
 
 ## Build & Test
