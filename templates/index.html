@@ -821,12 +821,39 @@
             }
         };
 
+        // Chart.js plugin for vertical hover line (crosshair)
+        const crosshairPlugin = {
+            id: 'crosshair',
+            afterDraw: function(chart) {
+                if (chart._active && chart._active.length) {
+                    const activePoint = chart._active[0];
+                    const ctx = chart.ctx;
+                    const chartArea = chart.chartArea;
+
+                    if (chartArea) {
+                        const x = activePoint.element.x;
+
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.moveTo(x, chartArea.top);
+                        ctx.lineTo(x, chartArea.bottom);
+                        ctx.lineWidth = 1;
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                        ctx.setLineDash([4, 4]);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                }
+            }
+        };
+
         // Initialize charts
         function initCharts() {
             const combinedCtx = document.getElementById('combined-usage-graph').getContext('2d');
             const tokensCtx = document.getElementById('tokens-graph').getContext('2d');
 
             // Combined CPU/GPU Usage Chart
+            Chart.register(crosshairPlugin);
             combinedUsageChart = new Chart(combinedCtx, {
                 type: 'line',
                 data: {
@@ -855,6 +882,10 @@
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
                         legend: { display: true, labels: { color: '#888' } }
                     },
