@@ -712,9 +712,9 @@
                 </div>
             </div>
 
-            <!-- Monthly Cost Graph -->
+            <!-- Daily Cost Graph -->
             <div class="card">
-                <h2>Monthly Cost</h2>
+                <h2>Daily Cost</h2>
                 <div class="graph-container">
                     <canvas id="monthly-cost-graph" class="graph-canvas"></canvas>
                 </div>
@@ -856,7 +856,7 @@
                 }
             });
 
-            // Monthly Cost Chart
+            // Daily Cost Chart
             const monthlyCostCtx = document.getElementById('monthly-cost-graph').getContext('2d');
             monthlyCostChart = new Chart(monthlyCostCtx, {
                 type: 'bar',
