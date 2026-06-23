@@ -931,10 +931,7 @@
                         y: {
                             beginAtZero: true,
                             grid: { color: '#2a3b5c' },
-                            ticks: {
-                                color: '#888',
-                                callback: function(value) { return '$' + value; }
-                            }
+                            ticks: { color: '#888' }
                         },
                         x: {
                             grid: { display: false },
@@ -969,7 +966,10 @@
                         y: {
                             beginAtZero: true,
                             grid: { color: '#2a3b5c' },
-                            ticks: { color: '#888' }
+                            ticks: {
+                                color: '#888',
+                                callback: function(value) { return '$' + value; }
+                            }
                         },
                         x: {
                             grid: { display: false },
