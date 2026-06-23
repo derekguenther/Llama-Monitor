@@ -766,6 +766,61 @@
         let combinedUsageChart, tokensChart, monthlyCostChart;
         let slotProgressChart, contextUsedChart;
 
+        // Format number with k-unit (divide by 1024, append k)
+        function formatKUnit(value) {
+            if (value >= 1024) {
+                const kValue = Math.round(value / 1024 * 10) / 10;
+                return kValue + 'k';
+            }
+            return value.toString();
+        }
+
+        // Chart.js plugin to draw labels on horizontal bar charts
+        const barLabelPlugin = {
+            id: 'barLabels',
+            afterDatasetsDraw: function(chart) {
+                const { ctx } = chart;
+                const isContextChart = chart.canvas.id === 'context-used-graph';
+
+                chart.data.datasets.forEach(function(dataset, i) {
+                    const meta = chart.getDatasetMeta(i);
+                    meta.data.forEach(function(bar, index) {
+                        const value = dataset.data[index];
+                        let label;
+
+                        if (isContextChart) {
+                            label = formatKUnit(value);
+                        } else {
+                            label = value + '%';
+                        }
+
+                        const barWidth = bar.x;
+                        const barHeight = bar.y - bar.barHeight / 2;
+                        const barBottom = bar.y + bar.barHeight / 2;
+
+                        ctx.save();
+                        ctx.fillStyle = '#fff';
+                        ctx.font = '11px sans-serif';
+                        ctx.textBaseline = 'middle';
+
+                        const textWidth = ctx.measureText(label).width;
+
+                        if (barWidth > textWidth + 10) {
+                            // Label fits inside bar
+                            ctx.textAlign = 'right';
+                            ctx.fillText(label, bar.x - 8, bar.y);
+                        } else {
+                            // Label goes outside bar
+                            ctx.textAlign = 'left';
+                            ctx.fillText(label, bar.x + 8, bar.y);
+                        }
+
+                        ctx.restore();
+                    });
+                });
+            }
+        };
+
         // Initialize charts
         function initCharts() {
             const combinedCtx = document.getElementById('combined-usage-graph').getContext('2d');
@@ -1120,6 +1175,7 @@
             const contextUsedCtx = document.getElementById('context-used-graph').getContext('2d');
 
             // Slot Progress Chart (horizontal bar)
+            Chart.register(barLabelPlugin);
             slotProgressChart = new Chart(slotProgressCtx, {
                 type: 'bar',
                 data: {
