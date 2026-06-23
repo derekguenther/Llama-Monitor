@@ -496,7 +496,7 @@
         <div class="header">
             <h1><i class="fa-solid fa-chart-line"></i> Llama Monitor</h1>
             <div class="server-info">
-                Server: {{ server_url }}
+                Server: <a href="{{ server_url }}" target="_blank">{{ server_url }}</a>
             </div>
         </div>
 
@@ -666,6 +666,7 @@
                 <div class="card">
                     <h2>Usage (60s)</h2>
                     <div class="graph-container">
+                        <div class="graph-label">CPU % & GPU %</div>
                         <canvas id="combined-usage-graph" class="graph-canvas"></canvas>
                     </div>
                 </div>
@@ -706,18 +707,18 @@
             <div class="card">
                 <h2>Tokens/Sec (60s)</h2>
                 <div class="graph-container">
+                    <div class="graph-label">Tokens/Sec</div>
                     <canvas id="tokens-graph" class="graph-canvas"></canvas>
                 </div>
             </div>
 
-            <!-- Daily Cost Graph -->
+            <!-- Monthly Cost Graph -->
             <div class="card">
-                <h2>Daily Cost</h2>
+                <h2>Monthly Cost</h2>
                 <div class="graph-container">
                     <canvas id="monthly-cost-graph" class="graph-canvas"></canvas>
                 </div>
-                <div style="margin-top: 15px; font-size: 0.85rem; color: #888;">Total Cost</div>
-                <div class="cost-value" id="monthly-total-cost" style="margin-top: 5px; font-size: 1.2rem;">-$1.00</div>
+                <div class="cost-value" id="monthly-total-cost" style="margin-top: 15px; font-size: 1.2rem;">-$1.00</div>
             </div>
         </div>
 
@@ -855,7 +856,7 @@
                 }
             });
 
-            // Daily Cost Chart
+            // Monthly Cost Chart
             const monthlyCostCtx = document.getElementById('monthly-cost-graph').getContext('2d');
             monthlyCostChart = new Chart(monthlyCostCtx, {
                 type: 'bar',
@@ -1084,8 +1085,8 @@
 
             // Extract context used data
             // Context used is the number of tokens currently in context
-            // We need to get the context limit from the props (top-level, not under server)
-            const props = data.props || {};
+            // We need to get the context limit from the props or use a default
+            const props = data.server?.props || {};
             const contextLimit = props.n_ctx || 4096; // Default to 4096 if not available
 
             const contextUsed = slots.map(slot => {
@@ -1106,8 +1107,8 @@
             // Scale graph container heights based on number of slots
             const slotContainer = document.getElementById('slot-progress-container');
             const contextContainer = document.getElementById('context-used-container');
-            const heightPerSlot = 40;
-            const baseHeight = 60;
+            const heightPerSlot = 60;
+            const baseHeight = 100;
             const slotHeight = Math.max(baseHeight, slots.length * heightPerSlot);
             if (slotContainer) slotContainer.style.height = slotHeight + 'px';
             if (contextContainer) contextContainer.style.height = slotHeight + 'px';
