@@ -1248,7 +1248,7 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return context.parsed.x + ' tokens';
+                                    return formatKUnit(context.parsed.x);
                                 }
                             }
                         }
@@ -1258,7 +1258,12 @@
                             min: 0,
                             max: 4096,
                             grid: { color: '#2a3b5c' },
-                            ticks: { color: '#888' },
+                            ticks: {
+                                color: '#888',
+                                callback: function(value) {
+                                    return formatKUnit(value);
+                                }
+                            },
                             title: { display: false }
                         },
                         y: {
