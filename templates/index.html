@@ -715,11 +715,11 @@
                 </div>
             </div>
 
-            <!-- Tokens/Sec Graph -->
+            <!-- Tokens Generated Graph -->
             <div class="card">
-                <h2>Tokens/Sec (60s)</h2>
+                <h2>Tokens Generated (since last poll)</h2>
                 <div class="graph-container">
-                    <div class="graph-label">Tokens/Sec</div>
+                    <div class="graph-label">Tokens Generated (since last poll)</div>
                     <canvas id="tokens-graph" class="graph-canvas"></canvas>
                 </div>
             </div>
@@ -762,10 +762,11 @@
         let historyData = {
             gpu: [],
             cpu: [],
-            tokens: [],
             labels: []
         };
         const MAX_HISTORY = 60;
+        let previousSlotTokens = {};
+        let slotDeltaHistory = {};
 
         // Monthly cost data
         let monthlyCostData = {
@@ -791,8 +792,11 @@
         const barLabelPlugin = {
             id: 'barLabels',
             afterDatasetsDraw: function(chart) {
+                const id = chart.canvas.id;
+                const allowed = ['slot-progress-graph', 'context-used-graph', 'combined-usage-graph'];
+                if (!allowed.includes(id)) return;
                 const { ctx } = chart;
-                const isContextChart = chart.canvas.id === 'context-used-graph';
+                const isContextChart = id === 'context-used-graph';
 
                 chart.data.datasets.forEach(function(dataset, i) {
                     const meta = chart.getDatasetMeta(i);
@@ -915,27 +919,23 @@
                 }
             });
 
+            Chart.register(crosshairPlugin);
             tokensChart = new Chart(tokensCtx, {
                 type: 'line',
                 data: {
                     labels: [],
-                    datasets: [{
-                        label: 'Tokens/s',
-                        data: [],
-                        borderColor: '#ffd93d',
-                        backgroundColor: 'rgba(255, 217, 61, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 0
-                    }]
+                    datasets: []
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: true, labels: { color: '#888' } }
                     },
                     scales: {
                         y: {
@@ -1121,22 +1121,20 @@
         function updateCharts(data) {
             const serverMetrics = data.server || {};
             const system = data.system || {};
+            const slots = serverMetrics.slots || [];
 
             // Add new data points
             const gpuUtil = system.gpu?.usage || 0;
             const cpuUtil = system.cpu?.percent || 0;
-            const tokensPerSec = serverMetrics.predicted_tokens_seconds || 0;
 
             historyData.gpu.push(gpuUtil);
             historyData.cpu.push(cpuUtil);
-            historyData.tokens.push(tokensPerSec);
             historyData.labels.push(new Date().toLocaleTimeString());
 
             // Keep only MAX_HISTORY points
             if (historyData.gpu.length > MAX_HISTORY) {
                 historyData.gpu.shift();
                 historyData.cpu.shift();
-                historyData.tokens.shift();
                 historyData.labels.shift();
             }
 
@@ -1146,7 +1144,80 @@
             combinedUsageChart.data.labels = historyData.labels;
             combinedUsageChart.update('none');
 
-            tokensChart.data.datasets[0].data = historyData.tokens;
+            // Compute per-slot n_decoded deltas from next_token
+            const currentSlotTokens = {};
+            slots.forEach(slot => {
+                const slotId = slot.id || 0;
+                const nDecoded = slot.next_token && slot.next_token.length > 0 ?
+                    slot.next_token[0].n_decoded || 0 : 0;
+                currentSlotTokens[slotId] = nDecoded;
+            });
+
+            // Update tokens chart with per-slot datasets
+            const slotColors = [
+                '#ffd93d', '#6bcb77', '#4d96ff', '#ff6b6b',
+                '#c77dff', '#ff922b', '#20c997', '#f06595'
+            ];
+
+            // Track per-slot delta history for time series
+            const newSlotIds = new Set(slots.map(s => s.id || 0));
+            const removedSlotIds = Object.keys(slotDeltaHistory).filter(id => !newSlotIds.has(Number(id)));
+            removedSlotIds.forEach(id => { delete slotDeltaHistory[id]; });
+
+            let slotDatasets = [];
+            slots.forEach(slot => {
+                const slotId = slot.id || 0;
+                const currentTokens = currentSlotTokens[slotId] || 0;
+                const prevTokens = previousSlotTokens[slotId];
+
+                if (!slotDeltaHistory[slotId]) {
+                    slotDeltaHistory[slotId] = [];
+                }
+
+                if (prevTokens !== undefined) {
+                    const delta = Math.max(0, currentTokens - prevTokens);
+                    slotDeltaHistory[slotId].push(delta);
+                    if (slotDeltaHistory[slotId].length > MAX_HISTORY) {
+                        slotDeltaHistory[slotId].shift();
+                    }
+                }
+                if (slotDeltaHistory[slotId].length > MAX_HISTORY) {
+                    slotDeltaHistory[slotId].shift();
+                }
+
+                const color = slotColors[slotId % slotColors.length];
+                slotDatasets.push({
+                    label: `Slot ${slotId}`,
+                    data: slotDeltaHistory[slotId],
+                    borderColor: color,
+                    backgroundColor: color.replace(')', ', 0.1)').replace('rgb', 'rgba'),
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 0
+                });
+            });
+
+            // Save current tokens as previous for next poll
+            previousSlotTokens = currentSlotTokens;
+
+            if (slotDatasets.length === 0) {
+                tokensChart.data.datasets = [{
+                    label: 'Idle',
+                    data: [],
+                    borderColor: '#666',
+                    borderWidth: 1,
+                    tension: 0.4,
+                    fill: false,
+                    pointRadius: 0
+                }];
+                // Reset previous tracking when no slots
+                previousSlotTokens = {};
+                slotDeltaHistory = {};
+            } else {
+                tokensChart.data.datasets = slotDatasets;
+            }
+
             tokensChart.data.labels = historyData.labels;
             tokensChart.update('none');
         }

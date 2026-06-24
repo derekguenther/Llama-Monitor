@@ -176,6 +176,7 @@ class ServerMetricsCollector:
                             "state": slot.get("state", "idle"),
                             "prompt": slot.get("prompt", ""),
                             "generated": slot.get("generated", ""),
+                            "next_token": slot.get("next_token", []),
                         }
                     )
         elif isinstance(slots, dict):
