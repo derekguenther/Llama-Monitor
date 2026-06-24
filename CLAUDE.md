@@ -154,3 +154,19 @@ Run each step separately — do NOT string together with &&:
 - If uncertainties or questions at any point → update bead with questions, move on, consolidate for user discussion
 - Never make changes not directly related to current bead description
 - **NEVER silently skip a required process step** — if you can't complete a step (e.g., Chrome unavailable, tests failing), set Needs_human_input and ask
+
+## Chrome Debugging Setup
+
+To enable Chrome/Chromium for functional review with the Chrome superpower:
+
+```bash
+# Start Chromium with remote debugging on port 9222
+chromium --remote-debugging-port=9222 --no-first-run --no-default-browser-check --disable-gpu --headless=new --no-sandbox &
+```
+
+Verify it's running:
+```bash
+curl -s http://localhost:9222/json/version
+```
+
+The Chrome tool connects to port 9222 automatically. If you get "Chrome did not become ready on port 9222 within 15000ms", Chromium is not running or not on the correct port.
