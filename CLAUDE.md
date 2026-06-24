@@ -170,3 +170,19 @@ curl -s http://localhost:9222/json/version
 ```
 
 The Chrome tool connects to port 9222 automatically. If you get "Chrome did not become ready on port 9222 within 15000ms", Chromium is not running or not on the correct port.
+
+## QA Protocol: Functional Verification
+
+When instructed to "verify" or perform a "functional review" in Chrome, checking the HTML/DOM for strings is **explicitly INSUFFICIENT**. You must act as a QA Engineer and execute the following 3 steps before marking a task complete:
+
+### 1. Render Check
+Verify the element is visually accessible to a human user. Check computed CSS styles to ensure it is not hidden (e.g., `display: none`, `opacity: 0`, obscured by z-index, or rendered off-screen).
+
+### 2. Data Provenance
+If expected data is missing from the page, you are **FORBIDDEN** from assuming external systems are broken. You must trace the data backward:
+- Intercept the network API response
+- Check the console for mapping errors
+- Verify the frontend state/props
+
+### 3. Interactive Validation
+If the target is interactive (a button, form, or link), you must trigger its event and capture the resulting state change, console log, or network request to prove the logic actually executes.
