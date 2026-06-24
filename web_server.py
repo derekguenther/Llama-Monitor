@@ -204,6 +204,11 @@ def api_latest_metrics():
         if aggregator and aggregator.last_metrics:
             return jsonify(aggregator.last_metrics)
 
+        # Try fetching from aggregator daemon HTTP API
+        agg_data = fetch_metrics_from_aggregator()
+        if agg_data:
+            return jsonify(agg_data)
+
     # Fallback to database
     config = get_config()
     db_path = config.get("database.path", "llama-monitor.db")

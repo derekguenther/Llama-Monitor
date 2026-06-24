@@ -715,11 +715,11 @@
                 </div>
             </div>
 
-            <!-- Tokens Generated Graph -->
+            <!-- Tokens/Sec Graph -->
             <div class="card">
-                <h2>Tokens Generated (since last poll)</h2>
+                <h2>Tokens/Sec (60s)</h2>
                 <div class="graph-container">
-                    <div class="graph-label">Tokens Generated (since last poll)</div>
+                    <div class="graph-label">Tokens/Sec</div>
                     <canvas id="tokens-graph" class="graph-canvas"></canvas>
                 </div>
             </div>
@@ -762,11 +762,10 @@
         let historyData = {
             gpu: [],
             cpu: [],
+            tokens: [],
             labels: []
         };
         const MAX_HISTORY = 60;
-        let previousSlotTokens = {};
-        let slotDeltaHistory = {};
 
         // Monthly cost data
         let monthlyCostData = {
@@ -793,7 +792,7 @@
             id: 'barLabels',
             afterDatasetsDraw: function(chart) {
                 const id = chart.canvas.id;
-                const allowed = ['slot-progress-graph', 'context-used-graph', 'combined-usage-graph'];
+                const allowed = ['slot-progress-graph', 'context-used-graph'];
                 if (!allowed.includes(id)) return;
                 const { ctx } = chart;
                 const isContextChart = id === 'context-used-graph';
@@ -826,9 +825,10 @@
                             ctx.textAlign = 'right';
                             ctx.fillText(label, bar.x - 8, bar.y);
                         } else {
-                            // Label goes outside bar
+                            // Label goes outside bar - position to the right of y-axis labels
+                            // Use textWidth + 8 instead of bar.x + 8 to avoid overlap when bar.x is 0
                             ctx.textAlign = 'left';
-                            ctx.fillText(label, bar.x + 8, bar.y);
+                            ctx.fillText(label, textWidth + 8, bar.y);
                         }
 
                         ctx.restore();
@@ -919,27 +919,30 @@
                 }
             });
 
-            Chart.register(crosshairPlugin);
             tokensChart = new Chart(tokensCtx, {
                 type: 'line',
                 data: {
                     labels: [],
-                    datasets: []
+                    datasets: [{
+                        label: 'Tokens/s',
+                        data: [],
+                        borderColor: '#ffd93d',
+                        backgroundColor: 'rgba(255, 217, 61, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 0
+                    }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
                     plugins: {
-                        legend: { display: true, labels: { color: '#888' } }
+                        legend: { display: false }
                     },
                     scales: {
                         y: {
-                            beginAtZero: true,
                             grid: { color: '#2a3b5c' },
                             ticks: { color: '#888' }
                         },
@@ -952,6 +955,7 @@
             });
 
             // Monthly Cost Chart
+            Chart.register(crosshairPlugin);
             const monthlyCostCtx = document.getElementById('monthly-cost-graph').getContext('2d');
             monthlyCostChart = new Chart(monthlyCostCtx, {
                 type: 'bar',
@@ -974,7 +978,6 @@
                     },
                     scales: {
                         y: {
-                            beginAtZero: true,
                             grid: { color: '#2a3b5c' },
                             ticks: {
                                 color: '#888',
@@ -1121,20 +1124,22 @@
         function updateCharts(data) {
             const serverMetrics = data.server || {};
             const system = data.system || {};
-            const slots = serverMetrics.slots || [];
 
             // Add new data points
             const gpuUtil = system.gpu?.usage || 0;
             const cpuUtil = system.cpu?.percent || 0;
+            const tokensPerSec = serverMetrics.predicted_tokens_seconds || 0;
 
             historyData.gpu.push(gpuUtil);
             historyData.cpu.push(cpuUtil);
+            historyData.tokens.push(tokensPerSec);
             historyData.labels.push(new Date().toLocaleTimeString());
 
             // Keep only MAX_HISTORY points
             if (historyData.gpu.length > MAX_HISTORY) {
                 historyData.gpu.shift();
                 historyData.cpu.shift();
+                historyData.tokens.shift();
                 historyData.labels.shift();
             }
 
@@ -1144,80 +1149,7 @@
             combinedUsageChart.data.labels = historyData.labels;
             combinedUsageChart.update('none');
 
-            // Compute per-slot n_decoded deltas from next_token
-            const currentSlotTokens = {};
-            slots.forEach(slot => {
-                const slotId = slot.id || 0;
-                const nDecoded = slot.next_token && slot.next_token.length > 0 ?
-                    slot.next_token[0].n_decoded || 0 : 0;
-                currentSlotTokens[slotId] = nDecoded;
-            });
-
-            // Update tokens chart with per-slot datasets
-            const slotColors = [
-                '#ffd93d', '#6bcb77', '#4d96ff', '#ff6b6b',
-                '#c77dff', '#ff922b', '#20c997', '#f06595'
-            ];
-
-            // Track per-slot delta history for time series
-            const newSlotIds = new Set(slots.map(s => s.id || 0));
-            const removedSlotIds = Object.keys(slotDeltaHistory).filter(id => !newSlotIds.has(Number(id)));
-            removedSlotIds.forEach(id => { delete slotDeltaHistory[id]; });
-
-            let slotDatasets = [];
-            slots.forEach(slot => {
-                const slotId = slot.id || 0;
-                const currentTokens = currentSlotTokens[slotId] || 0;
-                const prevTokens = previousSlotTokens[slotId];
-
-                if (!slotDeltaHistory[slotId]) {
-                    slotDeltaHistory[slotId] = [];
-                }
-
-                if (prevTokens !== undefined) {
-                    const delta = Math.max(0, currentTokens - prevTokens);
-                    slotDeltaHistory[slotId].push(delta);
-                    if (slotDeltaHistory[slotId].length > MAX_HISTORY) {
-                        slotDeltaHistory[slotId].shift();
-                    }
-                }
-                if (slotDeltaHistory[slotId].length > MAX_HISTORY) {
-                    slotDeltaHistory[slotId].shift();
-                }
-
-                const color = slotColors[slotId % slotColors.length];
-                slotDatasets.push({
-                    label: `Slot ${slotId}`,
-                    data: slotDeltaHistory[slotId],
-                    borderColor: color,
-                    backgroundColor: color.replace(')', ', 0.1)').replace('rgb', 'rgba'),
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: false,
-                    pointRadius: 0
-                });
-            });
-
-            // Save current tokens as previous for next poll
-            previousSlotTokens = currentSlotTokens;
-
-            if (slotDatasets.length === 0) {
-                tokensChart.data.datasets = [{
-                    label: 'Idle',
-                    data: [],
-                    borderColor: '#666',
-                    borderWidth: 1,
-                    tension: 0.4,
-                    fill: false,
-                    pointRadius: 0
-                }];
-                // Reset previous tracking when no slots
-                previousSlotTokens = {};
-                slotDeltaHistory = {};
-            } else {
-                tokensChart.data.datasets = slotDatasets;
-            }
-
+            tokensChart.data.datasets[0].data = historyData.tokens;
             tokensChart.data.labels = historyData.labels;
             tokensChart.update('none');
         }
@@ -1242,7 +1174,12 @@
             const slotLabels = slots.map((slot, index) => `Slot ${slot.id || index}`);
             const slotProgress = slots.map(slot => {
                 // Calculate progress percentage from next_token stats
-                const progress = slot.progress || 0;
+                let progress = slot.progress || 0;
+                // Fallback: if progress field is missing (0) but slot is generating tokens,
+                // the slot is at 100% prompt completion
+                if (progress === 0 && slot.n_gen_tokens > 0) {
+                    progress = 1.0;
+                }
                 // Convert to percentage (0-100)
                 return Math.min(Math.round(progress * 100), 100);
             });
