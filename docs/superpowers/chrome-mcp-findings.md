@@ -101,6 +101,103 @@ RUN cd /home/yolo_agent/superpowers-chrome/mcp && npm install && npm run build
 
 4. **Console Logging Scope**: Console logging only captures client-side browser console output (JavaScript console.log, etc.), not server-side logs. This is expected behavior — Chrome's DevTools Protocol has no access to server processes.
 
+## Recent Findings (2026-06-24) - Chrome Crash Issue
+
+### User's Analysis (Original Problem Description)
+
+**The actual issue:**
+
+1) It starts by looking at port 9222.
+2) My understanding is that it SHOULD try to connect to that port and pull the version info from it, and if that succeeds, it will use that instance of Chrome. But even though we have Chrome started and listening on that port, this check almost always seems to fail for some reason.
+3) It then tries to start its own instance of Chrome. Since port 9222 isn't available, it increments to 9223 which is, and launches Chrome.
+4) Chrome dies. I don't know why. If we could resolve this, then we wouldn't have to start Chrome before launching the superpower MCP thing etc. So I want our focus to be on this.
+5) Because it doesn't like the Chrome running on 9222, and its Chrome on 9223 died (or, alternatively, failed to pass the same check the one on port 9222 failed at?), the superpower fails to work properly.
+
+### Problem Description
+The Chrome MCP server's auto-started Chrome process crashes immediately on startup in the Docker container, even though:
+- Chromium binary is installed and works when started manually
+- The same command line arguments work when run directly in shell
+- Port 9222 is available and listening when Chrome is started manually
+
+### Observed Behavior
+1. MCP server attempts to connect to port 9222 (configured via `CHROME_WS_PORT=9222`)
+2. Connection check fails (reason unknown - possibly race condition or stale meta.json)
+3. MCP server falls back to dynamic port allocation (9223, 9224, etc.)
+4. Chrome process spawns but crashes before becoming ready
+5. Error: "Chrome did not become ready on port XXXX within 15000ms"
+
+### Root Cause Analysis
+
+**File**: `/home/yolo_agent/superpowers-chrome/skills/browsing/lib/chrome-process.js` (lines 179-182)
+
+```javascript
+const proc = spawn(chromePath, args, {
+  detached: true,
+  stdio: 'ignore'  // ← PROBLEM: stderr is completely discarded
+});
+```
+
+The `stdio: 'ignore'` option means:
+- stdout is discarded (no visible output)
+- stderr is discarded (no crash logs visible)
+- Chrome crashes silently without any diagnostic information
+
+### Evidence
+- Manual Chrome startup works: `chromium --headless --no-sandbox --remote-debugging-port=9222 ...`
+- MCP-spawned Chrome crashes silently
+- No crash dumps or error messages available due to `stdio: 'ignore'`
+
+### Debugging Steps Taken
+1. Started Chrome manually on port 9222 - works perfectly
+2. Started Chrome manually on port 9223 - works perfectly  
+3. MCP server tries to start Chrome on port 9223 - crashes silently
+4. Checked profile directories - no lock files or corruption
+5. Checked meta.json files - stale entries (old PIDs)
+
+### Recommended Next Steps
+
+1. **Remove `stdio: 'ignore'`** to see Chrome's stderr output when it crashes
+   - Change to `stdio: ['pipe', 'pipe', 'pipe']` or `stdio: 'inherit'`
+   - This will capture crash logs and error messages
+
+2. **Add Chrome crash detection** before the 15-second timeout
+   - Monitor the Chrome process exit event
+   - If Chrome exits with non-zero code, report the error immediately
+
+3. **Check for missing dependencies** in Docker container
+   - Run `ldd /usr/bin/chromium` to check for missing libraries
+   - Verify all required system libraries are present
+
+4. **Check Docker container capabilities**
+   - Chrome may need additional capabilities for headless mode
+   - Consider adding `--cap-add=SYS_ADMIN` or similar
+
+### Workaround (Temporary)
+Until the crash is fixed:
+- Start Chrome manually before launching the MCP server
+- Keep Chrome running in the background
+- MCP server will reconnect to the existing instance (Step 1 of startChrome)
+
+### Architecture Note
+
+```
+OpenCode (MCP Client)
+    |
+    v
+Chrome MCP Server (stdio)
+    |
+    v
+chrome-ws-lib.js (library)
+    |
+    v
+Chromium Browser (CDP on port 9222)
+    |
+    v
+CRASHES SILENTLY ← stdio: 'ignore' hides the error
+```
+
+The current `stdio: 'ignore'` configuration prevents any diagnostic information from reaching the logs, making debugging nearly impossible.
+
 ## Architecture
 
 ```
