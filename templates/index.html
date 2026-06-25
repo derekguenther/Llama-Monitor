@@ -1173,15 +1173,9 @@
             // Extract slot progress data
             const slotLabels = slots.map((slot, index) => `Slot ${slot.id || index}`);
             const slotProgress = slots.map(slot => {
-                // Calculate progress percentage from next_token stats
-                let progress = slot.progress || 0;
-                // Fallback: if progress field is missing (0) but slot is generating tokens,
-                // the slot is at 100% prompt completion
-                if (progress === 0 && slot.n_gen_tokens > 0) {
-                    progress = 1.0;
-                }
+                // Use progress from aggregator (calculated from n_prompt_tokens_processed / n_prompt_tokens)
                 // Convert to percentage (0-100)
-                return Math.min(Math.round(progress * 100), 100);
+                return Math.min(Math.round((slot.progress || 0) * 100), 100);
             });
 
             // Update slot progress chart

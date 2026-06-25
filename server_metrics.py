@@ -165,6 +165,20 @@ class ServerMetricsCollector:
         if isinstance(slots, list):
             for slot in slots:
                 if isinstance(slot, dict):
+                    # Calculate progress from prompt processing stats
+                    # llama.cpp /slots API doesn't include progress field, so we calculate it
+                    progress = slot.get("progress", 0.0)
+                    n_prompt_tokens = slot.get("n_prompt_tokens", 0)
+                    n_prompt_tokens_processed = slot.get("n_prompt_tokens_processed", 0)
+                    
+                    # If progress is 0 or missing but we have prompt processing stats, calculate it
+                    if progress == 0.0 and n_prompt_tokens > 0:
+                        progress = n_prompt_tokens_processed / n_prompt_tokens
+                    
+                    # Fallback: if still 0 but generating tokens, slot is at 100% prompt completion
+                    if progress == 0.0 and slot.get("n_gen_tokens", 0) > 0:
+                        progress = 1.0
+                    
                     result.append(
                         {
                             "id": slot.get("id", 0),
@@ -172,7 +186,8 @@ class ServerMetricsCollector:
                             "n_tokens": slot.get("n_tokens", 0),
                             "n_prompt_tokens": slot.get("n_prompt_tokens", 0),
                             "n_gen_tokens": slot.get("n_gen_tokens", 0),
-                            "progress": slot.get("progress", 0.0),
+                            "n_prompt_tokens_processed": n_prompt_tokens_processed,
+                            "progress": progress,
                             "state": slot.get("state", "idle"),
                             "prompt": slot.get("prompt", ""),
                             "generated": slot.get("generated", ""),
