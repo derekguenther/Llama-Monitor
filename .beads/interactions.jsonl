@@ -41,3 +41,6 @@
 {"id":"int-a7910381","kind":"field_change","created_at":"2026-06-24T17:53:54.338120201Z","actor":"Agent","issue_id":"llama-monitor-7jc","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
 {"id":"int-16429060","kind":"field_change","created_at":"2026-06-24T18:28:14.959842473Z","actor":"Agent","issue_id":"llama-monitor-blg","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
 {"id":"int-82029d0e","kind":"field_change","created_at":"2026-06-24T18:28:16.995418867Z","actor":"Agent","issue_id":"llama-monitor-7z7","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-b6346858","kind":"field_change","created_at":"2026-06-25T00:58:37.640051135Z","actor":"Agent","issue_id":"llama-monitor-wh9","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-8b5586c7","kind":"field_change","created_at":"2026-06-25T00:58:46.884279595Z","actor":"Agent","issue_id":"llama-monitor-2pz","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-066d03a6","kind":"field_change","created_at":"2026-06-25T00:58:56.006400101Z","actor":"Agent","issue_id":"llama-monitor-ccm","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
