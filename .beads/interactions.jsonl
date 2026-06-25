@@ -44,3 +44,8 @@
 {"id":"int-b6346858","kind":"field_change","created_at":"2026-06-25T00:58:37.640051135Z","actor":"Agent","issue_id":"llama-monitor-wh9","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
 {"id":"int-8b5586c7","kind":"field_change","created_at":"2026-06-25T00:58:46.884279595Z","actor":"Agent","issue_id":"llama-monitor-2pz","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
 {"id":"int-066d03a6","kind":"field_change","created_at":"2026-06-25T00:58:56.006400101Z","actor":"Agent","issue_id":"llama-monitor-ccm","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-21a226a3","kind":"field_change","created_at":"2026-06-25T03:19:31.021201212Z","actor":"Agent","issue_id":"llama-monitor-390","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-e5f28ecb","kind":"field_change","created_at":"2026-06-25T03:39:57.55674993Z","actor":"Agent","issue_id":"llama-monitor-zho","extra":{"field":"status","new_value":"open","old_value":"in_progress"}}
+{"id":"int-da619fb2","kind":"field_change","created_at":"2026-06-25T03:47:28.173887857Z","actor":"Agent","issue_id":"llama-monitor-zho","extra":{"field":"status","new_value":"open","old_value":"in_progress"}}
+{"id":"int-26611d8e","kind":"field_change","created_at":"2026-06-25T03:47:38.115462981Z","actor":"Agent","issue_id":"llama-monitor-zho","extra":{"field":"status","new_value":"blocked","old_value":"open"}}
+{"id":"int-428134d7","kind":"field_change","created_at":"2026-06-25T03:48:11.268257546Z","actor":"Agent","issue_id":"llama-monitor-zho","extra":{"field":"status","new_value":"needs_human_input","old_value":"blocked"}}
