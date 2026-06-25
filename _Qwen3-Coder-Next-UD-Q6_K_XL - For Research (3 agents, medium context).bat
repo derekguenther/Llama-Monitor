@@ -13,7 +13,7 @@ call conda activate llama.cpp
 
 
 
-start /affinity FFFF /b /wait "" "C:\Users\ClaudeCode\Documents\windows_llama.cpp\vendor\llama.cpp\build\bin\Release\llama-server.exe" -m "D:\AI\LLMs\Coding\Qwen3-Coder-Next-UD-Q6_K_XL\Qwen3-Coder-Next-UD-Q6_K_XL-00001-of-00003.gguf" --metrics --alias qwen3-coder-next --host 0.0.0.0 --port 8000 --jinja --ctx-size 393216 --parallel 3 --cache-type-k q8_0 --cache-type-v q8_0 --cont-batching --cache-reuse 21504 --flash-attn on --no-mmap --mlock --n-gpu-layers 49 --fit off --cpu-moe --temp 0.6 --top-p 0.95 --min-p 0.01 --top-nsigma 3 --top-k 30 --repeat-penalty 1.0 --threads 8 --threads-batch 16 --cpu-range 0-15 --cpu-strict 1 --batch-size 4096 --ubatch-size 4096 --slot-save-path "D:\AI\LLMs\Coding\Qwen3-Coder-Next-UD-Q6_K_XL\llama.cpp save slots"
+start /affinity FFFF /b /wait "" "C:\Users\ClaudeCode\Documents\windows_llama.cpp\vendor\llama.cpp\build\bin\Release\llama-server.exe" -m "D:\AI\LLMs\Coding\Qwen3-Coder-Next-UD-Q6_K_XL\Qwen3-Coder-Next-UD-Q6_K_XL-00001-of-00003.gguf" --metrics --alias qwen3-coder-next --host 0.0.0.0 --port 8000 --jinja --chat-template-file "C:\Users\ClaudeCode\Documents\windows_llama.cpp\vendor\llama.cpp\qwen3_tools.jinja" --ctx-size 393216 --parallel 3 --cache-type-k q8_0 --cache-type-v q8_0 --cont-batching --cache-reuse 21504 --flash-attn on --no-mmap --mlock --n-gpu-layers 49 --fit off --cpu-moe --temp 0.6 --top-p 0.95 --min-p 0.01 --top-nsigma 3 --top-k 30 --repeat-penalty 1.0 --threads 8 --threads-batch 16 --cpu-range 0-15 --cpu-strict 1 --batch-size 4096 --ubatch-size 4096 --slot-save-path "D:\AI\LLMs\Coding\Qwen3-Coder-Next-UD-Q6_K_XL\llama.cpp save slots"
 if %ERRORLEVEL% NEQ 0 pause
 
 rem --ctx-size 131072 (128k)

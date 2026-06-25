@@ -49,3 +49,5 @@
 {"id":"int-da619fb2","kind":"field_change","created_at":"2026-06-25T03:47:28.173887857Z","actor":"Agent","issue_id":"llama-monitor-zho","extra":{"field":"status","new_value":"open","old_value":"in_progress"}}
 {"id":"int-26611d8e","kind":"field_change","created_at":"2026-06-25T03:47:38.115462981Z","actor":"Agent","issue_id":"llama-monitor-zho","extra":{"field":"status","new_value":"blocked","old_value":"open"}}
 {"id":"int-428134d7","kind":"field_change","created_at":"2026-06-25T03:48:11.268257546Z","actor":"Agent","issue_id":"llama-monitor-zho","extra":{"field":"status","new_value":"needs_human_input","old_value":"blocked"}}
+{"id":"int-3365b3d5","kind":"field_change","created_at":"2026-06-25T05:03:14.3033809Z","actor":"Agent","issue_id":"llama-monitor-fob","extra":{"field":"status","new_value":"open","old_value":"in_progress"}}
+{"id":"int-ea8c41f0","kind":"field_change","created_at":"2026-06-25T05:03:14.308826296Z","actor":"Agent","issue_id":"llama-monitor-fob","extra":{"field":"priority","new_value":"4","old_value":"2"}}

@@ -13,7 +13,7 @@ call conda activate llama.cpp
 
 
 
-start /affinity FFFF /b /wait "" "C:\Users\ClaudeCode\Documents\windows_llama.cpp\vendor\llama.cpp\build\bin\Release\llama-server.exe" -m "D:\AI\LLMs\General Use\Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf" --metrics --alias qwen3-coder-next --host 0.0.0.0 --port 8000 --jinja --ctx-size 262144 --parallel 1 --cache-type-k bf16 --cache-type-v bf16 --cont-batching --cache-reuse 21504 --flash-attn on --no-mmap --mlock --n-gpu-layers 49 --fit off --cpu-moe --temp 0.6 --top-p 0.95 --min-p 0.01 --top-nsigma 3 --top-k 30 --repeat-penalty 1.0 --threads 8 --threads-batch 16 --cpu-range 0-15 --cpu-strict 1 --batch-size 4096 --ubatch-size 4096 --chat-template-kwargs "{\"preserve_thinking\": true}"
+start /affinity FFFF /b /wait "" "C:\Users\ClaudeCode\Documents\windows_llama.cpp\vendor\llama.cpp\build\bin\Release\llama-server.exe" -m "D:\AI\LLMs\General Use\Qwen3.6-35B-A3B-UD-Q8_K_XL.gguf" --metrics --alias qwen3-coder-next --host 0.0.0.0 --port 8000 --mmproj "D:\AI\LLMs\General Use\mmproj-F16 for Qwen3.6.gguf" --ctx-size 262144 --parallel 1 --cache-type-k bf16 --cache-type-v bf16 --cont-batching --cache-reuse 21504 --flash-attn on --no-mmap --mlock --n-gpu-layers 49 --fit off --cpu-moe --temp 0.6 --top-p 0.95 --min-p 0.01 --top-nsigma 3 --top-k 30 --repeat-penalty 1.0 --threads 8 --threads-batch 16 --cpu-range 0-15 --cpu-strict 1 --batch-size 4096 --ubatch-size 4096 --chat-template-kwargs "{\"preserve_thinking\": true}"
 if %ERRORLEVEL% NEQ 0 pause
 
 rem --ctx-size 131072 (128k)
