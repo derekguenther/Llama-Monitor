@@ -1,5 +1,23 @@
 # Chrome MCP Plugin - Testing Findings
 
+## Test Script
+
+Use this script to test the MCP server and Chrome integration:
+
+```bash
+node /tmp/test-mcp.js
+```
+
+This script:
+1. Starts the MCP server
+2. Sends MCP initialization messages
+3. Calls `use_browser` with `action: "navigate"` to `http://example.com`
+4. Captures all stdout/stderr from both MCP and Chrome
+
+**Expected output**: Chrome starts, navigates to example.com, and returns page content.
+
+**Tested**: Successfully navigates to example.com (780×437 viewport) on port 9222.
+
 ## Setup
 
 - **Plugin**: obra/superpowers-chrome v3.0.2
@@ -113,6 +131,26 @@ RUN cd /home/yolo_agent/superpowers-chrome/mcp && npm install && npm run build
 4) Chrome dies. I don't know why. If we could resolve this, then we wouldn't have to start Chrome before launching the superpower MCP thing etc. So I want our focus to be on this.
 5) Because it doesn't like the Chrome running on 9222, and its Chrome on 9223 died (or, alternatively, failed to pass the same check the one on port 9222 failed at?), the superpower fails to work properly.
 
+### Test Script
+
+To reproduce and debug the Chrome crash issue, use the MCP test script:
+
+```bash
+node /tmp/test-mcp.js
+```
+
+This script:
+1. Starts the MCP server
+2. Sends the MCP `initialize` and `notifications/initialized` messages
+3. Calls `use_browser` with `action: "navigate"` to `http://example.com`
+4. Captures all stdout/stderr from both MCP and Chrome
+
+**Expected behavior:** Chrome should start, navigate to example.com, and capture a screenshot.
+
+**Actual behavior (before fix):** Chrome crashes silently with profile lock error, MCP reports "Chrome did not become ready on port 9222".
+
+**After fix:** Chrome stderr is now captured to `/home/yolo_agent/.cache/superpowers/browser-profiles/{profile}/logs/chrome-*.log` and printed to MCP stderr, revealing the profile lock issue.
+
 ### Problem Description
 The Chrome MCP server's auto-started Chrome process crashes immediately on startup in the Docker container, even though:
 - Chromium binary is installed and works when started manually
@@ -128,12 +166,29 @@ The Chrome MCP server's auto-started Chrome process crashes immediately on start
 
 ### Root Cause Analysis
 
-**File**: `/home/yolo_agent/superpowers-chrome/skills/browsing/lib/chrome-process.js` (lines 179-182)
+**File**: `/home/yolo_agent/superpowers-chrome/skills/browsing/lib/chrome-process.js` (lines 179-190)
+
+**The Problem**: The `stdio: 'ignore'` option completely discards stderr, preventing any diagnostic information from reaching the logs when Chrome crashes.
+
+**The Fix**: Changed to capture stderr to a log file:
 
 ```javascript
 const proc = spawn(chromePath, args, {
   detached: true,
-  stdio: 'ignore'  // ← PROBLEM: stderr is completely discarded
+  stdio: ['ignore', 'ignore', 'pipe']  // stderr piped
+});
+
+// Capture stderr to log file
+const fs = require('fs');
+const path = require('path');
+const logDir = path.join(state.chromeUserDataDir, 'logs');
+fs.mkdirSync(logDir, { recursive: true });
+const logFile = path.join(logDir, `chrome-${Date.now()}.log`);
+
+const stderrLog = fs.createWriteStream(logFile);
+proc.stderr.pipe(stderrLog);
+proc.stderr.on('data', (data) => {
+  console.error(`Chrome stderr: ${data}`);
 });
 ```
 
@@ -142,10 +197,20 @@ The `stdio: 'ignore'` option means:
 - stderr is discarded (no crash logs visible)
 - Chrome crashes silently without any diagnostic information
 
-### Evidence
+### Evidence (Before Fix)
 - Manual Chrome startup works: `chromium --headless --no-sandbox --remote-debugging-port=9222 ...`
 - MCP-spawned Chrome crashes silently
 - No crash dumps or error messages available due to `stdio: 'ignore'`
+
+### Evidence (After Fix)
+The fix revealed the **actual root cause**: **stale profile lock files** from previous Chrome crashes.
+
+**Test Results (after fixing lock files)**:
+1. Started Chrome manually on port 9222 - works perfectly
+2. Started Chrome manually on port 9223 - works perfectly  
+3. MCP server tries to start Chrome on port 9222 (from CHROME_WS_PORT env var) - **SUCCESS!**
+4. Chrome stderr captured to: `/home/yolo_agent/.cache/superpowers/browser-profiles/superpowers-chrome/logs/chrome-*.log`
+5. Navigation to example.com: **SUCCESS** (780×437 viewport, page captured)
 
 ### Debugging Steps Taken
 1. Started Chrome manually on port 9222 - works perfectly
@@ -156,13 +221,14 @@ The `stdio: 'ignore'` option means:
 
 ### Recommended Next Steps
 
-1. **Remove `stdio: 'ignore'`** to see Chrome's stderr output when it crashes
-   - Change to `stdio: ['pipe', 'pipe', 'pipe']` or `stdio: 'inherit'`
-   - This will capture crash logs and error messages
+1. ✅ **Capture stderr to log file** - **DONE** - Chrome stderr is now logged to:
+   - `/home/yolo_agent/.cache/superpowers/browser-profiles/{profile}/logs/chrome-*.log`
+   - Also printed to MCP server stderr in real-time
 
 2. **Add Chrome crash detection** before the 15-second timeout
    - Monitor the Chrome process exit event
    - If Chrome exits with non-zero code, report the error immediately
+   - This would provide faster feedback if Chrome crashes during startup
 
 3. **Check for missing dependencies** in Docker container
    - Run `ldd /usr/bin/chromium` to check for missing libraries
@@ -171,6 +237,18 @@ The `stdio: 'ignore'` option means:
 4. **Check Docker container capabilities**
    - Chrome may need additional capabilities for headless mode
    - Consider adding `--cap-add=SYS_ADMIN` or similar
+
+### Root Cause Summary
+
+The Chrome crash issue was caused by **stale profile lock files** (`SingletonLock`, `SingletonSocket`) left behind when Chrome crashed or was killed unexpectedly. When the MCP server tried to start Chrome, it detected the lock file and failed to start.
+
+**Solution**: Clean up stale lock files:
+```bash
+rm -f /home/yolo_agent/.cache/superpowers/browser-profiles/*/*/SingletonLock
+rm -f /home/yolo_agent/.cache/superpowers/browser-profiles/*/*/SingletonSocket
+```
+
+**Long-term fix**: The MCP server should detect stale lock files and clean them up automatically before starting Chrome.
 
 ### Workaround (Temporary)
 Until the crash is fixed:
@@ -250,3 +328,18 @@ The Chrome MCP plugin is **fully functional** for browser automation:
 - Auto-capture system creates page snapshots (HTML, markdown, PNG, console logs)
 - Page text extraction successfully reads dashboard content
 - Console logging captures client-side browser console output (as designed)
+
+### Recent Update (2026-06-24)
+
+**Issue**: Chrome process crashed on startup with no diagnostic information.
+
+**Root Cause**: Stale profile lock files from previous Chrome crashes prevented new Chrome instances from starting.
+
+**Fix Applied**: 
+- Chrome stderr now captured to log files AND printed to MCP stderr
+- Test script at `/tmp/test-mcp.js` can reproduce and verify the fix
+
+**Verification**: 
+- Test script successfully navigates to example.com
+- Chrome starts on configured port 9222 (from `CHROME_WS_PORT` env var)
+- Page capture files created: 001-navigate.html, 001-navigate.md, 001-navigate.png
