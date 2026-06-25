@@ -2,4 +2,4 @@
 %~d0
 cd %~dp0
 
-python main.py --tui
+python llamamonitor.py --tui

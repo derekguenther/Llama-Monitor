@@ -275,14 +275,14 @@ class TestDependencyChecking(unittest.TestCase):
 
     def test_ensure_dependencies_no_missing(self):
         """Test ensure_dependencies when all deps are installed."""
-        from main import ensure_dependencies
+        from llamamonitor import ensure_dependencies
 
         # This should not raise or prompt since all deps are installed
         ensure_dependencies()
 
     def test_ensure_dependencies_with_tui_flag(self):
         """Test ensure_dependencies with check_tui=True."""
-        from main import ensure_dependencies
+        from llamamonitor import ensure_dependencies
 
         # This should check for curses but not fail if not on Windows
         ensure_dependencies(check_tui=True)

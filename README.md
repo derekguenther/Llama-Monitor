@@ -39,7 +39,7 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Create a `config.yaml` file in the same directory as `main.py`:
+Create a `config.yaml` file in the same directory as `llamamonitor.py`:
 
 ```yaml
 server:
@@ -79,13 +79,13 @@ See `example_config.yaml` for complete configuration options.
 ### Running the TUI Dashboard
 
 ```bash
-python main.py
+python llamamonitor.py
 ```
 
 ### Running the Web Dashboard
 
 ```bash
-python main.py --web
+python llamamonitor.py --web
 ```
 
 Then open `https://localhost:2633` in your browser.
