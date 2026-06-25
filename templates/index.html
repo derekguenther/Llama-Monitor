@@ -763,6 +763,7 @@
             gpu: [],
             cpu: [],
             tokens: [],
+            promptTokens: [],
             labels: []
         };
         const MAX_HISTORY = 60;
@@ -924,27 +925,54 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Tokens/s',
+                        label: 'Tokens Generated/s',
                         data: [],
                         borderColor: '#ffd93d',
                         backgroundColor: 'rgba(255, 217, 61, 0.1)',
                         borderWidth: 2,
                         tension: 0.4,
                         fill: true,
-                        pointRadius: 0
+                        pointRadius: 0,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Tokens Processed/s',
+                        data: [],
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 0,
+                        yAxisID: 'y1'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: true, labels: { color: '#888' } }
                     },
                     scales: {
                         y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
                             grid: { color: '#2a3b5c' },
-                            ticks: { color: '#888' }
+                            ticks: { color: '#ffd93d', callback: function(v) { return v.toFixed(0); } },
+                            title: { display: true, text: 'Tokens Generated/s', color: '#ffd93d' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#00d4ff', callback: function(v) { return v.toFixed(0); } },
+                            title: { display: true, text: 'Tokens Processed/s', color: '#00d4ff' }
                         },
                         x: {
                             grid: { display: false },
@@ -1128,11 +1156,13 @@
             // Add new data points
             const gpuUtil = system.gpu?.usage || 0;
             const cpuUtil = system.cpu?.percent || 0;
-            const tokensPerSec = serverMetrics.predicted_tokens_seconds || 0;
+            const tokensGeneratedPerSec = serverMetrics.predicted_tokens_seconds || 0;
+            const tokensProcessedPerSec = serverMetrics.prompt_tokens_seconds || 0;
 
             historyData.gpu.push(gpuUtil);
             historyData.cpu.push(cpuUtil);
-            historyData.tokens.push(tokensPerSec);
+            historyData.tokens.push(tokensGeneratedPerSec);
+            historyData.promptTokens.push(tokensProcessedPerSec);
             historyData.labels.push(new Date().toLocaleTimeString());
 
             // Keep only MAX_HISTORY points
@@ -1140,6 +1170,7 @@
                 historyData.gpu.shift();
                 historyData.cpu.shift();
                 historyData.tokens.shift();
+                historyData.promptTokens.shift();
                 historyData.labels.shift();
             }
 
@@ -1150,6 +1181,7 @@
             combinedUsageChart.update('none');
 
             tokensChart.data.datasets[0].data = historyData.tokens;
+            tokensChart.data.datasets[1].data = historyData.promptTokens;
             tokensChart.data.labels = historyData.labels;
             tokensChart.update('none');
         }
