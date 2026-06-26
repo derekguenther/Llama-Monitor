@@ -968,7 +968,8 @@
                             position: 'left',
                             grid: { color: '#2a3b5c' },
                             ticks: { color: '#00d4ff', callback: function(v) { return v.toFixed(0); } },
-                            title: { display: true, text: 'Tokens Processed/s', color: '#00d4ff' }
+                            title: { display: true, text: 'Tokens Processed/s', color: '#00d4ff' },
+                            min: 0
                         },
                         y1: {
                             type: 'linear',
@@ -976,7 +977,8 @@
                             position: 'right',
                             grid: { drawOnChartArea: false },
                             ticks: { color: '#ffd93d', callback: function(v) { return v.toFixed(0); } },
-                            title: { display: true, text: 'Tokens Generated/s', color: '#ffd93d' }
+                            title: { display: true, text: 'Tokens Generated/s', color: '#ffd93d' },
+                            min: 0
                         },
                         x: {
                             grid: { display: false },
