@@ -54,3 +54,5 @@
 {"id":"int-ce42d3c7","kind":"field_change","created_at":"2026-06-25T07:35:22.664488933Z","actor":"Agent","issue_id":"llama-monitor-zho","extra":{"field":"status","new_value":"review_requested","old_value":"needs_human_input"}}
 {"id":"int-d11bedc4","kind":"field_change","created_at":"2026-06-25T16:23:06.236304995Z","actor":"Agent","issue_id":"llama-monitor-fob","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
 {"id":"int-7e6220e3","kind":"field_change","created_at":"2026-06-25T16:24:25.349627322Z","actor":"Agent","issue_id":"llama-monitor-k1q","extra":{"field":"status","new_value":"closed","old_value":"in_progress"}}
+{"id":"int-b2c08a19","kind":"field_change","created_at":"2026-06-26T05:25:02.878900412Z","actor":"Agent","issue_id":"llama-monitor-qhn","extra":{"field":"status","new_value":"review_requested","old_value":"in_progress"}}
+{"id":"int-415efe37","kind":"field_change","created_at":"2026-06-26T05:28:03.677367975Z","actor":"Agent","issue_id":"llama-monitor-qhn","extra":{"field":"status","new_value":"closed","old_value":"review_requested","reason":"Closed"}}
