@@ -820,16 +820,20 @@
                         ctx.textBaseline = 'middle';
 
                         const textWidth = ctx.measureText(label).width;
+                        const minLabelOffset = 80;
 
                         if (barWidth > textWidth + 10) {
                             // Label fits inside bar
                             ctx.textAlign = 'right';
                             ctx.fillText(label, bar.x - 8, bar.y);
-                        } else {
-                            // Label goes outside bar - position to the right of y-axis labels
-                            // Use textWidth + 8 instead of bar.x + 8 to avoid overlap when bar.x is 0
+                        } else if (barWidth > 0) {
+                            // Label outside bar to the right of the bar's leading edge
                             ctx.textAlign = 'left';
-                            ctx.fillText(label, textWidth + 8, bar.y);
+                            ctx.fillText(label, bar.x + 8, bar.y);
+                        } else {
+                            // Bar has zero width (0% progress) - use minimum offset from y-axis
+                            ctx.textAlign = 'left';
+                            ctx.fillText(label, minLabelOffset, bar.y);
                         }
 
                         ctx.restore();
