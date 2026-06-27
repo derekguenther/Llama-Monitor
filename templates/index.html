@@ -1165,19 +1165,26 @@
             const tokensGeneratedPerSec = serverMetrics.predicted_tokens_seconds || 0;
             const tokensProcessedPerSec = serverMetrics.prompt_tokens_seconds || 0;
 
-            historyData.gpu.push(gpuUtil);
-            historyData.cpu.push(cpuUtil);
-            historyData.tokens.push(tokensGeneratedPerSec);
-            historyData.promptTokens.push(tokensProcessedPerSec);
-            historyData.labels.push(new Date().toLocaleTimeString());
+            // Reset history when both token values are 0 (idle state)
+            if (tokensGeneratedPerSec === 0 && tokensProcessedPerSec === 0) {
+                historyData.tokens = [0];
+                historyData.promptTokens = [0];
+                historyData.labels = [new Date().toLocaleTimeString()];
+            } else {
+                historyData.gpu.push(gpuUtil);
+                historyData.cpu.push(cpuUtil);
+                historyData.tokens.push(tokensGeneratedPerSec);
+                historyData.promptTokens.push(tokensProcessedPerSec);
+                historyData.labels.push(new Date().toLocaleTimeString());
 
-            // Keep only MAX_HISTORY points
-            if (historyData.gpu.length > MAX_HISTORY) {
-                historyData.gpu.shift();
-                historyData.cpu.shift();
-                historyData.tokens.shift();
-                historyData.promptTokens.shift();
-                historyData.labels.shift();
+                // Keep only MAX_HISTORY points
+                if (historyData.gpu.length > MAX_HISTORY) {
+                    historyData.gpu.shift();
+                    historyData.cpu.shift();
+                    historyData.tokens.shift();
+                    historyData.promptTokens.shift();
+                    historyData.labels.shift();
+                }
             }
 
             // Update combined usage chart (GPU first, then CPU)
