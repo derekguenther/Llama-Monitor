@@ -1,6 +1,13 @@
-"""System metrics collector using Windows performance counters."""
+"""System metrics collector using Windows performance counters and Linux power monitoring.
+
+Windows: Uses Energy Meter performance counter for CPU power, WMI for battery.
+Linux: Uses RAPL (/sys/class/powercap/intel-rapl:*) for CPU power when available.
+        Falls back to 0.0 if RAPL not available (requires lm-sensors or NVML for GPU).
+"""
 
 import time
+import os
+import subprocess
 from typing import Any, Dict, List, Optional
 
 try:
@@ -23,7 +30,7 @@ except ImportError:
 
 
 class SystemMetricsCollector:
-    """Collects system metrics (CPU, GPU, memory) on Windows."""
+    """Collects system metrics (CPU, GPU, memory) on Windows and Linux."""
 
     def __init__(self, tracked_processes: Optional[List[str]] = None):
         """Initialize the collector.
@@ -412,6 +419,44 @@ class SystemMetricsCollector:
         except Exception:
             return 0.0
 
+    def _get_linux_cpu_power_w(self) -> float:
+        """Get CPU package power from RAPL on Linux.
+
+        Reads from /sys/class/powercap/intel-rapl:* for Intel CPU power.
+        Returns power in watts, or 0.0 if not available.
+
+        Returns:
+            CPU package power in watts
+        """
+        if not os.path.exists('/sys/class/powercap/intel-rapl:0'):
+            return 0.0
+
+        try:
+            # Try to read from the max_energy_range_uj file to get energy counter
+            rapl_path = '/sys/class/powercap/intel-rapl:0'
+            energy_uj_path = os.path.join(rapl_path, 'energy_uj')
+
+            if not os.path.exists(energy_uj_path):
+                return 0.0
+
+            # Read current energy value
+            with open(energy_uj_path, 'r') as f:
+                energy_uj_1 = int(f.read().strip())
+
+            # Wait a short time and read again
+            time.sleep(0.5)
+
+            with open(energy_uj_path, 'r') as f:
+                energy_uj_2 = int(f.read().strip())
+
+            # Calculate power (energy difference over time)
+            energy_diff_uj = energy_uj_2 - energy_uj_1
+            power_w = (energy_diff_uj / 1000000.0) / 0.5  # Convert to watts
+
+            return max(0.0, power_w)
+        except Exception:
+            return 0.0
+
     def _collect_system_power(self) -> Dict[str, Any]:
         """Collect system power consumption.
 
@@ -420,13 +465,20 @@ class SystemMetricsCollector:
         """
         result = {}
 
-        # Get CPU/package power from Energy Meter performance counter
+        # Get CPU/package power
+        # On Windows, use Energy Meter performance counter
+        # On Linux, use RAPL or sensors as fallback
         cpu_power_w = self._get_cpu_power_w()
+        
+        # If Windows method returned 0, try Linux methods
+        if cpu_power_w <= 0:
+            cpu_power_w = self._get_linux_cpu_power_w()
+        
         if cpu_power_w > 0:
             result["cpu_power_w"] = cpu_power_w
             result["system_power_w"] = cpu_power_w  # System power equals CPU package power
 
-        # Try WMI for additional power data
+        # Try WMI for additional power data (Windows only)
         if self.wmi:
             try:
                 # Use battery or power sensor data if available
