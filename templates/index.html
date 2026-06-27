@@ -1232,7 +1232,8 @@
             // Context used is the number of tokens currently in context
             // We need to get the context limit from the props or use a default
             const props = data.server?.props || {};
-            const contextLimit = props.n_ctx || 4096; // Default to 4096 if not available
+            // n_ctx is at props.default_generation_settings.n_ctx (per-slot context)
+            const contextLimit = props.default_generation_settings?.n_ctx || 4096; // Default to 4096 if not available
 
             const contextUsed = slots.map(slot => {
                 const n_prompt_tokens = slot.n_prompt_tokens || 0;
