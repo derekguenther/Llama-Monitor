@@ -99,29 +99,41 @@ def transform_system_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         System metrics dictionary with nested structure
     """
+    def safe_float(value, default=-1):
+        """Convert None or non-numeric values to default.
+        
+        -1 is a sentinel value for broken data paths and should be preserved for detection.
+        """
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+    
     return {
         "cpu": {
-            "percent": data.get("cpu_percent", 0),
+            "percent": safe_float(data.get("cpu_percent"), -1),
             "cores": data.get("cpu_cores", []),
             "count": data.get("cpu_count", 0),
-            "power_w": data.get("cpu_power_w", 0),
+            "power_w": safe_float(data.get("cpu_power_w"), -1),
         },
         "gpu": {
-            "usage": data.get("gpu_usage", 0),
-            "memory_used": data.get("gpu_memory_used", 0),
-            "memory_total": data.get("gpu_memory_total", 0),
-            "temperature_c": data.get("gpu_temperature_c", 0),
-            "fan_speed_rpm": data.get("gpu_fan_speed_rpm", 0),
-            "power_w": data.get("gpu_power_w", 0),
+            "usage": safe_float(data.get("gpu_usage"), -1),
+            "memory_used": safe_float(data.get("gpu_memory_used"), -1),
+            "memory_total": safe_float(data.get("gpu_memory_total"), -1),
+            "temperature_c": safe_float(data.get("gpu_temperature_c"), -1),
+            "fan_speed_rpm": safe_float(data.get("gpu_fan_speed_rpm"), -1),
+            "power_w": safe_float(data.get("gpu_power_w"), -1),
         },
         "memory": {
-            "used": data.get("memory_used", 0),
-            "total": data.get("memory_total", 0),
-            "percent": data.get("memory_percent", 0),
-            "available": data.get("memory_available", 0),
+            "used": safe_float(data.get("memory_used"), -1),
+            "total": safe_float(data.get("memory_total"), -1),
+            "percent": safe_float(data.get("memory_percent"), -1),
+            "available": safe_float(data.get("memory_available"), -1),
         },
         "system": {
-            "power_w": data.get("system_power_w", 0),
+            "power_w": safe_float(data.get("system_power_w"), -1),
         },
         "timestamp": data.get("timestamp", ""),
     }

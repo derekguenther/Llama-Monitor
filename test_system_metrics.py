@@ -367,7 +367,9 @@ class TestCollectSystemPower(unittest.TestCase):
 
             result = collector._collect_system_power()
 
-            self.assertEqual(result, {})
+            # Power values should be 0 when not available (not None)
+            self.assertEqual(result["cpu_power_w"], 0.0)
+            self.assertEqual(result["system_power_w"], 0.0)
 
 
 class TestCollect(unittest.TestCase):

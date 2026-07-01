@@ -470,13 +470,13 @@ class SystemMetricsCollector:
         # On Linux, use RAPL or sensors as fallback
         cpu_power_w = self._get_cpu_power_w()
         
-        # If Windows method returned 0, try Linux methods
+        # If Windows method returned 0 or negative, try Linux methods
         if cpu_power_w <= 0:
             cpu_power_w = self._get_linux_cpu_power_w()
         
-        if cpu_power_w > 0:
-            result["cpu_power_w"] = cpu_power_w
-            result["system_power_w"] = cpu_power_w  # System power equals CPU package power
+        # Always set power values (0 for unavailable)
+        result["cpu_power_w"] = cpu_power_w if cpu_power_w > 0 else 0.0
+        result["system_power_w"] = cpu_power_w if cpu_power_w > 0 else 0.0
 
         # Try WMI for additional power data (Windows only)
         if self.wmi:

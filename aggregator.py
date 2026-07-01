@@ -47,6 +47,18 @@ class Aggregator:
         self.system_collector = SystemMetricsCollector()
         self.cost_calculator = ElectricityCostCalculator(self.db, idle_baseline_w)
 
+    def _safe_float(self, value, default=-1.0):
+        """Convert None or non-numeric values to default.
+        
+        -1 is a sentinel value for broken data paths and should be preserved for detection.
+        """
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+
     def collect_all_metrics(self) -> Dict[str, Any]:
         """Collect all metrics from all sources.
 
@@ -75,50 +87,50 @@ class Aggregator:
         # Calculate CPU percent: prioritize process CPU if available, otherwise use total OS CPU
         process_cpu = cpu.get("process_cpu", {})
         if process_cpu:
-            # Sum all tracked process CPU percentages
-            cpu_percent = sum(p.get("cpu_percent", 0) for p in process_cpu.values())
+            # Sum all tracked process CPU percentages, filtering out -1 values
+            cpu_percent = sum(self._safe_float(p.get("cpu_percent")) for p in process_cpu.values())
         else:
             # Fall back to total OS CPU
-            cpu_percent = cpu.get("percent", 0)
+            cpu_percent = self._safe_float(cpu.get("percent"))
 
         system_data = {
             # Flat keys for DB storage
             "cpu_percent": cpu_percent,
             "cpu_cores": cpu.get("cores", []),
             "cpu_count": cpu.get("count", 0),
-            "cpu_power_w": system.get("system", {}).get("cpu_power_w", 0),
-            "gpu_usage": gpu.get("usage", 0),
-            "gpu_memory_used": gpu.get("memory_used", 0),
-            "gpu_memory_total": gpu.get("memory_total", 0),
-            "gpu_temperature_c": gpu.get("temperature_c", 0),
-            "gpu_fan_speed_rpm": gpu.get("fan_speed_rpm", 0),
-            "gpu_power_w": gpu.get("power_w", 0),
-            "memory_used": memory.get("used", 0),
-            "memory_total": memory.get("total", 0),
-            "memory_percent": memory.get("percent", 0),
-            "memory_available": memory.get("available", 0),
-            "system_power_w": system.get("system", {}).get("system_power_w", 0),
+            "cpu_power_w": self._safe_float(system.get("system", {}).get("cpu_power_w")),
+            "gpu_usage": self._safe_float(gpu.get("usage")),
+            "gpu_memory_used": self._safe_float(gpu.get("memory_used")),
+            "gpu_memory_total": self._safe_float(gpu.get("memory_total")),
+            "gpu_temperature_c": self._safe_float(gpu.get("temperature_c")),
+            "gpu_fan_speed_rpm": self._safe_float(gpu.get("fan_speed_rpm")),
+            "gpu_power_w": self._safe_float(gpu.get("power_w")),
+            "memory_used": self._safe_float(memory.get("used")),
+            "memory_total": self._safe_float(memory.get("total")),
+            "memory_percent": self._safe_float(memory.get("percent")),
+            "memory_available": self._safe_float(memory.get("available")),
+            "system_power_w": self._safe_float(system.get("system", {}).get("system_power_w")),
             "timestamp": system.get("timestamp", int(time.time())),
             # Nested keys for frontend display (system.cpu.percent, system.gpu.usage, etc.)
             "cpu": {
                 "percent": cpu_percent,
                 "cores": cpu.get("cores", []),
                 "count": cpu.get("count", 0),
-                "power_w": system.get("system", {}).get("cpu_power_w", 0),
+                "power_w": self._safe_float(system.get("system", {}).get("cpu_power_w")),
             },
             "gpu": {
-                "usage": gpu.get("usage", 0),
-                "memory_used": gpu.get("memory_used", 0),
-                "memory_total": gpu.get("memory_total", 0),
-                "temperature_c": gpu.get("temperature_c", 0),
-                "fan_speed_rpm": gpu.get("fan_speed_rpm", 0),
-                "power_w": gpu.get("power_w", 0),
+                "usage": self._safe_float(gpu.get("usage")),
+                "memory_used": self._safe_float(gpu.get("memory_used")),
+                "memory_total": self._safe_float(gpu.get("memory_total")),
+                "temperature_c": self._safe_float(gpu.get("temperature_c")),
+                "fan_speed_rpm": self._safe_float(gpu.get("fan_speed_rpm")),
+                "power_w": self._safe_float(gpu.get("power_w")),
             },
             "memory": {
-                "used": memory.get("used", 0),
-                "total": memory.get("total", 0),
-                "percent": memory.get("percent", 0),
-                "available": memory.get("available", 0),
+                "used": self._safe_float(memory.get("used")),
+                "total": self._safe_float(memory.get("total")),
+                "percent": self._safe_float(memory.get("percent")),
+                "available": self._safe_float(memory.get("available")),
             },
         }
 

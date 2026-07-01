@@ -65,8 +65,12 @@ def get_nested_value(data, path):
 
 def transform_value(value, transform, data=None):
     """Apply a transform to a value."""
-    if value is None:
-        return None
+    def safe_value(v):
+        """Convert None to 0, preserve -1 sentinel."""
+        if v is None:
+            return 0
+        return v
+    
     if transform == "width":
         return f"{value}%"
     if transform == "mem_text" and data:
@@ -89,9 +93,14 @@ def transform_value(value, transform, data=None):
         return None
     if transform == "sum":
         # Sum all numeric values found in the data for power
-        gpu = get_nested_value(data, "system.gpu.power_w") or get_nested_value(data, "system.gpu_power_w") or 0
-        cpu = get_nested_value(data, "system.cpu.power_w") or get_nested_value(data, "system.cpu_power_w") or 0
+        # -1 values are guard values and should be treated as 0
+        gpu = safe_value(get_nested_value(data, "system.gpu.power_w"))
+        gpu = gpu or safe_value(get_nested_value(data, "system.gpu_power_w"))
+        cpu = safe_value(get_nested_value(data, "system.cpu.power_w"))
+        cpu = cpu or safe_value(get_nested_value(data, "system.cpu_power_w"))
         return gpu + cpu
+    if value is None:
+        return None
     return value
 
 
@@ -143,7 +152,7 @@ def main():
 
         if not found:
             errors.append(dom_id)
-            print(f"  MISSING {dom_id}: no valid data path found")
+            print(f"  FAILED  {dom_id}: no valid data path found")
 
     print()
     print("=" * 70)
@@ -158,7 +167,7 @@ def main():
 
     if errors:
         print()
-        print(f"ERRORS: {len(errors)} elements have no data:")
+        print(f"FAILED: {len(errors)} elements have no data:")
         for e in errors:
             print(f"  - {e}")
         sys.exit(1)

@@ -20,7 +20,7 @@ rem --ctx-size 131072 (128k)
 rem --ctx-size 196608 (192k)
 rem --ctx-size 262144 (256k)
 rem --ctx-size 393216 (384k, e.g. 192k for 2 agents OR 128k for 3 agents)
-rem --ctx-size 524288 (512k, e.g. 256k for 2 agents)
+rem --ctx-size 524288 (512k, e.g. 256k for 2 agents OR 128k for 4 agents)
 rem --ctx-size 786432 (768k, e.g. 256k for 3 agents)
 rem --ctx-size 1048576 (1M, e.g. 256k for 4 agents)
 

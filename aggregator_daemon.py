@@ -132,14 +132,26 @@ class Aggregator:
         Returns:
             Extracted server metrics dictionary
         """
+        def safe_float(value, default=-1.0):
+            """Convert None or non-numeric values to default.
+            
+            -1 is a sentinel value for broken data paths and should be preserved for detection.
+            """
+            if value is None:
+                return default
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+        
         server = server_data.get("server", {})
         result = {
-            "prompt_tokens_total": server.get("prompt_tokens_total"),
-            "prompt_tokens_seconds": server.get("prompt_tokens_seconds"),
-            "tokens_predicted_total": server.get("tokens_predicted_total"),
-            "predicted_tokens_seconds": server.get("predicted_tokens_seconds"),
-            "requests_processing": server.get("requests_processing"),
-            "requests_deferred": server.get("requests_deferred"),
+            "prompt_tokens_total": safe_float(server.get("prompt_tokens_total")),
+            "prompt_tokens_seconds": safe_float(server.get("prompt_tokens_seconds")),
+            "tokens_predicted_total": safe_float(server.get("tokens_predicted_total")),
+            "predicted_tokens_seconds": safe_float(server.get("predicted_tokens_seconds")),
+            "requests_processing": safe_float(server.get("requests_processing")),
+            "requests_deferred": safe_float(server.get("requests_deferred")),
         }
 
         # Include slots data if available (check explicitly for None, not empty list)
@@ -161,6 +173,18 @@ class Aggregator:
         Returns:
             Extracted system metrics dictionary
         """
+        def safe_float(value, default=-1.0):
+            """Convert None or non-numeric values to default.
+            
+            -1 is a sentinel value for broken data paths and should be preserved for detection.
+            """
+            if value is None:
+                return default
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+        
         cpu = system_data.get("cpu", {})
         gpu = system_data.get("gpu", {})
         memory = system_data.get("memory", {})
@@ -168,40 +192,40 @@ class Aggregator:
 
         return {
             # Flat keys for DB storage
-            "cpu_percent": cpu.get("percent"),
+            "cpu_percent": safe_float(cpu.get("percent")),
             "cpu_cores_percent": json.dumps(cpu.get("cores", [])),
             "cpu_temperature_c": json.dumps(cpu.get("temperature_c", [])),
-            "cpu_power_w": cpu.get("power_w"),
-            "gpu_usage": gpu.get("usage"),
-            "gpu_memory_used_mb": gpu.get("memory_used"),
-            "gpu_memory_total_mb": gpu.get("memory_total"),
-            "gpu_temperature_c": gpu.get("temperature_c"),
-            "gpu_fan_speed_rpm": gpu.get("fan_speed_rpm"),
-            "gpu_power_w": gpu.get("power_w"),
-            "memory_used_mb": memory.get("used"),
-            "memory_total_mb": memory.get("total"),
-            "memory_percent": memory.get("percent"),
-            "system_power_w": system.get("power_w"),
+            "cpu_power_w": safe_float(cpu.get("power_w")),
+            "gpu_usage": safe_float(gpu.get("usage")),
+            "gpu_memory_used_mb": safe_float(gpu.get("memory_used")),
+            "gpu_memory_total_mb": safe_float(gpu.get("memory_total")),
+            "gpu_temperature_c": safe_float(gpu.get("temperature_c")),
+            "gpu_fan_speed_rpm": safe_float(gpu.get("fan_speed_rpm")),
+            "gpu_power_w": safe_float(gpu.get("power_w")),
+            "memory_used_mb": safe_float(memory.get("used")),
+            "memory_total_mb": safe_float(memory.get("total")),
+            "memory_percent": safe_float(memory.get("percent")),
+            "system_power_w": safe_float(system.get("power_w")),
             # Nested keys for frontend display
             "cpu": {
-                "percent": cpu.get("percent"),
+                "percent": safe_float(cpu.get("percent")),
                 "cores": cpu.get("cores", []),
                 "count": cpu.get("count", 0),
-                "power_w": cpu.get("power_w"),
+                "power_w": safe_float(cpu.get("power_w")),
             },
             "gpu": {
-                "usage": gpu.get("usage"),
-                "memory_used": gpu.get("memory_used"),
-                "memory_total": gpu.get("memory_total"),
-                "temperature_c": gpu.get("temperature_c"),
-                "fan_speed_rpm": gpu.get("fan_speed_rpm"),
-                "power_w": gpu.get("power_w"),
+                "usage": safe_float(gpu.get("usage")),
+                "memory_used": safe_float(gpu.get("memory_used")),
+                "memory_total": safe_float(gpu.get("memory_total")),
+                "temperature_c": safe_float(gpu.get("temperature_c")),
+                "fan_speed_rpm": safe_float(gpu.get("fan_speed_rpm")),
+                "power_w": safe_float(gpu.get("power_w")),
             },
             "memory": {
-                "used": memory.get("used"),
-                "total": memory.get("total"),
-                "percent": memory.get("percent"),
-                "available": memory.get("available"),
+                "used": safe_float(memory.get("used")),
+                "total": safe_float(memory.get("total")),
+                "percent": safe_float(memory.get("percent")),
+                "available": safe_float(memory.get("available")),
             },
         }
 
