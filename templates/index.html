@@ -1248,9 +1248,11 @@
             });
 
             // Update slot progress chart
-            document.getElementById('slot-progress-graph').style.height = chartHeight + 'px';
+            const progressContainer = document.getElementById('slot-progress-container');
+            progressContainer.style.height = chartHeight + 'px';
             slotProgressChart.data.labels = slotLabels;
             slotProgressChart.data.datasets[0].data = slotProgress;
+            slotProgressChart.resize();
             slotProgressChart.update('none');
 
             // Extract context used data
@@ -1262,10 +1264,12 @@
             });
 
             // Update context used chart
+            const contextContainer = document.getElementById('context-used-container');
+            contextContainer.style.height = chartHeight + 'px';
             contextUsedChart.options.scales.x.max = contextLimit;
-            document.getElementById('context-used-graph').style.height = chartHeight + 'px';
             contextUsedChart.data.labels = slotLabels;
             contextUsedChart.data.datasets[0].data = contextUsed;
+            contextUsedChart.resize();
             contextUsedChart.update('none');
         }
 
