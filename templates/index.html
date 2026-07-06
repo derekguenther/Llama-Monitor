@@ -61,6 +61,7 @@
             grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 20px;
+            align-items: start;
         }
 
         @media (max-width: 768px) {
@@ -75,6 +76,7 @@
             grid-template-columns: 1fr 300px;
             gap: 20px;
             margin-bottom: 20px;
+            grid-column: 1 / -1;
         }
 
         @media (max-width: 900px) {
@@ -94,6 +96,7 @@
             background: #16213e;
             border-radius: 10px;
             padding: 20px;
+            position: relative;
         }
 
         .card h2 {
@@ -110,6 +113,13 @@
             justify-content: space-between;
             padding: 10px 0;
             border-bottom: 1px solid #2a3b5c;
+        }
+
+        #summary-metrics {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            justify-content: space-between;
         }
 
         .metric-label {
@@ -185,20 +195,30 @@
         }
 
         .cost-value {
-            font-size: 1.8rem;
+            font-size: 1rem;
             font-weight: bold;
             color: #ffd93d;
+            position: absolute;
+            top: 20px;
+            right: 20px;
         }
 
         /* History Graphs */
         .graph-container {
-            height: 150px;
+            overflow: hidden;
+            height: 180px;
             position: relative;
         }
 
         .graph-canvas {
-            width: 100%;
-            height: 100%;
+            max-height: 180px !important;
+            min-height: 180px !important;
+            height: 180px !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            display: block !important;
         }
 
         .graph-label {
@@ -207,62 +227,25 @@
             margin-bottom: 5px;
         }
 
-        /* Horizontal Bar Graphs for Slots */
-        .horizontal-bar-container {
+        /* Slot Progress & Context Card - dynamic height, grows with slot count */
+        .slot-context-card {
             display: flex;
             flex-direction: column;
-            gap: 8px;
         }
 
-        .horizontal-bar-row {
+        .slot-graph {
             display: flex;
-            align-items: center;
-            gap: 10px;
+            flex-direction: column;
+            padding: 5px 0;
         }
 
-        .horizontal-bar-slot-label {
-            width: 80px;
-            font-size: 0.75rem;
-            color: #888;
-            font-family: 'Courier New', monospace;
-            text-align: right;
+        .slot-graph:first-child {
+            padding-bottom: 8px;
         }
 
-        .horizontal-bar-track {
-            flex: 1;
-            height: 24px;
-            background: #0d111d;
-            border-radius: 4px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .horizontal-bar-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.7rem;
-            color: #1a1a2e;
-            font-weight: bold;
-        }
-
-        .slot-progress-fill {
-            background: linear-gradient(90deg, #00d4ff, #0099cc);
-        }
-
-        .context-used-fill {
-            background: linear-gradient(90deg, #00ff88, #00cc6a);
-        }
-
-        .bar-value {
-            font-size: 0.7rem;
-            color: #eee;
-            min-width: 50px;
-            text-align: right;
-            font-family: 'Courier New', monospace;
+        .slot-canvas {
+            width: 100%;
+            display: block;
         }
 
         /* Stats Summary */
@@ -521,7 +504,7 @@
             </div>
             <div class="key-metric-item">
                 <div class="key-metric-label">Today's Energy</div>
-                <div class="key-metric-value energy" id="today-energy">-1</div>
+                <div class="key-metric-value energy" id="today-energy">-</div>
             </div>
         </div>
         <!-- Vendor Comparison Modal -->
@@ -573,23 +556,23 @@
                 <div id="server-metrics">
                     <div class="metric-row">
                         <span class="metric-label">Prompt Tokens</span>
-                        <span class="metric-value" id="prompt-tokens">-1</span>
+                        <span class="metric-value" id="prompt-tokens">-</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Generated Tokens</span>
-                        <span class="metric-value" id="generated-tokens">-1</span>
+                        <span class="metric-value" id="generated-tokens">-</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Active Requests Being Processed</span>
-                        <span class="metric-value" id="processing-requests">-1</span>
+                        <span class="metric-value" id="processing-requests">-</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Deferred Requests</span>
-                        <span class="metric-value" id="deferred-requests">-1</span>
+                        <span class="metric-value" id="deferred-requests">-</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Active Slots</span>
-                        <span class="metric-value" id="active-slots">-1/-1</span>
+                        <span class="metric-value" id="active-slots">-/-</span>
                     </div>
                 </div>
             </div>
@@ -611,22 +594,20 @@
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Total Energy</span>
-                        <span class="metric-value" id="total-energy">-1</span>
+                        <span class="metric-value" id="total-energy">-</span>
                     </div>
                 </div>
             </div>
             <!-- Slot Progress and Context Used Bar Graphs -->
-            <div class="card">
+            <div class="card slot-context-card">
                 <h2>Slot Progress & Context</h2>
                 <!-- Slot Progress Bar Graph -->
-                <div class="graph-container" id="slot-progress-container" style="margin-bottom: 15px;">
-                    <div class="graph-label">Slot Progress (0-100% completion)</div>
-                    <canvas id="slot-progress-graph" class="graph-canvas"></canvas>
+                <div class="slot-graph" id="slot-progress-container">
+                    <canvas id="slot-progress-graph" class="slot-canvas"></canvas>
                 </div>
                 <!-- Context Used Bar Graph -->
-                <div class="graph-container" id="context-used-container">
-                    <div class="graph-label">Context Used (tokens in context)</div>
-                    <canvas id="context-used-graph" class="graph-canvas"></canvas>
+                <div class="slot-graph" id="context-used-container">
+                    <canvas id="context-used-graph" class="slot-canvas"></canvas>
                 </div>
             </div>
 
@@ -637,37 +618,37 @@
                 <div class="resource-bar">
                     <div class="resource-header">
                         <span>CPU Usage</span>
-                        <span id="cpu-percent">-1%</span>
+                        <span id="cpu-percent">-<</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill cpu-fill" id="cpu-bar" style="width: -1%"></div>
+                        <div class="progress-fill cpu-fill" id="cpu-bar" style="width: 0%"></div>
                     </div>
                 </div>
                 <div class="resource-bar">
                     <div class="resource-header">
                         <span>GPU Usage</span>
-                        <span id="gpu-percent">-1%</span>
+                        <span id="gpu-percent">-<</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill gpu-fill" id="gpu-bar" style="width: -1%"></div>
+                        <div class="progress-fill gpu-fill" id="gpu-bar" style="width: 0%"></div>
                     </div>
                 </div>
                 <div class="resource-bar">
                     <div class="resource-header">
                         <span>Memory</span>
-                        <span id="mem-percent">-1%</span>
+                        <span id="mem-percent">-<</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill mem-fill" id="mem-bar" style="width: -1%"></div>
+                        <div class="progress-fill mem-fill" id="mem-bar" style="width: 0%"></div>
                     </div>
                 </div>
                 <div class="resource-bar">
                     <div class="resource-header">
                         <span>GPU Memory</span>
-                        <span id="gpu-mem">-1/-1 MB</span>
+                        <span id="gpu-mem">-/- MB</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill gpu-fill" id="gpu-mem-bar" style="width: -1%"></div>
+                        <div class="progress-fill gpu-fill" id="gpu-mem-bar" style="width: 0%"></div>
                     </div>
                 </div>
             </div>
@@ -677,8 +658,8 @@
                 <!-- Combined CPU/GPU Usage Graph -->
                 <div class="card">
                     <h2>Usage (60s)</h2>
+                    <div class="graph-label">CPU % & GPU %</div>
                     <div class="graph-container">
-                        <div class="graph-label">CPU % & GPU %</div>
                         <canvas id="combined-usage-graph" class="graph-canvas"></canvas>
                     </div>
                 </div>
@@ -688,27 +669,27 @@
                     <h2>Power</h2>
                     <div class="power-grid">
                         <div class="power-item">
-                            <div class="power-value" id="gpu-power-1">-1 W</div>
+                            <div class="power-value" id="gpu-power-1">- W</div>
                             <div class="power-label">GPU Power</div>
                         </div>
                         <div class="power-item">
-                            <div class="power-value" id="cpu-power-1">-1 W</div>
+                            <div class="power-value" id="cpu-power-1">- W</div>
                             <div class="power-label">CPU Power</div>
                         </div>
                         <div class="power-item">
-                            <div class="power-value" id="sys-power-1">-1 W</div>
+                            <div class="power-value" id="sys-power-1">- W</div>
                             <div class="power-label">System (llama.cpp)</div>
                         </div>
                         <div class="power-item">
-                            <div class="power-value" id="gpu-power-2">-1 W</div>
+                            <div class="power-value" id="gpu-power-2">- W</div>
                             <div class="power-label">GPU Power</div>
                         </div>
                         <div class="power-item">
-                            <div class="power-value" id="cpu-power-2">-1 W</div>
+                            <div class="power-value" id="cpu-power-2">- W</div>
                             <div class="power-label">CPU Power</div>
                         </div>
                         <div class="power-item">
-                            <div class="power-value" id="sys-power-2">-1 W</div>
+                            <div class="power-value" id="sys-power-2">- W</div>
                             <div class="power-label">System (Total)</div>
                         </div>
                     </div>
@@ -718,8 +699,8 @@
             <!-- Tokens/Sec Graph -->
             <div class="card">
                 <h2>Tokens/Sec (60s)</h2>
+                <div class="graph-label">Tokens/Sec</div>
                 <div class="graph-container">
-                    <div class="graph-label">Tokens/Sec</div>
                     <canvas id="tokens-graph" class="graph-canvas"></canvas>
                 </div>
             </div>
@@ -730,7 +711,7 @@
                 <div class="graph-container">
                     <canvas id="monthly-cost-graph" class="graph-canvas"></canvas>
                 </div>
-                <div class="cost-value" id="monthly-total-cost" style="margin-top: 15px; font-size: 1.2rem;">-$1.00</div>
+                <div class="cost-value" id="monthly-total-cost">-$1.00</div>
             </div>
         </div>
 
@@ -788,31 +769,21 @@
             return value.toString();
         }
 
-        // Chart.js plugin to draw labels on horizontal bar charts
+        // Chart.js plugin to draw labels on horizontal bar charts (context chart only)
         const barLabelPlugin = {
             id: 'barLabels',
             afterDatasetsDraw: function(chart) {
-                const id = chart.canvas.id;
-                const allowed = ['slot-progress-graph', 'context-used-graph'];
-                if (!allowed.includes(id)) return;
+                // Only draw labels on the context-used chart
+                if (chart.canvas.id !== 'context-used-graph') return;
+
                 const { ctx } = chart;
-                const isContextChart = id === 'context-used-graph';
 
                 chart.data.datasets.forEach(function(dataset, i) {
                     const meta = chart.getDatasetMeta(i);
-                    meta.data.forEach(function(bar, index) {
-                        const value = dataset.data[index];
-                        let label;
-
-                        if (isContextChart) {
-                            label = formatKUnit(value);
-                        } else {
-                            label = value + '%';
-                        }
-
+                    meta.data.forEach(function(bar, barIndex) {
+                        const value = dataset.data[barIndex];
+                        const label = formatKUnit(value);
                         const barWidth = bar.x;
-                        const barHeight = bar.y - bar.barHeight / 2;
-                        const barBottom = bar.y + bar.barHeight / 2;
 
                         ctx.save();
                         ctx.fillStyle = '#fff';
@@ -820,20 +791,15 @@
                         ctx.textBaseline = 'middle';
 
                         const textWidth = ctx.measureText(label).width;
-                        const minLabelOffset = 80;
 
                         if (barWidth > textWidth + 10) {
-                            // Label fits inside bar
+                            // Label fits inside bar - draw right-aligned inside
                             ctx.textAlign = 'right';
                             ctx.fillText(label, bar.x - 8, bar.y);
-                        } else if (barWidth > 0) {
-                            // Label outside bar to the right of the bar's leading edge
+                        } else {
+                            // Label doesn't fit inside bar - draw to the right of the bar
                             ctx.textAlign = 'left';
                             ctx.fillText(label, bar.x + 8, bar.y);
-                        } else {
-                            // Bar has zero width (0% progress) - use minimum offset from y-axis
-                            ctx.textAlign = 'left';
-                            ctx.fillText(label, minLabelOffset, bar.y);
                         }
 
                         ctx.restore();
@@ -908,7 +874,15 @@
                         intersect: false
                     },
                     plugins: {
-                        legend: { display: true, labels: { color: '#888' } }
+                        legend: { display: false }
+                    },
+                    layout: {
+                        padding: {
+                            top: 5,
+                            right: 5,
+                            bottom: 5,
+                            left: 5
+                        }
                     },
                     scales: {
                         y: {
@@ -959,17 +933,24 @@
                         intersect: false
                     },
                     plugins: {
-                        legend: { display: true, labels: { color: '#888' } }
+                        legend: { display: false }
                     },
-                    scales: {
-                        y: {
+                    layout: {
+                        padding: {
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            left: 0
+                        }
+                    },
+                      scales: {
+                         y: {
                             type: 'linear',
                             display: true,
                             position: 'left',
                             grid: { color: '#2a3b5c' },
                             ticks: { color: '#00d4ff', callback: function(v) { return v.toFixed(0); } },
-                            title: { display: true, text: 'Tokens Processed/s', color: '#00d4ff' },
-                            min: 0
+                            title: { display: true, text: 'Tokens Processed/s', color: '#00d4ff' }
                         },
                         y1: {
                             type: 'linear',
@@ -977,12 +958,10 @@
                             position: 'right',
                             grid: { drawOnChartArea: false },
                             ticks: { color: '#ffd93d', callback: function(v) { return v.toFixed(0); } },
-                            title: { display: true, text: 'Tokens Generated/s', color: '#ffd93d' },
-                            min: 0
+                            title: { display: true, text: 'Tokens Generated/s', color: '#ffd93d' }
                         },
                         x: {
-                            grid: { display: false },
-                            ticks: { color: '#888' }
+                            display: false
                         }
                     }
                 }
@@ -1010,6 +989,14 @@
                     plugins: {
                         legend: { display: false }
                     },
+                    layout: {
+                        padding: {
+                            top: 0,
+                            right: 0,
+                            bottom: 0,
+                            left: 0
+                        }
+                    },
                     scales: {
                         y: {
                             grid: { color: '#2a3b5c' },
@@ -1019,8 +1006,7 @@
                             }
                         },
                         x: {
-                            grid: { display: false },
-                            ticks: { color: '#888' }
+                            display: false
                         }
                     }
                 }
@@ -1072,20 +1058,28 @@
             const system = data.system || {};
             const cost = data.cost || {};
 
-            // Server metrics
+             // Server metrics
             const serverMetrics = server || {};
-            // Only update if value is valid (>= 0), leave -1 as-is to indicate "not updated"
-            if (serverMetrics.prompt_tokens_total !== undefined && serverMetrics.prompt_tokens_total >= 0) {
+            // Only update if value is valid (not null/undefined)
+            if (serverMetrics.prompt_tokens_total != null) {
                 document.getElementById('prompt-tokens').textContent = formatNumber(serverMetrics.prompt_tokens_total);
+            } else {
+                document.getElementById('prompt-tokens').textContent = '-';
             }
-            if (serverMetrics.tokens_predicted_total !== undefined && serverMetrics.tokens_predicted_total >= 0) {
+            if (serverMetrics.tokens_predicted_total != null) {
                 document.getElementById('generated-tokens').textContent = formatNumber(serverMetrics.tokens_predicted_total);
+            } else {
+                document.getElementById('generated-tokens').textContent = '-';
             }
-            if (serverMetrics.requests_processing !== undefined && serverMetrics.requests_processing >= 0) {
+            if (serverMetrics.requests_processing != null) {
                 document.getElementById('processing-requests').textContent = serverMetrics.requests_processing;
+            } else {
+                document.getElementById('processing-requests').textContent = '-';
             }
-            if (serverMetrics.requests_deferred !== undefined && serverMetrics.requests_deferred >= 0) {
+            if (serverMetrics.requests_deferred != null) {
                 document.getElementById('deferred-requests').textContent = serverMetrics.requests_deferred;
+            } else {
+                document.getElementById('deferred-requests').textContent = '-';
             }
 
             // Slots
@@ -1098,66 +1092,80 @@
             const gpu = system.gpu || {};
             const memory = system.memory || {};
 
-            // CPU - only update if valid (>= 0)
-            if (cpu.percent !== undefined && cpu.percent >= 0) {
+            // CPU
+            if (cpu.percent != null) {
                 document.getElementById('cpu-percent').textContent = cpu.percent.toFixed(1) + '%';
                 document.getElementById('cpu-bar').style.width = cpu.percent + '%';
+            } else {
+                document.getElementById('cpu-percent').textContent = '-';
+                document.getElementById('cpu-bar').style.width = '0%';
             }
 
-            // GPU - only update if valid (>= 0)
-            if (gpu.usage !== undefined && gpu.usage >= 0) {
+            // GPU
+            if (gpu.usage != null) {
                 document.getElementById('gpu-percent').textContent = gpu.usage.toFixed(1) + '%';
                 document.getElementById('gpu-bar').style.width = gpu.usage + '%';
+            } else {
+                document.getElementById('gpu-percent').textContent = '-';
+                document.getElementById('gpu-bar').style.width = '0%';
             }
 
-            // Memory - only update if valid (>= 0)
-            if (memory.percent !== undefined && memory.percent >= 0) {
+            // Memory
+            if (memory.percent != null) {
                 document.getElementById('mem-percent').textContent = memory.percent.toFixed(1) + '%';
                 document.getElementById('mem-bar').style.width = memory.percent + '%';
+            } else {
+                document.getElementById('mem-percent').textContent = '-';
+                document.getElementById('mem-bar').style.width = '0%';
             }
 
-            // GPU Memory - only update if valid (>= 0)
-            if (gpu.memory_used !== undefined && gpu.memory_used >= 0 && gpu.memory_total !== undefined && gpu.memory_total >= 0) {
+            // GPU Memory
+            if (gpu.memory_used != null && gpu.memory_total != null) {
                 document.getElementById('gpu-mem').textContent = `${gpu.memory_used}/${gpu.memory_total} MB`;
                 const gpuMemPercent = gpu.memory_total > 0 ? (gpu.memory_used / gpu.memory_total) * 100 : 0;
                 document.getElementById('gpu-mem-bar').style.width = gpuMemPercent + '%';
+            } else {
+                document.getElementById('gpu-mem').textContent = '-/- MB';
+                document.getElementById('gpu-mem-bar').style.width = '0%';
             }
 
-            // Power - only update if valid (>= 0)
-            const gpuPower = gpu.power_w !== undefined && gpu.power_w >= 0 ? gpu.power_w : null;
-            const cpuPower = cpu.power_w !== undefined && cpu.power_w >= 0 ? cpu.power_w : null;
-            const sysPowerTotal = system.system_power_w !== undefined && system.system_power_w >= 0 ? system.system_power_w : null;
+            // Power
+            const gpuPower = gpu.power_w ?? null;
+            const cpuPower = cpu.power_w ?? null;
+            const sysPowerTotal = system.system_power_w ?? null;
             if (gpuPower !== null || cpuPower !== null) {
                 const filteredPower = (gpuPower || 0) + (cpuPower || 0);
-                document.getElementById('gpu-power-1').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-1') + ' W';
-                document.getElementById('cpu-power-1').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-1') + ' W';
+                document.getElementById('gpu-power-1').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-') + ' W';
+                document.getElementById('cpu-power-1').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-') + ' W';
                 document.getElementById('sys-power-1').textContent = filteredPower.toFixed(0) + ' W';
-                document.getElementById('gpu-power-2').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-1') + ' W';
-                document.getElementById('cpu-power-2').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-1') + ' W';
-                document.getElementById('sys-power-2').textContent = (sysPowerTotal !== null ? sysPowerTotal.toFixed(0) : '-1') + ' W';
+                document.getElementById('gpu-power-2').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-') + ' W';
+                document.getElementById('cpu-power-2').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-') + ' W';
+                document.getElementById('sys-power-2').textContent = (sysPowerTotal !== null ? sysPowerTotal.toFixed(0) : '-') + ' W';
             }
 
-            // Cost - only update if valid (>= 0)
+            // Cost
             if (costDisplayEnabled) {
-                console.log('updateDisplay: costDisplayEnabled=true, cost=', cost);
                 // Use session_cost_usd or total_cost for session cost display
-                const sessionCost = cost.session_cost_usd !== undefined ? cost.session_cost_usd : (cost.total_cost !== undefined ? cost.total_cost : undefined);
-                console.log('updateDisplay: sessionCost=', sessionCost);
-                if (sessionCost !== undefined && sessionCost >= 0) {
+                const sessionCost = cost.session_cost_usd ?? cost.total_cost ?? null;
+                if (sessionCost != null && sessionCost >= 0) {
                     document.getElementById('session-cost').textContent = '$' + sessionCost.toFixed(4);
+                } else {
+                    document.getElementById('session-cost').textContent = '-';
                 }
                 // Update today's cost
-                console.log('updateDisplay: today_cost=', cost.today_cost);
-                if (cost.today_cost !== undefined && cost.today_cost >= 0) {
-                    document.getElementById('today-cost').textContent = '$' + cost.today_cost.toFixed(4);
+                const todayCost = cost.today_cost ?? null;
+                if (todayCost != null && todayCost >= 0) {
+                    document.getElementById('today-cost').textContent = '$' + todayCost.toFixed(4);
+                } else {
+                    document.getElementById('today-cost').textContent = '-';
                 }
-                // Update total energy (Wh) - use today_wh for display (session energy may be 0)
-                console.log('updateDisplay: today_wh=', cost.today_wh);
-                if (cost.today_wh !== undefined && cost.today_wh >= 0) {
-                    document.getElementById('total-energy').textContent = cost.today_wh.toFixed(2) + ' Wh';
+                // Update total energy (Wh)
+                const todayWh = cost.today_wh ?? null;
+                if (todayWh != null && todayWh >= 0) {
+                    document.getElementById('total-energy').textContent = todayWh.toFixed(2) + ' Wh';
+                } else {
+                    document.getElementById('total-energy').textContent = '-';
                 }
-            } else {
-                console.log('updateDisplay: costDisplayEnabled=false');
             }
         }
 
@@ -1183,8 +1191,8 @@
             } else {
                 historyData.gpu.push(gpuUtil);
                 historyData.cpu.push(cpuUtil);
-                historyData.tokens.push(tokensGeneratedPerSec);
                 historyData.promptTokens.push(tokensProcessedPerSec);
+                historyData.tokens.push(tokensGeneratedPerSec);
                 historyData.labels.push(new Date().toLocaleTimeString());
 
                 // Keep only MAX_HISTORY points
@@ -1205,8 +1213,8 @@
             combinedUsageChart.data.labels = historyData.labels;
             combinedUsageChart.update('none');
 
-            tokensChart.data.datasets[0].data = historyData.tokens;
-            tokensChart.data.datasets[1].data = historyData.promptTokens;
+            tokensChart.data.datasets[0].data = historyData.promptTokens;
+            tokensChart.data.datasets[1].data = historyData.tokens;
             tokensChart.data.labels = historyData.labels;
             tokensChart.update('none');
         }
@@ -1214,6 +1222,10 @@
         // Update slot progress and context remaining charts
         function updateSlotCharts(data) {
             const slots = data.server?.slots || [];
+
+            // Calculate dynamic height based on number of slots
+            const slotCount = slots.length;
+            const chartHeight = slotCount > 0 ? Math.max(60, slotCount * 24) : 20;
 
             if (!slots || slots.length === 0) {
                 // Clear charts if no slots
@@ -1228,7 +1240,7 @@
             }
 
             // Extract slot progress data
-            const slotLabels = slots.map((slot, index) => `Slot ${slot.id || index}`);
+            const slotLabels = slots.map((slot, index) => `Slot ${slot.id != null ? slot.id : index}`);
             const slotProgress = slots.map(slot => {
                 // Use progress from aggregator (calculated from n_prompt_tokens_processed / n_prompt_tokens)
                 // Convert to percentage (0-100)
@@ -1236,40 +1248,25 @@
             });
 
             // Update slot progress chart
+            document.getElementById('slot-progress-graph').style.height = chartHeight + 'px';
             slotProgressChart.data.labels = slotLabels;
             slotProgressChart.data.datasets[0].data = slotProgress;
             slotProgressChart.update('none');
 
             // Extract context used data
-            // Context used is the number of tokens currently in context
-            // We need to get the context limit from the props or use a default
             const props = data.server?.props || {};
-            // n_ctx is at props.default_generation_settings.n_ctx (per-slot context)
-            const contextLimit = props.default_generation_settings?.n_ctx || 4096; // Default to 4096 if not available
+            const contextLimit = props.default_generation_settings?.n_ctx || 4096;
 
             const contextUsed = slots.map(slot => {
-                const n_prompt_tokens = slot.n_prompt_tokens || 0;
-                const n_gen_tokens = slot.n_gen_tokens || 0;
-                const n_tokens = slot.n_tokens || 0;
-                // Context used is n_tokens (tokens currently in context)
-                // The 'n_tokens' represents tokens currently in the context
-                return n_tokens;
+                return slot.n_tokens || 0;
             });
 
             // Update context used chart
             contextUsedChart.options.scales.x.max = contextLimit;
+            document.getElementById('context-used-graph').style.height = chartHeight + 'px';
             contextUsedChart.data.labels = slotLabels;
             contextUsedChart.data.datasets[0].data = contextUsed;
             contextUsedChart.update('none');
-
-            // Scale graph container heights based on number of slots
-            const slotContainer = document.getElementById('slot-progress-container');
-            const contextContainer = document.getElementById('context-used-container');
-            const heightPerSlot = 60;
-            const baseHeight = 100;
-            const slotHeight = Math.max(baseHeight, slots.length * heightPerSlot);
-            if (slotContainer) slotContainer.style.height = slotHeight + 'px';
-            if (contextContainer) contextContainer.style.height = slotHeight + 'px';
         }
 
         // Initialize slot progress and context used charts
@@ -1284,8 +1281,6 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Progress',
-                        data: [],
                         backgroundColor: '#00d4ff',
                         borderColor: '#0099cc',
                         borderWidth: 1,
@@ -1300,13 +1295,14 @@
                     maintainAspectRatio: false,
                     animation: false,
                     plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return 'Progress: ' + context.parsed.x + '%';
-                                }
-                            }
+                        legend: { display: false }
+                    },
+                    layout: {
+                        padding: {
+                            top: 5,
+                            right: 5,
+                            bottom: 5,
+                            left: 150
                         }
                     },
                     scales: {
@@ -1314,12 +1310,17 @@
                             min: 0,
                             max: 100,
                             grid: { color: '#2a3b5c' },
-                            ticks: { color: '#888', callback: function(value) { return value + '%'; } },
-                            title: { display: false }
+                            ticks: {
+                                color: '#888',
+                                callback: function(value) { return value + '%'; },
+                                maxTicksLimit: 5
+                            }
                         },
                         y: {
                             grid: { display: false },
-                            ticks: { color: '#888' }
+                            ticks: {
+                                color: '#888'
+                            }
                         }
                     }
                 }
@@ -1331,8 +1332,6 @@
                 data: {
                     labels: [],
                     datasets: [{
-                        label: 'Context Used',
-                        data: [],
                         backgroundColor: '#00ff88',
                         borderColor: '#00cc6a',
                         borderWidth: 1,
@@ -1347,31 +1346,32 @@
                     maintainAspectRatio: false,
                     animation: false,
                     plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return formatKUnit(context.parsed.x);
-                                }
-                            }
+                        legend: { display: false }
+                    },
+                    layout: {
+                        padding: {
+                            top: 5,
+                            right: 5,
+                            bottom: 5,
+                            left: 150
                         }
                     },
                     scales: {
                         x: {
                             min: 0,
-                            max: 4096,
                             grid: { color: '#2a3b5c' },
                             ticks: {
                                 color: '#888',
                                 callback: function(value) {
                                     return formatKUnit(value);
                                 }
-                            },
-                            title: { display: false }
+                            }
                         },
                         y: {
                             grid: { display: false },
-                            ticks: { color: '#888' }
+                            ticks: {
+                                color: '#888'
+                            }
                         }
                     }
                 }
@@ -1380,48 +1380,56 @@
 
         // Update summary
         function updateSummary(data) {
-            const energy = data.cost || {};
+             const energy = data.cost || {};
             const serverMetrics = data.server || {};
             const cost = data.cost || {};
             const costRate = CONFIG.costRate || 0.12;
 
-            // Only update if value is valid (>= 0), leave -1 as-is to indicate "not updated"
-            if (serverMetrics.prompt_tokens_total !== undefined && serverMetrics.prompt_tokens_total >= 0) {
+            // Update if value is valid (not null/undefined)
+            if (serverMetrics.prompt_tokens_total != null) {
                 document.getElementById('total-tokens').textContent = formatNumber(serverMetrics.prompt_tokens_total);
+            } else {
+                document.getElementById('total-tokens').textContent = '-';
             }
-            if (serverMetrics.predicted_tokens_seconds !== undefined && serverMetrics.predicted_tokens_seconds >= 0) {
+            if (serverMetrics.predicted_tokens_seconds != null) {
                 document.getElementById('tokens-per-sec').textContent = formatNumber(serverMetrics.predicted_tokens_seconds);
+            } else {
+                document.getElementById('tokens-per-sec').textContent = '-';
             }
-            // Use today_wh for total-energy display (session total_wh may be 0)
-            if (energy.today_wh !== undefined && energy.today_wh >= 0) {
-                document.getElementById('total-energy').textContent = energy.today_wh.toFixed(1) + ' Wh';
-            } else if (energy.total_wh !== undefined && energy.total_wh >= 0) {
-                document.getElementById('total-energy').textContent = energy.total_wh.toFixed(1) + ' Wh';
+            // Use today_wh for total-energy display
+            const todayWh = energy.today_wh ?? energy.total_wh ?? null;
+            if (todayWh != null && todayWh >= 0) {
+                document.getElementById('total-energy').textContent = todayWh.toFixed(1) + ' Wh';
+            } else {
+                document.getElementById('total-energy').textContent = '-';
             }
-            if (cost.session_cost_usd !== undefined && cost.session_cost_usd >= 0) {
-                document.getElementById('session-cost').textContent = '$' + cost.session_cost_usd.toFixed(4);
+            const sessionCost = cost.session_cost_usd ?? null;
+            if (sessionCost != null && sessionCost >= 0) {
+                document.getElementById('session-cost').textContent = '$' + sessionCost.toFixed(4);
+            } else {
+                document.getElementById('session-cost').textContent = '-';
             }
 
             // Update Key Metrics: today's energy
             const todayEnergyEl = document.getElementById('today-energy');
             if (todayEnergyEl) {
-                const todayEnergy = energy.today_wh;
-                if (todayEnergy !== undefined && todayEnergy >= 0) {
+                const todayEnergy = energy.today_wh ?? null;
+                if (todayEnergy != null && todayEnergy >= 0) {
                     todayEnergyEl.textContent = todayEnergy.toFixed(1) + ' Wh';
+                } else {
+                    todayEnergyEl.textContent = '-';
                 }
             }
 
             // Update Key Metrics: today's cost from energy * rate / 1000
             const todayCostEl = document.getElementById('today-cost');
-            console.log('updateSummary: todayCostEl=', todayCostEl, 'energy.today_wh=', energy.today_wh, 'costRate=', costRate);
             if (todayCostEl) {
-                const todayEnergy = energy.today_wh;
-                if (todayEnergy !== undefined && todayEnergy >= 0) {
+                const todayEnergy = energy.today_wh ?? null;
+                if (todayEnergy != null && todayEnergy >= 0) {
                     const todayCost = (todayEnergy * costRate / 1000).toFixed(2);
                     todayCostEl.textContent = '$' + todayCost;
-                    console.log('updateSummary: updated today-cost to $' + todayCost);
                 } else {
-                    console.log('updateSummary: todayEnergy not valid:', todayEnergy);
+                    todayCostEl.textContent = '-';
                 }
             }
         }
