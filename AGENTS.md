@@ -26,6 +26,10 @@ Follow the process documents in sequence. Read the current process document befo
 **IMPORTANT: Always start the software using llamamonitor.py**
 **Never** run individual Python files (web_server.py, aggregator_daemon.py, etc.) directly. This will result in broken behavior.
 
+## Documentation
+
+See [Documentation Map](docs/README.md) for the full index of project documentation files.
+
 ## Quick Reference
 
 ```bash
