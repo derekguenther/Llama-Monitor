@@ -179,11 +179,24 @@ class ServerMetricsCollector:
                     if progress == 0.0 and slot.get("n_gen_tokens", 0) > 0:
                         progress = 1.0
                     
+                    # Calculate context used (n_tokens) - may not be in all llama.cpp builds
+                    n_tokens = slot.get("n_tokens", 0)
+                    if n_tokens == 0:
+                        # Build n_tokens from available fields (cache + newly processed + generated)
+                        n_cache = slot.get("n_prompt_tokens_cache", 0)
+                        n_prompt_processed = slot.get("n_prompt_tokens_processed", 0)
+                        n_gen = slot.get("n_gen_tokens", 0)
+                        n_decoded = 0
+                        next_token_list = slot.get("next_token", [])
+                        if next_token_list and isinstance(next_token_list, list):
+                            n_decoded = next_token_list[0].get("n_decoded", 0)
+                        n_tokens = n_cache + n_prompt_processed + max(n_gen, n_decoded)
+
                     result.append(
                         {
                             "id": slot.get("id", 0),
                             "task": slot.get("task", -1),
-                            "n_tokens": slot.get("n_tokens", 0),
+                            "n_tokens": n_tokens,
                             "n_prompt_tokens": slot.get("n_prompt_tokens", 0),
                             "n_gen_tokens": slot.get("n_gen_tokens", 0),
                             "n_prompt_tokens_processed": n_prompt_tokens_processed,

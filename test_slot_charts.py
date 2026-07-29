@@ -284,6 +284,11 @@ class TestSlotChartsIntegration(unittest.TestCase):
             "session_cost_usd": 1.20,
             "total_wh": 500.0,
         }
+        # Setup get_today_stats to return a dict (not a Mock)
+        mock_cost_instance.get_today_stats.return_value = {
+            "total_wh": 100.0, "gpu_wh": 50.0, "cpu_wh": 50.0, "total_cost_usd": 0.012
+        }
+
         mock_cost_calc.return_value = mock_cost_instance
 
         # Setup database mock
