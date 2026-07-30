@@ -212,12 +212,12 @@ class ServerMetricsCollector:
                     result.append(
                         {
                             "id": _v("id"),
-                            "task": _v("task", -1),
-                            "n_tokens": n_tokens,
-                            "n_prompt_tokens": n_prompt_tokens,
-                            "n_gen_tokens": n_gen_tokens,
-                            "n_prompt_tokens_processed": n_prompt_tokens_processed,
-                            "progress": progress,
+                            "task": max(-1, _v("task", -1)),
+                            "n_tokens": max(0, n_tokens),
+                            "n_prompt_tokens": max(0, n_prompt_tokens),
+                            "n_gen_tokens": max(0, n_gen_tokens),
+                            "n_prompt_tokens_processed": max(0, n_prompt_tokens_processed),
+                            "progress": max(0.0, min(1.0, progress)),
                             "state": slot_state,
                             "prompt": slot.get("prompt", ""),
                             "generated": slot.get("generated", ""),

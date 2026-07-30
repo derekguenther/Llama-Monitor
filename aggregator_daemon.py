@@ -146,12 +146,14 @@ class Aggregator:
         
         server = server_data.get("server", {})
         result = {
-            "prompt_tokens_total": safe_float(server.get("prompt_tokens_total")),
-            "prompt_tokens_seconds": safe_float(server.get("prompt_tokens_seconds")),
-            "tokens_predicted_total": safe_float(server.get("tokens_predicted_total")),
-            "predicted_tokens_seconds": safe_float(server.get("predicted_tokens_seconds")),
-            "requests_processing": safe_float(server.get("requests_processing")),
-            "requests_deferred": safe_float(server.get("requests_deferred")),
+            "prompt_tokens_total": max(0, safe_float(server.get("prompt_tokens_total"))),
+            "prompt_tokens_seconds": max(0, safe_float(server.get("prompt_tokens_seconds"))),
+            "tokens_predicted_total": max(0, safe_float(server.get("tokens_predicted_total"))),
+            "predicted_tokens_seconds": max(0, safe_float(server.get("predicted_tokens_seconds"))),
+            "requests_processing": max(0, safe_float(server.get("requests_processing"))),
+            "requests_deferred": max(0, safe_float(server.get("requests_deferred"))),
+            "prompt_tokens_seconds_instant": max(0, safe_float(server.get("prompt_tokens_seconds_instant"))),
+            "predicted_tokens_seconds_instant": max(0, safe_float(server.get("predicted_tokens_seconds_instant"))),
         }
 
         # Include slots data if available (check explicitly for None, not empty list)
@@ -262,21 +264,33 @@ class Aggregator:
             duration_seconds=duration
         )
 
+        def _clamp(value, minimum=0):
+            """Clamp a numeric value to minimum, handling non-numeric types gracefully."""
+            try:
+                return max(minimum, float(value)) if value is not None else minimum
+            except (ValueError, TypeError):
+                return minimum
+
         # Add today's energy stats from database for display
         today_stats = self.cost_calculator.get_today_stats()
         if today_stats:
-            base_cost["today_wh"] = today_stats["total_wh"]
-            base_cost["today_gpu_wh"] = today_stats["gpu_wh"]
-            base_cost["today_cpu_wh"] = today_stats["cpu_wh"]
-            base_cost["today_cost"] = today_stats["total_cost_usd"]
+            base_cost["today_wh"] = _clamp(today_stats.get("total_wh"))
+            base_cost["today_gpu_wh"] = _clamp(today_stats.get("gpu_wh"))
+            base_cost["today_cpu_wh"] = _clamp(today_stats.get("cpu_wh"))
+            base_cost["today_cost"] = _clamp(today_stats.get("total_cost_usd"))
+        else:
+            base_cost["today_wh"] = 0
+            base_cost["today_gpu_wh"] = 0
+            base_cost["today_cpu_wh"] = 0
+            base_cost["today_cost"] = 0
 
         # Add session cumulative energy (total_wh from cost_calculator)
-        base_cost["total_wh"] = self.cost_calculator.total_energy_wh
+        base_cost["total_wh"] = _clamp(self.cost_calculator.total_energy_wh)
 
         # Add session cost for frontend display
-        base_cost["session_cost_usd"] = self.cost_calculator.calculate_cost(
+        base_cost["session_cost_usd"] = _clamp(self.cost_calculator.calculate_cost(
             self.cost_calculator.total_energy_wh
-        )
+        ))
         base_cost["total_cost"] = base_cost["session_cost_usd"]
 
         return base_cost
