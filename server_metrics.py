@@ -21,6 +21,12 @@ class ServerMetricsCollector:
         self.metrics_endpoint = metrics_endpoint
         self.collect_metrics = collect_metrics
         self.metrics_available = True  # Will be set to False if /metrics returns error
+        # Previous cumulative values for instantaneous rate calculation
+        self._prev_prompt_tokens_total = None
+        self._prev_prompt_seconds_total = None
+        self._prev_tokens_predicted_total = None
+        self._prev_tokens_predicted_seconds_total = None
+        self._prev_timestamp = None
 
     def _make_request(self, endpoint: str) -> Optional[Any]:
         """Make HTTP request to server endpoint.
@@ -92,6 +98,8 @@ class ServerMetricsCollector:
             metrics = self.get_metrics()
             if metrics:
                 result["server"] = self._parse_metrics(metrics)
+                # Calculate instantaneous token rates from cumulative deltas
+                self._compute_instant_rates(result["server"])
             else:
                 # Metrics endpoint returned None (not supported)
                 result["metrics_available"] = False
@@ -212,6 +220,52 @@ class ServerMetricsCollector:
             result.append(slots)
 
         return result
+
+    def _compute_instant_rates(self, server: Dict[str, Any]) -> None:
+        """Calculate instantaneous token rates from cumulative delta.
+
+        The /metrics endpoint provides cumulative averages (total/seconds).
+        This method tracks deltas between consecutive poll cycles to compute
+        instantaneous rates that reflect current activity.
+
+        Adds prompt_tokens_seconds_instant and predicted_tokens_seconds_instant
+        to the server dict in-place.
+        """
+        now = time.time()
+        pt = server.get("prompt_tokens_total")
+        pst = server.get("prompt_seconds_total")
+        tt = server.get("tokens_predicted_total")
+        tst = server.get("tokens_predicted_seconds_total")
+
+        if None in (pt, pst, tt, tst) or self._prev_timestamp is None:
+            # First call or missing data — store baseline, no rate yet
+            self._prev_prompt_tokens_total = pt
+            self._prev_prompt_seconds_total = pst
+            self._prev_tokens_predicted_total = tt
+            self._prev_tokens_predicted_seconds_total = tst
+            self._prev_timestamp = now
+            server["prompt_tokens_seconds_instant"] = 0.0
+            server["predicted_tokens_seconds_instant"] = 0.0
+            return
+
+        dt = now - self._prev_timestamp
+        dpt = pt - self._prev_prompt_tokens_total
+        dpst = pst - self._prev_prompt_seconds_total
+        dtt = tt - self._prev_tokens_predicted_total
+        dtst = tst - self._prev_tokens_predicted_seconds_total
+
+        # Update stored prev values for next cycle
+        self._prev_prompt_tokens_total = pt
+        self._prev_prompt_seconds_total = pst
+        self._prev_tokens_predicted_total = tt
+        self._prev_tokens_predicted_seconds_total = tst
+        self._prev_timestamp = now
+
+        prompt_rate = dpt / dt if dt > 0 and dpt >= 0 else 0.0
+        gen_rate = dtt / dt if dt > 0 and dtt >= 0 else 0.0
+
+        server["prompt_tokens_seconds_instant"] = round(prompt_rate, 2)
+        server["predicted_tokens_seconds_instant"] = round(gen_rate, 2)
 
 
 def format_metrics_display(metrics: Dict[str, Any]) -> str:

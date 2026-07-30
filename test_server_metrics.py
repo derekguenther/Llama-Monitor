@@ -211,6 +211,59 @@ requests_processing 2
         result = self.collector._parse_metrics({})
         self.assertEqual(result, {})
 
+    def test_compute_instant_rates_first_call_returns_zero(self):
+        """Test that first call to _compute_instant_rates returns 0 rates."""
+        server = {
+            "prompt_tokens_total": 1000,
+            "prompt_seconds_total": 10.0,
+            "tokens_predicted_total": 500,
+            "tokens_predicted_seconds_total": 25.0,
+        }
+        self.collector._compute_instant_rates(server)
+        self.assertEqual(server.get("prompt_tokens_seconds_instant"), 0.0)
+        self.assertEqual(server.get("predicted_tokens_seconds_instant"), 0.0)
+
+    def test_compute_instant_rates_second_call(self):
+        """Test that second call computes delta correctly."""
+        import time
+        server = {
+            "prompt_tokens_total": 1000,
+            "prompt_seconds_total": 10.0,
+            "tokens_predicted_total": 500,
+            "tokens_predicted_seconds_total": 25.0,
+        }
+        self.collector._compute_instant_rates(server)
+        server["prompt_tokens_total"] = 1100
+        server["tokens_predicted_total"] = 550
+        self.collector._prev_timestamp = time.time() - 1.0
+        time.sleep(0.01)
+        self.collector._compute_instant_rates(server)
+        self.assertGreater(server.get("prompt_tokens_seconds_instant", 0), 50)
+        self.assertGreater(server.get("predicted_tokens_seconds_instant", 0), 25)
+
+    def test_compute_instant_rates_idle_returns_zero(self):
+        """Test that idle server returns 0 rates."""
+        import time
+        server = {
+            "prompt_tokens_total": 1000,
+            "prompt_seconds_total": 10.0,
+            "tokens_predicted_total": 500,
+            "tokens_predicted_seconds_total": 25.0,
+        }
+        self.collector._compute_instant_rates(server)
+        self.collector._prev_timestamp = time.time() - 1.0
+        time.sleep(0.01)
+        self.collector._compute_instant_rates(server)
+        self.assertEqual(server.get("prompt_tokens_seconds_instant"), 0.0)
+        self.assertEqual(server.get("predicted_tokens_seconds_instant"), 0.0)
+
+    def test_compute_instant_rates_missing_fields(self):
+        """Test that missing fields don't crash."""
+        server = {}
+        self.collector._compute_instant_rates(server)
+        self.assertEqual(server.get("prompt_tokens_seconds_instant"), 0.0)
+        self.assertEqual(server.get("predicted_tokens_seconds_instant"), 0.0)
+
 
 class TestParseSlots(unittest.TestCase):
     """Tests for _parse_slots method."""

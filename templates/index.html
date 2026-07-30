@@ -1179,8 +1179,9 @@
             // Add new data points
             const gpuUtil = system.gpu?.usage || 0;
             const cpuUtil = system.cpu?.percent || 0;
-            const tokensGeneratedPerSec = serverMetrics.predicted_tokens_seconds || 0;
-            const tokensProcessedPerSec = serverMetrics.prompt_tokens_seconds || 0;
+            // Use instantaneous rates when available, fall back to cumulative averages
+            const tokensGeneratedPerSec = serverMetrics.predicted_tokens_seconds_instant || serverMetrics.predicted_tokens_seconds || 0;
+            const tokensProcessedPerSec = serverMetrics.prompt_tokens_seconds_instant || serverMetrics.prompt_tokens_seconds || 0;
 
             console.log('updateCharts: tokensGeneratedPerSec=' + tokensGeneratedPerSec + ', tokensProcessedPerSec=' + tokensProcessedPerSec);
             console.log('updateCharts: historyData.tokens before=' + JSON.stringify(historyData.tokens));
