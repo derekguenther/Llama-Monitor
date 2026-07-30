@@ -173,43 +173,52 @@ class ServerMetricsCollector:
         if isinstance(slots, list):
             for slot in slots:
                 if isinstance(slot, dict):
-                    # Calculate progress from prompt processing stats
-                    # llama.cpp /slots API doesn't include progress field, so we calculate it
-                    progress = slot.get("progress", 0.0)
-                    n_prompt_tokens = slot.get("n_prompt_tokens", 0)
-                    n_prompt_tokens_processed = slot.get("n_prompt_tokens_processed", 0)
+                    # Convert None to 0/default for numeric fields
+                    def _v(key, default=0):
+                        val = slot.get(key, default)
+                        return val if val is not None else default
+
+                    slot_state = slot.get("state")
+                    progress = slot.get("progress")
+                    n_prompt_tokens = _v("n_prompt_tokens")
+                    n_prompt_tokens_processed = _v("n_prompt_tokens_processed")
+                    n_gen_tokens = _v("n_gen_tokens")
                     
-                    # If progress is 0 or missing but we have prompt processing stats, calculate it
-                    if progress == 0.0 and n_prompt_tokens > 0:
-                        progress = n_prompt_tokens_processed / n_prompt_tokens
+                    # Normalize state: None (from JSON null) means idle
+                    if slot_state is None:
+                        slot_state = "idle"
                     
-                    # Fallback: if still 0 but generating tokens, slot is at 100% prompt completion
-                    if progress == 0.0 and slot.get("n_gen_tokens", 0) > 0:
-                        progress = 1.0
+                    # Calculate progress when actively processing
+                    if progress is None:
+                        if slot_state == "processing" and n_prompt_tokens > 0:
+                            progress = n_prompt_tokens_processed / n_prompt_tokens
+                            if progress == 0.0 and n_gen_tokens > 0:
+                                progress = 1.0
+                        else:
+                            progress = 0.0
                     
-                    # Calculate context used (n_tokens) - may not be in all llama.cpp builds
-                    n_tokens = slot.get("n_tokens", 0)
+                    n_tokens = _v("n_tokens")
                     if n_tokens == 0:
-                        # Build n_tokens from available fields (cache + newly processed + generated)
-                        n_cache = slot.get("n_prompt_tokens_cache", 0)
-                        n_prompt_processed = slot.get("n_prompt_tokens_processed", 0)
-                        n_gen = slot.get("n_gen_tokens", 0)
+                        n_cache = _v("n_prompt_tokens_cache")
+                        n_gen = _v("n_gen_tokens")
                         n_decoded = 0
                         next_token_list = slot.get("next_token", [])
                         if next_token_list and isinstance(next_token_list, list):
-                            n_decoded = next_token_list[0].get("n_decoded", 0)
-                        n_tokens = n_cache + n_prompt_processed + max(n_gen, n_decoded)
+                            next_token = next_token_list[0]
+                            if isinstance(next_token, dict):
+                                n_decoded = next_token.get("n_decoded") or 0
+                        n_tokens = n_cache + n_prompt_tokens_processed + max(n_gen, n_decoded)
 
                     result.append(
                         {
-                            "id": slot.get("id", 0),
-                            "task": slot.get("task", -1),
+                            "id": _v("id"),
+                            "task": _v("task", -1),
                             "n_tokens": n_tokens,
-                            "n_prompt_tokens": slot.get("n_prompt_tokens", 0),
-                            "n_gen_tokens": slot.get("n_gen_tokens", 0),
+                            "n_prompt_tokens": n_prompt_tokens,
+                            "n_gen_tokens": n_gen_tokens,
                             "n_prompt_tokens_processed": n_prompt_tokens_processed,
                             "progress": progress,
-                            "state": slot.get("state", "idle"),
+                            "state": slot_state,
                             "prompt": slot.get("prompt", ""),
                             "generated": slot.get("generated", ""),
                             "next_token": slot.get("next_token", []),
