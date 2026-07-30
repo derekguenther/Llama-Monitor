@@ -5,7 +5,8 @@ echo ==========================================
 echo.
 
 :: Navigate to your project folder
-cd /d "C:\Users\ClaudeCode\Documents\llama-monitor"
+%~d0
+cd %~dp0
 
 :: Show the current status so you can see what is about to be pushed
 echo --- Current Git Status ---

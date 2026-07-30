@@ -28,7 +28,7 @@ Follow the process documents in sequence. Read the current process document befo
 
 ## Documentation
 
-See [Documentation Map](docs/README.md) for the full index of project documentation files.
+See [Documentation Map](docs/DOCUMENTATION_MAP.md) for the full index of project documentation files.
 
 ## Quick Reference
 
