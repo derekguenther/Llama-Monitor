@@ -266,11 +266,12 @@
             font-size: 0.9rem;
             color: #888;
             margin-bottom: 5px;
+            font-weight: bold;
         }
 
         .key-metric-value {
             line-height: 1;
-            font-size: 6rem;
+            font-size: 4.5rem;
             font-weight: bold;
             color: #00d4ff;
         }
@@ -491,9 +492,6 @@
         <!-- Header -->
         <div class="header">
             <h1><i class="fa-solid fa-chart-line"></i> Llama Monitor</h1>
-            <div class="server-info">
-                Server: <a href="{{ server_url }}" target="_blank">{{ server_url }}</a>
-            </div>
         </div>
 
 
@@ -506,6 +504,14 @@
             <div class="key-metric-item">
                 <div class="key-metric-label">Today's Energy</div>
                 <div class="key-metric-value energy" id="today-energy">-</div>
+            </div>
+            <div class="key-metric-item">
+                <div class="key-metric-label">Total Cost</div>
+                <div class="key-metric-value" id="total-cost">-$1.00</div>
+            </div>
+            <div class="key-metric-item">
+                <div class="key-metric-label">Total Energy</div>
+                <div class="key-metric-value energy" id="total-energy-km">-</div>
             </div>
         </div>
         <!-- Vendor Comparison Modal -->
@@ -700,7 +706,6 @@
             <!-- Tokens/Sec Graph -->
             <div class="card">
                 <h2>Tokens/Sec (60s)</h2>
-                <div class="graph-label">Tokens/Sec</div>
                 <div class="graph-container">
                     <canvas id="tokens-graph" class="graph-canvas"></canvas>
                 </div>
@@ -1259,6 +1264,12 @@
             progressContainer.style.height = chartHeight + 'px';
             slotProgressChart.data.labels = slotLabels;
             slotProgressChart.data.datasets[0].data = slotProgress;
+            slotProgressChart.data.datasets[0].backgroundColor = slotProgress.map(p =>
+                p >= 100 ? '#666' : '#00d4ff'
+            );
+            slotProgressChart.data.datasets[0].borderColor = slotProgress.map(p =>
+                p >= 100 ? '#444' : '#0099cc'
+            );
             slotProgressChart.resize();
             slotProgressChart.update('none');
 
@@ -1429,6 +1440,28 @@
                     todayEnergyEl.textContent = todayEnergy.toFixed(1) + ' Wh';
                 } else {
                     todayEnergyEl.textContent = '-';
+                }
+            }
+
+            // Update Key Metrics: total cost (lifetime)
+            const totalCostEl = document.getElementById('total-cost');
+            if (totalCostEl) {
+                const totalCost = cost.session_cost_usd ?? null;
+                if (totalCost != null && totalCost >= 0) {
+                    totalCostEl.textContent = '$' + totalCost.toFixed(4);
+                } else {
+                    totalCostEl.textContent = '-';
+                }
+            }
+
+            // Update Key Metrics: total energy (lifetime)
+            const totalEnergyKmEl = document.getElementById('total-energy-km');
+            if (totalEnergyKmEl) {
+                const totalEnergy = energy.total_wh ?? null;
+                if (totalEnergy != null && totalEnergy >= 0) {
+                    totalEnergyKmEl.textContent = totalEnergy.toFixed(1) + ' Wh';
+                } else {
+                    totalEnergyKmEl.textContent = '-';
                 }
             }
 
