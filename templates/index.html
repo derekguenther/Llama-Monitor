@@ -231,6 +231,7 @@
         .slot-context-card {
             display: flex;
             flex-direction: column;
+            align-items: start;
         }
 
         .slot-graph {
@@ -706,12 +707,12 @@
             </div>
 
             <!-- Monthly Cost Graph -->
-            <div class="card">
+            <div class="card" style="position: relative;">
                 <h2>Monthly Cost</h2>
                 <div class="graph-container">
                     <canvas id="monthly-cost-graph" class="graph-canvas"></canvas>
                 </div>
-                <div class="cost-value" id="monthly-total-cost">-$1.00</div>
+                <div class="cost-value" id="monthly-total-cost">$0.00</div>
             </div>
         </div>
 
@@ -773,16 +774,19 @@
         const barLabelPlugin = {
             id: 'barLabels',
             afterDatasetsDraw: function(chart) {
-                // Only draw labels on the context-used chart
-                if (chart.canvas.id !== 'context-used-graph') return;
-
                 const { ctx } = chart;
 
                 chart.data.datasets.forEach(function(dataset, i) {
                     const meta = chart.getDatasetMeta(i);
                     meta.data.forEach(function(bar, barIndex) {
                         const value = dataset.data[barIndex];
-                        const label = formatKUnit(value);
+
+                        // Skip 0-value labels to prevent overlap with y-axis labels
+                        if (!value || value === 0) return;
+
+                        const label = chart.canvas.id === 'context-used-graph'
+                            ? formatKUnit(value)
+                            : value + '%';
                         const barWidth = bar.x;
 
                         ctx.save();
