@@ -115,6 +115,9 @@ class ServerMetricsCollector:
         # Get props
         props = self.get_props()
         if props:
+            # Strip out the massive chat_template (Jinja2 template) — not used by frontend
+            if isinstance(props, dict):
+                props = {k: v for k, v in props.items() if k != "chat_template"}
             result["props"] = props
 
         return result
@@ -197,17 +200,8 @@ class ServerMetricsCollector:
                         else:
                             progress = 0.0
                     
-                    n_tokens = _v("n_tokens")
-                    if n_tokens == 0:
-                        n_cache = _v("n_prompt_tokens_cache")
-                        n_gen = _v("n_gen_tokens")
-                        n_decoded = 0
-                        next_token_list = slot.get("next_token", [])
-                        if next_token_list and isinstance(next_token_list, list):
-                            next_token = next_token_list[0]
-                            if isinstance(next_token, dict):
-                                n_decoded = next_token.get("n_decoded") or 0
-                        n_tokens = n_cache + n_prompt_tokens_processed + max(n_gen, n_decoded)
+                    n_cache = _v("n_prompt_tokens_cache")
+                    n_tokens = n_cache + n_prompt_tokens_processed + n_gen_tokens
 
                     result.append(
                         {

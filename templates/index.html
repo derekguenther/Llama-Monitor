@@ -779,6 +779,10 @@
         const barLabelPlugin = {
             id: 'barLabels',
             afterDatasetsDraw: function(chart) {
+                // Only draw on slot progress and context used bar charts
+                const targetIds = ['slot-progress-graph', 'context-used-graph'];
+                if (!targetIds.includes(chart.canvas.id)) return;
+
                 const { ctx } = chart;
 
                 chart.data.datasets.forEach(function(dataset, i) {
@@ -792,21 +796,21 @@
                         const label = chart.canvas.id === 'context-used-graph'
                             ? formatKUnit(value)
                             : value + '%';
-                        const barWidth = bar.x;
 
                         ctx.save();
-                        ctx.fillStyle = '#fff';
                         ctx.font = '11px sans-serif';
                         ctx.textBaseline = 'middle';
 
-                        const textWidth = ctx.measureText(label).width;
+                        const chartWidth = chart.chartArea.right - chart.chartArea.left;
 
-                        if (barWidth > textWidth + 10) {
-                            // Label fits inside bar - draw right-aligned inside
+                        if (bar.x >= chartWidth / 4) {
+                            // Bar >= 1/4 full - draw inside with dark text
+                            ctx.fillStyle = '#1a1a2e';
                             ctx.textAlign = 'right';
                             ctx.fillText(label, bar.x - 8, bar.y);
                         } else {
-                            // Label doesn't fit inside bar - draw to the right of the bar
+                            // Bar < 1/4 full - draw to the right of bar end with light text
+                            ctx.fillStyle = '#ccc';
                             ctx.textAlign = 'left';
                             ctx.fillText(label, bar.x + 8, bar.y);
                         }
