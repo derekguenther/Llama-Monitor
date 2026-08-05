@@ -93,7 +93,7 @@ class Aggregator:
         Returns:
             Dictionary with timestamped metrics from all sources
         """
-        timestamp = datetime.now().isoformat()
+        timestamp = int(time.time())
 
         # Collect server metrics
         server_data = self.server_collector.collect()
@@ -352,7 +352,7 @@ class Aggregator:
 
         # Update cumulative energy
         self.db.update_cumulative_energy(
-            session_start=self.cost_calculator.session_start or datetime.now().isoformat(),
+            session_start=self.cost_calculator.session_start or int(time.time()),
             total_wh=self.cost_calculator.total_energy_wh,
             gpu_wh=self.cost_calculator.gpu_energy_wh,
             cpu_wh=self.cost_calculator.cpu_energy_wh,
