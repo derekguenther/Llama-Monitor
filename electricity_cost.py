@@ -597,7 +597,9 @@ if __name__ == "__main__":
             stats = calculator.update_power_readings(
                 gpu_power_w=250.0,
                 cpu_power_w=65.0,
-                duration_seconds=1.0  # TODO: use actual polling interval,
+<<<<<<< HEAD
+                duration_seconds=1.0  # FIXED: should use config.polling_interval
+>>>>>>> energy-duration-6
             )
             print(f"Session {i+1}: {calculator.format_cost_display(stats['total_wh'], (i+1))}")
 
