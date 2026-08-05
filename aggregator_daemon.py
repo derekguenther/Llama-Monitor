@@ -94,6 +94,8 @@ class Aggregator:
             Dictionary with timestamped metrics from all sources
         """
         timestamp = int(time.time())
+        # Delegate collection to aggregator module to reduce duplication
+        metrics = self.aggregator.collect_all_metrics() if hasattr(self, "aggregator") else {}
 
         # Collect server metrics
         server_data = self.server_collector.collect()
@@ -923,3 +925,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+from aggregator import Aggregator
