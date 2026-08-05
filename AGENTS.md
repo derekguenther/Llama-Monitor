@@ -47,7 +47,7 @@ When ending a work session, complete all steps:
 1. File issues for remaining work
 2. Run quality gates (tests, linters, builds)
 3. Update issue status (close finished, update in-progress)
-4. **PUSH TO REMOTE** - User is responsible for all remote pushes, agents only perform local commits
+4. **COMMIT LOCALLY** - User is responsible for remote pushes; agents only commit locally
 5. Clean up (clear stashes, prune branches)
 6. Verify all changes committed and pushed
 7. Provide context for next session
