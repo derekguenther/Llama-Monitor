@@ -213,3 +213,5 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+# FILTER: skip -1.0 sentinel values in display
