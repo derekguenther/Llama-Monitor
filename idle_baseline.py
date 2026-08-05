@@ -87,15 +87,15 @@ class IdleBaselineTracker:
         Args:
             baseline_w: Average baseline power in watts.
         """
-        cursor = self.db.cursor()
+        cursor = self.db.connect().cursor()
         cursor.execute(
             """
-            INSERT INTO idle_baseline (timestamp, cpu_percent_avg, gpu_percent_avg, system_power_w, is_active)
+            INSERT INTO idle_baseline (timestamp, cpu_percent, gpu_percent, system_power_w, is_valid)
             VALUES (?, ?, ?, ?, ?)
             """,
             (int(time.time()), 0.0, 0.0, baseline_w, 1),
         )
-        self.db.commit()
+        self.db.connect().commit()
 
     def get_baseline_average(self) -> Optional[float]:
         """Get the average of all stored baseline readings.
@@ -103,12 +103,12 @@ class IdleBaselineTracker:
         Returns:
             Average baseline power in watts, or None if no readings.
         """
-        cursor = self.db.cursor()
+        cursor = self.db.connect().cursor()
         cursor.execute(
             """
             SELECT AVG(system_power_w) as avg_power
             FROM idle_baseline
-            WHERE is_active = 1
+            WHERE is_valid = 1
             """
         )
         result = cursor.fetchone()
@@ -125,14 +125,14 @@ class IdleBaselineTracker:
         Returns:
             Average of recent baseline readings, or None if not enough readings.
         """
-        cursor = self.db.cursor()
+        cursor = self.db.connect().cursor()
         cursor.execute(
             """
             SELECT AVG(system_power_w) as avg_power
             FROM (
                 SELECT system_power_w
                 FROM idle_baseline
-                WHERE is_active = 1
+                WHERE is_valid = 1
                 ORDER BY timestamp DESC
                 LIMIT ?
             )
@@ -146,9 +146,9 @@ class IdleBaselineTracker:
 
     def clear_baseline_data(self) -> None:
         """Clear all baseline data from the database."""
-        cursor = self.db.cursor()
-        cursor.execute("DELETE FROM idle_baseline WHERE is_active = 1")
-        self.db.commit()
+        cursor = self.db.connect().cursor()
+        cursor.execute("DELETE FROM idle_baseline WHERE is_valid = 1")
+        self.db.connect().commit()
 
     def reset(self) -> None:
         """Reset tracker state without clearing database."""
