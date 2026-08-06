@@ -360,7 +360,6 @@ class ElectricityCostCalculator:
         return f"${cost:.4f} ({time_str} @ {rate_cents:.2f} cents/kWh)"
 
     # Token tracking methods
-    # ======================================================================
 
     def get_today_token_stats(self) -> Optional[Dict[str, Any]]:
         """Get today's token tracking statistics.
@@ -597,9 +596,7 @@ if __name__ == "__main__":
             stats = calculator.update_power_readings(
                 gpu_power_w=250.0,
                 cpu_power_w=65.0,
-<<<<<<< HEAD
                 duration_seconds=1.0  # FIXED: should use config.polling_interval
->>>>>>> energy-duration-6
             )
             print(f"Session {i+1}: {calculator.format_cost_display(stats['total_wh'], (i+1))}")
 

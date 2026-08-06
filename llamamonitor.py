@@ -229,7 +229,7 @@ class Monitor:
 
         # Start web server in background thread
         self.web_server_thread = threading.Thread(
-            target=lambda: start_web_server(host="0.0.0.0", port=8080, metrics_cache=self.metrics_cache, verbose=self.verbose),
+            target=lambda: start_web_server(host="0.0.0.0", port=args.port if hasattr(args, "port") else 8080, metrics_cache=self.metrics_cache, verbose=self.verbose),
             daemon=True,
         )
         self.web_server_thread.start()
@@ -276,7 +276,7 @@ class Monitor:
         # When running via main.py, pass metrics_cache for in-process data sharing
         self.tui = TUI(
             aggregator_host="localhost",
-            aggregator_port=8080,
+            aggregator_port=args.port if hasattr(args, "port") else 8080,
             metrics_cache=self.metrics_cache,
         )
 
@@ -397,6 +397,12 @@ def parse_args() -> argparse.Namespace:
         help="Path to config file (default: llama-monitor/config.yaml)",
     )
 
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="Web server port (default: 8080)",
+    )
     parser.add_argument(
         "--polling-interval",
         type=float,
