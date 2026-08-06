@@ -72,6 +72,7 @@ class Monitor:
         polling_interval: float = 1.0,
         enable_web: bool = True,
         enable_tui: bool = False,
+        port: int = 8080,
         show_stats: bool = False,
         verbose: bool = False,
     ):
@@ -91,6 +92,7 @@ class Monitor:
         self.polling_interval = polling_interval
         self.enable_web = enable_web
         self.enable_tui = enable_tui
+        self.port = port
         self.show_stats = show_stats
         self.verbose = verbose
 
@@ -225,11 +227,11 @@ class Monitor:
         """Run in web server mode."""
         from web_server import start_server as start_web_server
 
-        print(f"Starting web server on port 8080")
+        print(f"Starting web server on port {self.port}")
 
         # Start web server in background thread
         self.web_server_thread = threading.Thread(
-            target=lambda: start_web_server(host="0.0.0.0", port=args.port if hasattr(args, "port") else 8080, metrics_cache=self.metrics_cache, verbose=self.verbose),
+            target=lambda: start_web_server(host="0.0.0.0", port=self.port, metrics_cache=self.metrics_cache, verbose=self.verbose),
             daemon=True,
         )
         self.web_server_thread.start()
@@ -276,7 +278,7 @@ class Monitor:
         # When running via main.py, pass metrics_cache for in-process data sharing
         self.tui = TUI(
             aggregator_host="localhost",
-            aggregator_port=args.port if hasattr(args, "port") else 8080,
+            aggregator_port=self.port,
             metrics_cache=self.metrics_cache,
         )
 
@@ -572,6 +574,7 @@ def main():
         enable_web=not args.no_web,
         enable_tui=args.tui,
         show_stats=args.stats,
+        port=args.port,
         verbose=args.verbose,
     )
 
