@@ -253,8 +253,8 @@ class Aggregator:
         Returns:
             Cost calculation results
         """
-        gpu_power = system_metrics.get("gpu_power_w", 0) or 0
-        cpu_power = system_metrics.get("cpu_power_w", 0) or 0
+        gpu_power = max(0, system_metrics.get("gpu_power_w", 0))
+        cpu_power = max(0, system_metrics.get("cpu_power_w", 0))
 
         # Use a fixed duration for each calculation (1 second since we poll frequently)
         duration = 1.0

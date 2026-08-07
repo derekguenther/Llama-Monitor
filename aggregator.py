@@ -248,14 +248,14 @@ class Aggregator:
 
         # Update power readings to accumulate energy totals
         energy_stats = self.cost_calculator.update_power_readings(
-            gpu_power_w=gpu_power_w or 0,
-            cpu_power_w=cpu_power_w or 0,
+            gpu_power_w=max(0, gpu_power_w),
+            cpu_power_w=max(0, cpu_power_w),
             duration_seconds=1.0
         )
 
         # Build cost data from energy stats
         cost = {
-            "gpu_power_w": gpu_power_w or 0,
+            "gpu_power_w": max(0, gpu_power_w),
             "cpu_power_w": cpu_power_w or 0,
             "duration_seconds": 1.0,
             "duration_hours": 1.0 / 3600.0,
