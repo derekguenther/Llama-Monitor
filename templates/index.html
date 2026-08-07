@@ -967,6 +967,7 @@
                             type: 'linear',
                             display: true,
                             position: 'left',
+                            suggestedMin: 0,
                             grid: { color: '#2a3b5c' },
                             ticks: { color: '#00d4ff', callback: function(v) { return v.toFixed(0); } },
                             title: { display: true, text: 'Tokens Processed/s', color: '#00d4ff' }
@@ -975,6 +976,7 @@
                             type: 'linear',
                             display: true,
                             position: 'right',
+                            suggestedMin: 0,
                             grid: { drawOnChartArea: false },
                             ticks: { color: '#ffd93d', callback: function(v) { return v.toFixed(0); } },
                             title: { display: true, text: 'Tokens Generated/s', color: '#ffd93d' }
