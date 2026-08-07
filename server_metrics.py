@@ -173,52 +173,53 @@ class ServerMetricsCollector:
         """
         result = []
 
-        if isinstance(slots, list):
-            for slot in slots:
-                if isinstance(slot, dict):
-                    # Convert None to 0/default for numeric fields
-                    def _v(key, default=0):
-                        val = slot.get(key, default)
-                        return val if val is not None else default
+        # Normalize input: wrap single dict in a list so all paths use the same loop
+        slot_list = slots if isinstance(slots, list) else ([slots] if isinstance(slots, dict) else [])
 
-                    slot_state = slot.get("state")
-                    progress = slot.get("progress")
-                    n_prompt_tokens = _v("n_prompt_tokens")
-                    n_prompt_tokens_processed = _v("n_prompt_tokens_processed")
-                    n_gen_tokens = _v("n_gen_tokens")
-                    
-                    # Normalize state: None (from JSON null) means idle
-                    if slot_state is None:
-                        slot_state = "idle"
-                    
-                    # Calculate progress when actively processing
-                    if progress is None:
-                        if slot_state == "processing" and n_prompt_tokens > 0:
-                            progress = n_prompt_tokens_processed / n_prompt_tokens
-                        else:
-                            progress = 0.0
-                    
-                    n_cache = _v("n_prompt_tokens_cache")
-                    n_tokens = n_cache + n_prompt_tokens_processed + n_gen_tokens
+        for slot in slot_list:
+            if not isinstance(slot, dict):
+                continue
 
-                    result.append(
-                        {
-                            "id": _v("id"),
-                            "task": max(-1, _v("task", -1)),
-                            "n_tokens": max(0, n_tokens),
-                            "n_prompt_tokens": max(0, n_prompt_tokens),
-                            "n_gen_tokens": max(0, n_gen_tokens),
-                            "n_prompt_tokens_processed": max(0, n_prompt_tokens_processed),
-                            "progress": max(0.0, min(1.0, progress)),
-                            "state": slot_state,
-                            "prompt": slot.get("prompt", ""),
-                            "generated": slot.get("generated", ""),
-                            "next_token": slot.get("next_token", []),
-                        }
-                    )
-        elif isinstance(slots, dict):
-            # Single slot format
-            result.append(slots)
+            # Convert None to 0/default for numeric fields
+            def _v(key, default=0):
+                val = slot.get(key, default)
+                return val if val is not None else default
+
+            slot_state = slot.get("state")
+            progress = slot.get("progress")
+            n_prompt_tokens = _v("n_prompt_tokens")
+            n_prompt_tokens_processed = _v("n_prompt_tokens_processed")
+            n_gen_tokens = _v("n_gen_tokens")
+
+            # Normalize state: None (from JSON null) means idle
+            if slot_state is None:
+                slot_state = "idle"
+
+            # Calculate progress when actively processing
+            if progress is None:
+                if slot_state == "processing" and n_prompt_tokens > 0:
+                    progress = n_prompt_tokens_processed / n_prompt_tokens
+                else:
+                    progress = 0.0
+
+            n_cache = _v("n_prompt_tokens_cache")
+            n_tokens = n_cache + n_prompt_tokens_processed + n_gen_tokens
+
+            result.append(
+                {
+                    "id": _v("id"),
+                    "task": max(-1, _v("task", -1)),
+                    "n_tokens": max(0, n_tokens),
+                    "n_prompt_tokens": max(0, n_prompt_tokens),
+                    "n_gen_tokens": max(0, n_gen_tokens),
+                    "n_prompt_tokens_processed": max(0, n_prompt_tokens_processed),
+                    "progress": max(0.0, min(1.0, progress)),
+                    "state": slot_state,
+                    "prompt": slot.get("prompt", ""),
+                    "generated": slot.get("generated", ""),
+                    "next_token": slot.get("next_token", []),
+                }
+            )
 
         return result
 
