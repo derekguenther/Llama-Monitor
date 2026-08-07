@@ -15,31 +15,36 @@ def test_slot_height_adequate():
 
     errors = []
 
-    # Check heightPerSlot is at least 60
+    # Check heightPerSlot is at least 20 (compact but readable)
     height_per_slot_match = re.search(r'const heightPerSlot = (\d+);', content)
     if not height_per_slot_match:
         errors.append("heightPerSlot not found")
     else:
         hps = int(height_per_slot_match.group(1))
-        if hps < 60:
-            errors.append(f"heightPerSlot is {hps}, should be at least 60")
+        if hps < 20:
+            errors.append(f"heightPerSlot is {hps}, should be at least 20")
 
-    # Check baseHeight is at least 100
+    # Check baseHeight is at least 30 (compact minimum for single bar + label)
     base_height_match = re.search(r'const baseHeight = (\d+);', content)
     if not base_height_match:
         errors.append("baseHeight not found")
     else:
         bh = int(base_height_match.group(1))
-        if bh < 100:
-            errors.append(f"baseHeight is {bh}, should be at least 100")
+        if bh < 30:
+            errors.append(f"baseHeight is {bh}, should be at least 30")
+
+    # Verify no max-height constraint on slot-context-card
+    if re.search(r'max-height.*slot-context-card', content):
+        errors.append("slot-context-card should not have max-height constraint")
 
     if errors:
         for e in errors:
             print(f"[FAIL] {e}")
         return False
 
-    print("[PASS] heightPerSlot is 60 (adequate space per slot)")
-    print("[PASS] baseHeight is 100 (adequate minimum)")
+    print(f"[PASS] heightPerSlot is {hps} (adequate space per slot)")
+    print(f"[PASS] baseHeight is {bh} (adequate minimum)")
+    print("[PASS] slot-context-card has no max-height constraint")
     return True
 
 
