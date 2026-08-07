@@ -195,8 +195,6 @@ class ServerMetricsCollector:
                     if progress is None:
                         if slot_state == "processing" and n_prompt_tokens > 0:
                             progress = n_prompt_tokens_processed / n_prompt_tokens
-                            if progress == 0.0 and n_gen_tokens > 0:
-                                progress = 1.0
                         else:
                             progress = 0.0
                     
