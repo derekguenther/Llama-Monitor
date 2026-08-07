@@ -1037,10 +1037,10 @@
                 const data = await response.json();
                 if (data.success && data.data) {
                     monthlyCostChart.data.labels = data.data.map(entry => entry.date);
-                    monthlyCostChart.data.datasets[0].data = data.data.map(entry => entry.cost_usd);
+                    monthlyCostChart.data.datasets[0].data = data.data.map(entry => Math.max(0, entry.cost_usd));
                     monthlyCostChart.update();
 
-                    const totalCost = data.data.reduce((sum, entry) => sum + entry.cost_usd, 0);
+                    const totalCost = data.data.reduce((sum, entry) => sum + Math.max(0, entry.cost_usd), 0);
                     document.getElementById('monthly-total-cost').textContent = `$${totalCost.toFixed(2)}`;
                 }
             } catch (error) {
@@ -1108,7 +1108,7 @@
             const memory = system.memory || {};
 
             // CPU
-            if (cpu.percent != null) {
+            if (cpu.percent != null && cpu.percent >= 0) {
                 document.getElementById('cpu-percent').textContent = cpu.percent.toFixed(1) + '%';
                 document.getElementById('cpu-bar').style.width = cpu.percent + '%';
             } else {
@@ -1117,7 +1117,7 @@
             }
 
             // GPU
-            if (gpu.usage != null) {
+            if (gpu.usage != null && gpu.usage >= 0) {
                 document.getElementById('gpu-percent').textContent = gpu.usage.toFixed(1) + '%';
                 document.getElementById('gpu-bar').style.width = gpu.usage + '%';
             } else {
@@ -1126,7 +1126,7 @@
             }
 
             // Memory
-            if (memory.percent != null) {
+            if (memory.percent != null && memory.percent >= 0) {
                 document.getElementById('mem-percent').textContent = memory.percent.toFixed(1) + '%';
                 document.getElementById('mem-bar').style.width = memory.percent + '%';
             } else {
@@ -1135,7 +1135,7 @@
             }
 
             // GPU Memory
-            if (gpu.memory_used != null && gpu.memory_total != null) {
+            if (gpu.memory_used != null && gpu.memory_total != null && gpu.memory_used >= 0 && gpu.memory_total >= 0) {
                 document.getElementById('gpu-mem').textContent = `${gpu.memory_used}/${gpu.memory_total} MB`;
                 const gpuMemPercent = gpu.memory_total > 0 ? (gpu.memory_used / gpu.memory_total) * 100 : 0;
                 document.getElementById('gpu-mem-bar').style.width = gpuMemPercent + '%';
@@ -1148,14 +1148,17 @@
             const gpuPower = gpu.power_w ?? null;
             const cpuPower = cpu.power_w ?? null;
             const sysPowerTotal = system.system_power_w ?? null;
-            if (gpuPower !== null || cpuPower !== null) {
-                const filteredPower = (gpuPower || 0) + (cpuPower || 0);
-                document.getElementById('gpu-power-1').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-') + ' W';
-                document.getElementById('cpu-power-1').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-') + ' W';
+            const validGpu = gpuPower !== null && gpuPower >= 0;
+            const validCpu = cpuPower !== null && cpuPower >= 0;
+            if (validGpu || validCpu) {
+                const filteredPower = (validGpu ? gpuPower : 0) + (validCpu ? cpuPower : 0);
+                document.getElementById('gpu-power-1').textContent = (validGpu ? gpuPower.toFixed(0) : '-') + ' W';
+                document.getElementById('cpu-power-1').textContent = (validCpu ? cpuPower.toFixed(0) : '-') + ' W';
                 document.getElementById('sys-power-1').textContent = filteredPower.toFixed(0) + ' W';
-                document.getElementById('gpu-power-2').textContent = (gpuPower !== null ? gpuPower.toFixed(0) : '-') + ' W';
-                document.getElementById('cpu-power-2').textContent = (cpuPower !== null ? cpuPower.toFixed(0) : '-') + ' W';
-                document.getElementById('sys-power-2').textContent = (sysPowerTotal !== null ? sysPowerTotal.toFixed(0) : '-') + ' W';
+                document.getElementById('gpu-power-2').textContent = (validGpu ? gpuPower.toFixed(0) : '-') + ' W';
+                document.getElementById('cpu-power-2').textContent = (validCpu ? cpuPower.toFixed(0) : '-') + ' W';
+                const validSysPower = sysPowerTotal !== null && sysPowerTotal >= 0;
+                document.getElementById('sys-power-2').textContent = (validSysPower ? sysPowerTotal.toFixed(0) : '-') + ' W';
             }
 
             // Cost
