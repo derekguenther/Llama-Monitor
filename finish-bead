@@ -1,0 +1,117 @@
+#!/bin/bash
+if [ "$#" -ne 1 ]; then
+  echo "ERROR: You must provide a commit message. Example: finish-bead \"Fixed the bug\""
+  exit 1
+fi
+if [[ "$PWD" != *".worktrees"* ]]; then
+  echo "ERROR: You are not inside a worktree! cd into your worktree first."
+  exit 1
+fi
+TASK_NAME=$(basename "$PWD")
+
+echo "Generating Repository Map..."
+python3 << 'PYEOF' || { echo "ERROR: Failed to generate REPO_MAP.md"; exit 1; }
+import os, re, sys
+
+EXCLUDE_DIRS = {'.git', 'node_modules', '.worktrees', '.claude-history'}
+INCLUDE_EXTS = {'.py', '.gd', '.js', '.sh'}
+
+def get_docstring(lines, idx):
+    """Return first line of docstring after a def/class, or empty string."""
+    j = idx + 1
+    while j < len(lines):
+        s = lines[j].strip()
+        if not s:
+            j += 1
+            continue
+        for q in ('"""', "'''"):
+            if s.startswith(q):
+                body = s[len(q):]
+                if body.endswith(q):
+                    body = body[:-len(q)]
+                body = body.strip()
+                if body:
+                    return body
+                if j + 1 < len(lines):
+                    nx = lines[j + 1].strip()
+                    if nx and not nx.startswith(q):
+                        return nx
+                return ''
+        break
+    return ''
+
+results = []
+for dirpath, dirnames, filenames in os.walk('.'):
+    rel = os.path.relpath(dirpath, '.')
+    parts = rel.split(os.sep) if rel != '.' else []
+    if any(p in EXCLUDE_DIRS for p in parts):
+        dirnames.clear()
+        continue
+    for fn in filenames:
+        ext = os.path.splitext(fn)[1]
+        if ext not in INCLUDE_EXTS:
+            continue
+        filepath = os.path.join(dirpath, fn)
+        try:
+            with open(filepath, encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+        except:
+            continue
+        for i, line in enumerate(lines):
+            stripped = line.rstrip()
+            # Class / def / func / async def / async func
+            m = re.match(r'^(\s*)((?:async\s+)?(?:class|def|func))\s+(\w+)', stripped)
+            if m:
+                doc = get_docstring(lines, i)
+                entry = f'{os.path.relpath(filepath, ".")}:{stripped}'
+                if doc:
+                    entry += f'  # {doc}'
+                results.append(entry)
+                continue
+            # Module-level (no leading whitespace, not a comment)
+            if re.match(r'^[^\s#]', stripped):
+                # ALL_CAPS constants
+                if re.match(r'^([A-Z_][A-Z0-9_]*)\s*=', stripped):
+                    results.append(f'{os.path.relpath(filepath, ".")}:{stripped}')
+                    continue
+                # Object assignments: var = ClassName(...)
+                m3 = re.match(r'^([a-z_][a-z_0-9]*)\s*=\s*([A-Z][A-Za-z0-9_]*)\s*\(', stripped)
+                if m3:
+                    results.append(f'{os.path.relpath(filepath, ".")}:{stripped}')
+                    continue
+
+outpath = os.path.join('.', 'docs', 'REPO_MAP.md')
+os.makedirs(os.path.dirname(outpath), exist_ok=True)
+with open(outpath, 'w') as f:
+    f.write('\n'.join(results) + '\n')
+print(f'REPO_MAP.md generated with {len(results)} entries')
+PYEOF
+
+git add .
+git commit -m "$1"
+cd /sandbox
+
+# Run verification before merge
+echo ""
+echo "Running verification before merge..."
+if [ -x "/sandbox/.beads/hooks/verify-before-merge" ]; then
+    /sandbox/.beads/hooks/verify-before-merge "$TASK_NAME" || {
+        echo ""
+        echo "============================================"
+        echo "VERIFICATION FAILED - Merge aborted"
+        echo "============================================"
+        echo ""
+        echo "Fix the issues above and try again."
+        echo "To skip verification (not recommended), run:"
+        echo "  SKIP_VERIFICATION=1 finish-bead \"message\""
+        exit 1
+    }
+else
+    echo "WARNING: verify-before-merge hook not found, skipping verification"
+fi
+
+echo ""
+git merge $TASK_NAME --no-edit
+git worktree remove ".worktrees/$TASK_NAME" --force
+git branch -d $TASK_NAME
+echo "SUCCESS: Bead merged, Map updated, and worktree destroyed."

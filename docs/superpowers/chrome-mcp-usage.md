@@ -1,91 +1,18 @@
 # Chrome MCP Superpower — Usage Guide
 
-The Chrome MCP server (obra/superpowers-chrome) provides headless browser automation for functional review, visual inspection, and page content extraction.
-
-## Important: opencode Does Not Expose MCP Tools to Agents
-
-The Chrome MCP server is configured and connected in opencode (`opencode mcp list` shows `✓ chrome connected`), but opencode does not expose MCP tools (like `use_browser`) to agents in the current session. The tools are added at runtime during session processing, but they are not available in the agent's static tool list.
-
-**Workaround:** Invoke the Chrome MCP server directly via its stdio protocol using a Node.js script. This is fully functional and gives you the same capabilities.
+The Chrome MCP server (obra/superpowers-chrome v3.0.2) provides headless browser automation for functional review, visual inspection, and page content extraction.
 
 ## Quick Start
 
-Run a Node.js script that communicates with the MCP server over stdio:
+The Chrome MCP server is configured and connected in opencode (`opencode mcp list` shows `✓ chrome connected`). Use the `use_browser` tool with actions like `navigate`, `screenshot`, and `extract`.
+
+If opencode does not expose the MCP tool directly, invoke the server via a Node.js script:
 
 ```bash
-node -e "
-const { spawn } = require('child_process');
-const proc = spawn('node', ['/home/yolo_agent/superpowers-chrome/mcp/dist/index.js', '--headless'], { stdio: ['pipe','pipe','pipe'] });
-let id = 1;
-const responses = [];
-proc.stdout.on('data', d => { for (const line of d.toString().trim().split('\n')) { if (line.trim()) try { responses.push(JSON.parse(line)); } catch {} } });
-proc.stderr.on('data', () => {});
-proc.on('error', e => console.error(e.message));
-function send(m, p, i) { proc.stdin.write(JSON.stringify({jsonrpc:'2.0',id:i??id++,method:m,params:p||{}})+'\n'); }
-setTimeout(()=>{ send('initialize',{protocolVersion:'2024-11-05',capabilities:{tools:{}},clientInfo:{name:'invoker',version:'1.0'}},1); },500);
-setTimeout(()=>{ send('tools/list',{}); },3000);
-setTimeout(()=>{ send('tools/call',{name:'use_browser',arguments:{action:'navigate',selector:null,payload:'http://example.com'}}); },5000);
-setTimeout(()=>{ send('tools/call',{name:'use_browser',arguments:{action:'extract',selector:null,payload:{format:'text'}}}); },12000);
-setTimeout(()=>{
-  for (const r of responses) {
-    if (r.result?.content) for (const c of r.result.content) { if (c.type==='text') console.log(c.text); }
-  }
-  proc.kill('SIGTERM'); process.exit(0);
-}, 18000);
-"
+node /tmp/chrome-mcp-test.js http://example.com
 ```
 
-This navigates to the URL, extracts the page text, and prints it to stdout.
-
-## Reusable Template
-
-Save this as a script for repeated use:
-
-```javascript
-// chrome-mcp.js — Invoke Chrome MCP server directly
-const { spawn } = require('child_process');
-
-const proc = spawn('node', [
-  '/home/yolo_agent/superpowers-chrome/mcp/dist/index.js',
-  '--headless'
-], { stdio: ['pipe', 'pipe', 'pipe'] });
-
-let id = 1;
-const responses = [];
-proc.stdout.on('data', d => {
-  for (const line of d.toString().trim().split('\n')) {
-    if (line.trim()) try { responses.push(JSON.parse(line)); } catch {}
-  }
-});
-proc.stderr.on('data', () => {}); // ignore dbus/GPU noise
-
-function send(method, params, messageId) {
-  proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: messageId ?? id++, method, params: params || {} }) + '\n');
-}
-
-// Initialize
-setTimeout(() => send('initialize', { protocolVersion: '2024-11-05', capabilities: { tools: {} }, clientInfo: { name: 'invoker', version: '1.0' } }, 1), 500);
-
-// List tools (optional, for verification)
-setTimeout(() => send('tools/list', {}), 3000);
-
-// Navigate
-setTimeout(() => send('tools/call', { name: 'use_browser', arguments: { action: 'navigate', selector: null, payload: process.argv[2] || 'http://example.com' } }), 5000);
-
-// Extract page text
-setTimeout(() => send('tools/call', { name: 'use_browser', arguments: { action: 'extract', selector: null, payload: { format: 'text' } } }), 12000);
-
-// Print results
-setTimeout(() => {
-  for (const r of responses) {
-    if (r.result?.content) for (const c of r.result.content) { if (c.type === 'text') console.log(c.text); }
-  }
-  proc.kill('SIGTERM');
-  process.exit(0);
-}, 18000);
-```
-
-Usage: `node chrome-mcp.js http://example.com`
+This script navigates to the URL, takes a screenshot, extracts page text, and prints results. It also auto-cleans stale lock files before starting.
 
 ## Key Actions
 
@@ -104,7 +31,7 @@ Usage: `node chrome-mcp.js http://example.com`
 
 ## Auto-Captured Files
 
-Every DOM action (navigate, click, type, eval) auto-captures to the session directory:
+Every DOM action (navigate, click, type, eval) auto-captures to a session directory:
 
 - `{prefix}.png` — viewport screenshot (780×437)
 - `{prefix}.md` — page content as structured markdown
@@ -120,5 +47,4 @@ Files: 001-navigate.html, 001-navigate.md, 001-navigate.png, 001-navigate-consol
 ## Troubleshooting
 
 See [Troubleshoot Chrome](../../processes/troubleshoot-chrome.md) for stale lock files, zombie processes, and port conflicts.
-
 See [Chrome MCP Findings](chrome-mcp-findings.md) for detailed architecture, known issues, and debugging procedures.

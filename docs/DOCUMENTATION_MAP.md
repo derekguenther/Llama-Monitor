@@ -21,7 +21,7 @@ Index of notable documentation files in this project. Load the one you need.
 | `processes/work-bead.md` | Implementing a bead | Development workflow: changes, tests, verification |
 | `processes/review-bead.md` | Reviewing completed work | Scope review, code review, functional review (Chrome) |
 | `processes/finish-bead.md` | Merging and closing | Merge squash, cleanup worktree, close bead |
-| `processes/troubleshoot-chrome.md` | Chrome issues | Cleaning stale lock files, killing zombie Chrome processes |
+| `processes/troubleshoot-chrome.md` | Chrome issues | Troubleshooting stale lock files, zombie processes, port conflicts |
 
 ## Memory / Notes
 
