@@ -823,6 +823,8 @@
         const crosshairPlugin = {
             id: 'crosshair',
             afterDraw: function(chart) {
+                const targetIds = ['combined-usage-graph', 'monthly-cost-graph'];
+                if (!targetIds.includes(chart.canvas.id)) return;
                 if (chart._active && chart._active.length) {
                     const activePoint = chart._active[0];
                     const ctx = chart.ctx;
