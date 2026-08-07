@@ -74,6 +74,13 @@ def fetch_metrics(host: str, port: int) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _value_or_zero(val, sentinel=-1.0):
+    """Return val if not None and not sentinel, else 0."""
+    if val is None or val == sentinel:
+        return 0
+    return val
+
+
 def format_stats(metrics: Dict[str, Any], verbose: bool = False) -> str:
     """Format stats for display.
 
@@ -95,12 +102,12 @@ def format_stats(metrics: Dict[str, Any], verbose: bool = False) -> str:
     lines.append("")
     lines.append("Server:")
     if server:
-        prompt_tokens = server.get("prompt_tokens_total", 0) or 0
-        prompt_rate = server.get("prompt_tokens_seconds", 0) or 0
-        generated = server.get("tokens_predicted_total", 0) or 0
-        gen_rate = server.get("predicted_tokens_seconds", 0) or 0
-        processing = server.get("requests_processing", 0) or 0
-        deferred = server.get("requests_deferred", 0) or 0
+        prompt_tokens = _value_or_zero(server.get("prompt_tokens_total"))
+        prompt_rate = _value_or_zero(server.get("prompt_tokens_seconds"))
+        generated = _value_or_zero(server.get("tokens_predicted_total"))
+        gen_rate = _value_or_zero(server.get("predicted_tokens_seconds"))
+        processing = _value_or_zero(server.get("requests_processing"))
+        deferred = _value_or_zero(server.get("requests_deferred"))
 
         lines.append(f"  Prompt tokens:    {prompt_tokens:,} ({prompt_rate:,.0f}/s)")
         lines.append(f"  Generated:        {generated:,} ({gen_rate:,.0f}/s)")
@@ -114,14 +121,14 @@ def format_stats(metrics: Dict[str, Any], verbose: bool = False) -> str:
     lines.append("")
     lines.append("System:")
     if system:
-        cpu = system.get("cpu_percent", 0) or 0
-        gpu = system.get("gpu_usage", 0) or 0
-        mem = system.get("memory_percent", 0) or 0
-        gpu_mem = system.get("gpu_memory_used", 0) or 0
-        gpu_total = system.get("gpu_memory_total", 0) or 0
-        gpu_power = system.get("gpu_power_w", 0) or 0
-        cpu_power = system.get("cpu_power_w", 0) or 0
-        system_power = system.get("system_power_w", 0) or 0
+        cpu = _value_or_zero(system.get("cpu_percent"))
+        gpu = _value_or_zero(system.get("gpu_usage"))
+        mem = _value_or_zero(system.get("memory_percent"))
+        gpu_mem = _value_or_zero(system.get("gpu_memory_used"))
+        gpu_total = _value_or_zero(system.get("gpu_memory_total"))
+        gpu_power = _value_or_zero(system.get("gpu_power_w"))
+        cpu_power = _value_or_zero(system.get("cpu_power_w"))
+        system_power = _value_or_zero(system.get("system_power_w"))
 
         lines.append(f"  CPU:         {cpu:.1f}%")
         lines.append(f"  GPU:         {gpu:.1f}%")
@@ -145,8 +152,8 @@ def format_stats(metrics: Dict[str, Any], verbose: bool = False) -> str:
             lines.append("Process GPU:")
             for name, proc in list(process_gpu.items())[:5]:
                 pid = proc.get("pid", "?")
-                gpu_util = proc.get("gpu_utilization", 0) or 0
-                gpu_mem = proc.get("gpu_memory_mb", 0) or 0
+                gpu_util = _value_or_zero(proc.get("gpu_utilization"))
+                gpu_mem = _value_or_zero(proc.get("gpu_memory_mb"))
                 lines.append(f"  {name[:15]:15s} (PID: {pid})")
                 lines.append(f"    GPU: {gpu_util:.1f}%  Memory: {gpu_mem:,}MB")
 
@@ -154,8 +161,8 @@ def format_stats(metrics: Dict[str, Any], verbose: bool = False) -> str:
     cost = metrics.get("cost", {})
     if cost:
         # Use today's energy if available, otherwise fall back to session energy
-        total_wh = cost.get("today_wh") or cost.get("total_wh", 0) or 0
-        cost_rate = cost.get("cost_rate", 0) or 0
+        total_wh = _value_or_zero(cost.get("today_wh")) or _value_or_zero(cost.get("total_wh"))
+        cost_rate = _value_or_zero(cost.get("cost_rate"))
         session_cost = total_wh / 1000 * cost_rate
 
         lines.append("")
@@ -213,5 +220,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-# FILTER: skip -1.0 sentinel values in display
