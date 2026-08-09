@@ -225,6 +225,26 @@
             color: #888;
             margin-bottom: 5px;
         }
+        .graph-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px 10px;
+            margin-bottom: 4px;
+        }
+        .graph-checkboxes label {
+            font-size: 0.65rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            color: #aaa;
+            white-space: nowrap;
+        }
+        .graph-checkboxes input[type="checkbox"] {
+            accent-color: #00d4ff;
+            width: 10px;
+            height: 10px;
+        }
 
         /* Slot Progress & Context Card - height fits content based on slot count */
         .slot-context-card {
@@ -500,7 +520,7 @@
         <div class="key-metrics">
             <div class="key-metric-item">
                 <div class="key-metric-label">Today's Cost</div>
-                <div class="key-metric-value" id="today-cost">-$1.00</div>
+                <div class="key-metric-value" id="today-cost">-</div>
             </div>
             <div class="key-metric-item">
                 <div class="key-metric-label">Today's Energy</div>
@@ -508,7 +528,7 @@
             </div>
             <div class="key-metric-item">
                 <div class="key-metric-label">Total Cost</div>
-                <div class="key-metric-value" id="total-cost">-$1.00</div>
+                <div class="key-metric-value" id="total-cost">-</div>
             </div>
             <div class="key-metric-item">
                 <div class="key-metric-label">Total Energy</div>
@@ -598,7 +618,7 @@
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Session Cost</span>
-                        <span class="metric-value" id="session-cost">-$1.00</span>
+                        <span class="metric-value" id="session-cost">-</span>
                     </div>
                     <div class="metric-row">
                         <span class="metric-label">Total Energy</span>
@@ -626,7 +646,7 @@
                 <div class="resource-bar">
                     <div class="resource-header">
                         <span>CPU Usage</span>
-                        <span id="cpu-percent">-<</span>
+                        <span id="cpu-percent">-</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill cpu-fill" id="cpu-bar" style="width: 0%"></div>
@@ -635,7 +655,7 @@
                 <div class="resource-bar">
                     <div class="resource-header">
                         <span>GPU Usage</span>
-                        <span id="gpu-percent">-<</span>
+                        <span id="gpu-percent">-</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill gpu-fill" id="gpu-bar" style="width: 0%"></div>
@@ -644,7 +664,7 @@
                 <div class="resource-bar">
                     <div class="resource-header">
                         <span>Memory</span>
-                        <span id="mem-percent">-<</span>
+                        <span id="mem-percent">-</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill mem-fill" id="mem-bar" style="width: 0%"></div>
@@ -666,7 +686,16 @@
                 <!-- Combined CPU/GPU Usage Graph -->
                 <div class="card">
                     <h2>Usage (60s)</h2>
-                    <div class="graph-label">CPU % & GPU %</div>
+                    <div class="graph-checkboxes" id="usage-checkboxes">
+                        <label><input type="checkbox" id="chk-gpu-pct" checked> GPU %</label>
+                        <label><input type="checkbox" id="chk-cpu-pct" checked> CPU %</label>
+                        <label><input type="checkbox" id="chk-gpu-power"> GPU ⚡</label>
+                        <label><input type="checkbox" id="chk-cpu-power"> CPU ⚡</label>
+                        <label><input type="checkbox" id="chk-llama-gpu-pct"> ƒ GPU %</label>
+                        <label><input type="checkbox" id="chk-llama-cpu-pct"> ƒ CPU %</label>
+                        <label><input type="checkbox" id="chk-llama-gpu-power"> ƒ GPU ⚡</label>
+                        <label><input type="checkbox" id="chk-llama-cpu-power"> ƒ CPU ⚡</label>
+                    </div>
                     <div class="graph-container">
                         <canvas id="combined-usage-graph" class="graph-canvas"></canvas>
                     </div>
@@ -686,7 +715,7 @@
                         </div>
                         <div class="power-item">
                             <div class="power-value" id="sys-power-1">- W</div>
-                            <div class="power-label">System (llama.cpp)</div>
+                            <div class="power-label">System (Filtered)</div>
                         </div>
                         <div class="power-item">
                             <div class="power-value" id="gpu-power-2">- W</div>
@@ -734,8 +763,8 @@
         </div>
     </div>
 
-    <!-- Chart.js from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js (local copy for offline use) -->
+    <script src="/static/chart.js"></script>
 
     <script>
         // Configuration
@@ -753,7 +782,13 @@
             cpu: [],
             tokens: [],
             promptTokens: [],
-            labels: []
+            labels: [],
+            gpuPower: [],
+            cpuPower: [],
+            filteredGpu: [],
+            filteredCpu: [],
+            filteredGpuPower: [],
+            filteredCpuPower: []
         };
         const MAX_HISTORY = 60;
 
@@ -862,25 +897,16 @@
                 type: 'line',
                 data: {
                     labels: [],
-                    datasets: [{
-                        label: 'GPU %',
-                        data: [],
-                        borderColor: '#00ff88',
-                        backgroundColor: 'rgba(0, 255, 136, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 0
-                    }, {
-                        label: 'CPU %',
-                        data: [],
-                        borderColor: '#00d4ff',
-                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 0
-                    }]
+                    datasets: [
+                        { label: 'GPU %', data: [], borderColor: '#00ff88', backgroundColor: 'rgba(0,255,136,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-gpu-pct' },
+                        { label: 'CPU %', data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-cpu-pct' },
+                        { label: 'GPU Power', data: [], borderColor: '#ff4444', backgroundColor: 'rgba(255,68,68,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-gpu-power', hidden: true },
+                        { label: 'CPU Power', data: [], borderColor: '#ff8800', backgroundColor: 'rgba(255,136,0,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-cpu-power', hidden: true },
+                        { label: 'ƒ GPU %', data: [], borderColor: '#66ffbb', backgroundColor: 'rgba(102,255,187,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-llama-gpu-pct', hidden: true },
+                        { label: 'ƒ CPU %', data: [], borderColor: '#66e7ff', backgroundColor: 'rgba(102,231,255,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-llama-cpu-pct', hidden: true },
+                        { label: 'ƒ GPU Power', data: [], borderColor: '#cc2222', backgroundColor: 'rgba(204,34,34,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-llama-gpu-power', hidden: true },
+                        { label: 'ƒ CPU Power', data: [], borderColor: '#cc6600', backgroundColor: 'rgba(204,102,0,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-llama-cpu-power', hidden: true }
+                    ]
                 },
                 options: {
                     responsive: true,
@@ -906,7 +932,6 @@
                     scales: {
                         y: {
                             min: 0,
-                            max: 100,
                             grid: { color: '#2a3b5c' },
                             ticks: { color: '#888' }
                         },
@@ -1156,11 +1181,25 @@
             const sysPowerTotal = system.system_power_w ?? null;
             const validGpu = gpuPower !== null && gpuPower >= 0;
             const validCpu = cpuPower !== null && cpuPower >= 0;
+            // Compute filtered (llama.cpp contribution) values
+            let llamaGpuUtil = 0, llamaCpuUtil = 0;
+            const procGpu = data.process_gpu || {};
+            for (const proc of Object.values(procGpu)) {
+                if (proc.gpu_utilization != null) llamaGpuUtil += proc.gpu_utilization;
+            }
+            const rawCpu = data.system_raw?.cpu?.process_cpu || {};
+            for (const proc of Object.values(rawCpu)) {
+                if (proc.cpu_percent != null) llamaCpuUtil += proc.cpu_percent;
+            }
+            const gpuUtil = gpu.usage || 0;
+            const cpuUtil = cpu.percent || 0;
+            const filteredGpuPower = (validGpu && gpuUtil > 0) ? (llamaGpuUtil / gpuUtil) * gpuPower : (validGpu ? gpuPower : 0);
+            const filteredCpuPower = (validCpu && cpuUtil > 0) ? (llamaCpuUtil / cpuUtil) * cpuPower : (validCpu ? cpuPower : 0);
+            const filteredSysPower = (validGpu || validCpu) ? (validGpu ? filteredGpuPower : 0) + (validCpu ? filteredCpuPower : 0) : 0;
             if (validGpu || validCpu) {
-                const filteredPower = (validGpu ? gpuPower : 0) + (validCpu ? cpuPower : 0);
-                document.getElementById('gpu-power-1').textContent = (validGpu ? gpuPower.toFixed(0) : '-') + ' W';
-                document.getElementById('cpu-power-1').textContent = (validCpu ? cpuPower.toFixed(0) : '-') + ' W';
-                document.getElementById('sys-power-1').textContent = filteredPower.toFixed(0) + ' W';
+                document.getElementById('gpu-power-1').textContent = (validGpu ? filteredGpuPower.toFixed(0) : '-') + ' W';
+                document.getElementById('cpu-power-1').textContent = (validCpu ? filteredCpuPower.toFixed(0) : '-') + ' W';
+                document.getElementById('sys-power-1').textContent = filteredSysPower.toFixed(0) + ' W';
                 document.getElementById('gpu-power-2').textContent = (validGpu ? gpuPower.toFixed(0) : '-') + ' W';
                 document.getElementById('cpu-power-2').textContent = (validCpu ? cpuPower.toFixed(0) : '-') + ' W';
                 const validSysPower = sysPowerTotal !== null && sysPowerTotal >= 0;
@@ -1197,21 +1236,41 @@
         function updateCharts(data) {
             const serverMetrics = data.server || {};
             const system = data.system || {};
+            const process_gpu = data.process_gpu || {};
 
             // Add new data points
             const gpuUtil = system.gpu?.usage || 0;
             const cpuUtil = system.cpu?.percent || 0;
+            const gpuPower = system.gpu?.power_w || 0;
+            const cpuPower = system.cpu?.power_w || 0;
             // Use instantaneous rates when available, fall back to cumulative averages
-            const tokensGeneratedPerSec = serverMetrics.predicted_tokens_seconds_instant || serverMetrics.predicted_tokens_seconds || 0;
-            const tokensProcessedPerSec = serverMetrics.prompt_tokens_seconds_instant || serverMetrics.prompt_tokens_seconds || 0;
+            const tokensGeneratedPerSec = serverMetrics.predicted_tokens_seconds_instant != null ? serverMetrics.predicted_tokens_seconds_instant : (serverMetrics.predicted_tokens_seconds || 0);
+            const tokensProcessedPerSec = serverMetrics.prompt_tokens_seconds_instant != null ? serverMetrics.prompt_tokens_seconds_instant : (serverMetrics.prompt_tokens_seconds || 0);
 
-            console.log('updateCharts: tokensGeneratedPerSec=' + tokensGeneratedPerSec + ', tokensProcessedPerSec=' + tokensProcessedPerSec);
-            console.log('updateCharts: historyData.tokens before=' + JSON.stringify(historyData.tokens));
+            // Calculate filtered llama.cpp values
+            let llamaGpuUtil = 0, llamaCpuUtil = 0;
+            for (const proc of Object.values(process_gpu)) {
+                if (proc.gpu_utilization != null) llamaGpuUtil += proc.gpu_utilization;
+            }
+            const rawCpu = data.system_raw?.cpu?.process_cpu || {};
+            for (const proc of Object.values(rawCpu)) {
+                if (proc.cpu_percent != null) llamaCpuUtil += proc.cpu_percent;
+            }
+            const filteredGpu = gpuUtil > 0 ? Math.min(llamaGpuUtil, gpuUtil) : 0;
+            const filteredCpu = cpuUtil > 0 ? Math.min(llamaCpuUtil, cpuUtil) : 0;
+            const filteredGpuPower = gpuUtil > 0 ? (llamaGpuUtil / gpuUtil) * gpuPower : 0;
+            const filteredCpuPower = cpuUtil > 0 ? (llamaCpuUtil / cpuUtil) * cpuPower : 0;
 
             // Always append data — even when idle, append zeros so the graph
             // shows a smooth decline to zero instead of flashing blank.
             historyData.gpu.push(gpuUtil);
             historyData.cpu.push(cpuUtil);
+            historyData.gpuPower.push(gpuPower);
+            historyData.cpuPower.push(cpuPower);
+            historyData.filteredGpu.push(filteredGpu);
+            historyData.filteredCpu.push(filteredCpu);
+            historyData.filteredGpuPower.push(filteredGpuPower);
+            historyData.filteredCpuPower.push(filteredCpuPower);
             historyData.promptTokens.push(tokensProcessedPerSec);
             historyData.tokens.push(tokensGeneratedPerSec);
             historyData.labels.push(new Date().toLocaleTimeString());
@@ -1220,16 +1279,26 @@
             if (historyData.gpu.length > MAX_HISTORY) {
                 historyData.gpu.shift();
                 historyData.cpu.shift();
+                historyData.gpuPower.shift();
+                historyData.cpuPower.shift();
+                historyData.filteredGpu.shift();
+                historyData.filteredCpu.shift();
+                historyData.filteredGpuPower.shift();
+                historyData.filteredCpuPower.shift();
                 historyData.tokens.shift();
                 historyData.promptTokens.shift();
                 historyData.labels.shift();
             }
 
-            console.log('updateCharts: historyData.tokens after=' + JSON.stringify(historyData.tokens));
-
-            // Update combined usage chart (GPU first, then CPU)
+            // Update combined usage chart (all 8 datasets)
             combinedUsageChart.data.datasets[0].data = historyData.gpu;
             combinedUsageChart.data.datasets[1].data = historyData.cpu;
+            combinedUsageChart.data.datasets[2].data = historyData.gpuPower;
+            combinedUsageChart.data.datasets[3].data = historyData.cpuPower;
+            combinedUsageChart.data.datasets[4].data = historyData.filteredGpu;
+            combinedUsageChart.data.datasets[5].data = historyData.filteredCpu;
+            combinedUsageChart.data.datasets[6].data = historyData.filteredGpuPower;
+            combinedUsageChart.data.datasets[7].data = historyData.filteredCpuPower;
             combinedUsageChart.data.labels = historyData.labels;
             combinedUsageChart.update('none');
 
@@ -1613,13 +1682,39 @@
         }
 
         // Initialize and start polling
+        // Graph preferences helpers
+        function toggleDataset(chkId, visible) {
+            const dataset = combinedUsageChart.data.datasets.find(d => d.chkId === chkId);
+            if (dataset) { dataset.hidden = !visible; combinedUsageChart.update('none'); }
+        }
+        async function loadGraphPreferences() {
+            try {
+                const resp = await fetch('/api/settings/graph-preferences');
+                const prefs = await resp.json();
+                for (const [key, val] of Object.entries(prefs)) {
+                    const cb = document.getElementById(key);
+                    if (cb) { cb.checked = val; toggleDataset(key, val); }
+                }
+            } catch(e) { console.error('loadGraphPreferences error:', e); }
+        }
+        async function saveGraphPreference(key, value) {
+            try { await fetch('/api/settings/graph-preferences', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({[key]: value}) }); }
+            catch(e) { console.error('saveGraphPreference error:', e); }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             initCharts();
             initSlotCharts();
             fetchMetrics();
             setInterval(fetchMetrics, CONFIG.refreshRate);
-            // Also fetch monthly cost on initial load
             fetchMonthlyCost();
+            loadGraphPreferences();
+            document.querySelectorAll('#usage-checkboxes input[type="checkbox"]').forEach(cb => {
+                cb.addEventListener('change', function() {
+                    toggleDataset(this.id, this.checked);
+                    saveGraphPreference(this.id, this.checked);
+                });
+            });
         });
     </script>
 </body>

@@ -238,7 +238,8 @@
             try {
                 const response = await fetch('/api/vendor/comparison');
                 if (!response.ok) {
-                    throw new Error('Bad response');
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || 'Bad response (status ' + response.status + ')');
                 }
 
                 const data = await response.json();
