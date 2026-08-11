@@ -19,3 +19,7 @@ CLAUDE.md.bak
 .beads/interactions.jsonl
 llama-monitor.db-shm
 llama-monitor.db-wal
+
+# Chrome browser profile created with a literal ~ name (see ~/ contents)
+~/
+

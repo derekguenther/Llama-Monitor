@@ -13,10 +13,10 @@ set API_TIMEOUT_MS=600000
 call conda activate llama.cpp
 
 :: Executable & Model Paths
-set SERVER_BIN=C:\Users\ClaudeCode\Documents\windows_llama.cpp\vendor\llama.cpp\build\bin\llama-server.exe
-set MODEL_PATH=D:\AI\LLMs\General Use\DeepSeek v4\DeepSeek-V4-Flash-0731-UD-IQ3_XXS-00001-of-00004.gguf
-set SLOT_PATH=D:\AI\LLMs\General Use\DeepSeek v4\llama.cpp save slots
-set JINJATEMPLATE_PATH=D:\AI\LLMs\General Use\DeepSeek v4\chat_template.jinja
+set SERVER_BIN=C:\Users\ClaudeCode\Documents\windows_llama.cpp\vendor\llama.cpp\build\bin\Release\llama-server.exe
+set MODEL_PATH=D:\AI\LLMs\General Use\DeepSeek v4 Preview\DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf
+set SLOT_PATH=D:\AI\LLMs\General Use\DeepSeek v4 Preview\llama.cpp save slots
+set JINJATEMPLATE_PATH=D:\AI\LLMs\General Use\DeepSeek v4 Preview\chat_template.jinja
 
 :: Launch Mainline llama-server
 start /affinity FFFF /b /wait "" "%SERVER_BIN%" ^
@@ -29,7 +29,7 @@ start /affinity FFFF /b /wait "" "%SERVER_BIN%" ^
     --reasoning on ^
     --reasoning-format deepseek ^
     --metrics ^
-    --ctx-size 262144 ^
+    --ctx-size 131072 ^
     --parallel 5 ^
     --cache-prompt ^
     --cache-reuse 256 ^
@@ -40,7 +40,7 @@ start /affinity FFFF /b /wait "" "%SERVER_BIN%" ^
     --flash-attn on ^
     --load-mode none ^
     --n-gpu-layers all ^
-    --n-cpu-moe 43 ^
+    --n-cpu-moe 42 ^
     --temp 1.0 ^
     --top-p 1.0 ^
     --min-p 0.05 ^
@@ -49,7 +49,7 @@ start /affinity FFFF /b /wait "" "%SERVER_BIN%" ^
     --threads 8 ^
     --threads-batch 16 ^
     --batch-size 4096 ^
-    --ubatch-size 1024
+    --ubatch-size 1024 
 
 if %ERRORLEVEL% NEQ 0 pause
 
