@@ -13,7 +13,7 @@ echo "Generating Repository Map..."
 python3 << 'PYEOF' || { echo "ERROR: Failed to generate REPO_MAP.md"; exit 1; }
 import os, re, sys
 
-EXCLUDE_DIRS = {'.git', 'node_modules', '.worktrees', '.claude-history'}
+EXCLUDE_DIRS = {'.git', 'node_modules', '.worktrees', '.claude-history', 'backup'}
 INCLUDE_EXTS = {'.py', '.gd', '.js', '.sh'}
 
 def get_docstring(lines, idx):
@@ -40,7 +40,15 @@ def get_docstring(lines, idx):
         break
     return ''
 
+# Separate test files from regular project files
+def is_test_file(filepath):
+    return os.path.basename(filepath).startswith('test_') and filepath.endswith('.py')
+
+def is_underscore_file(filepath):
+    return os.path.basename(filepath).startswith('_')
+
 results = []
+test_results = []
 for dirpath, dirnames, filenames in os.walk('.'):
     rel = os.path.relpath(dirpath, '.')
     parts = rel.split(os.sep) if rel != '.' else []
@@ -52,6 +60,9 @@ for dirpath, dirnames, filenames in os.walk('.'):
         if ext not in INCLUDE_EXTS:
             continue
         filepath = os.path.join(dirpath, fn)
+        # Skip underscore-prefixed files entirely (they're user-side tools)
+        if is_underscore_file(filepath):
+            continue
         try:
             with open(filepath, encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
@@ -66,25 +77,47 @@ for dirpath, dirnames, filenames in os.walk('.'):
                 entry = f'{os.path.relpath(filepath, ".")}:{stripped}'
                 if doc:
                     entry += f'  # {doc}'
-                results.append(entry)
+                if is_test_file(filepath):
+                    test_results.append(entry)
+                else:
+                    results.append(entry)
                 continue
             # Module-level (no leading whitespace, not a comment)
             if re.match(r'^[^\s#]', stripped):
                 # ALL_CAPS constants
                 if re.match(r'^([A-Z_][A-Z0-9_]*)\s*=', stripped):
-                    results.append(f'{os.path.relpath(filepath, ".")}:{stripped}')
+                    entry = f'{os.path.relpath(filepath, ".")}:{stripped}'
+                    if is_test_file(filepath):
+                        test_results.append(entry)
+                    else:
+                        results.append(entry)
                     continue
                 # Object assignments: var = ClassName(...)
                 m3 = re.match(r'^([a-z_][a-z_0-9]*)\s*=\s*([A-Z][A-Za-z0-9_]*)\s*\(', stripped)
                 if m3:
-                    results.append(f'{os.path.relpath(filepath, ".")}:{stripped}')
+                    entry = f'{os.path.relpath(filepath, ".")}:{stripped}'
+                    if is_test_file(filepath):
+                        test_results.append(entry)
+                    else:
+                        results.append(entry)
                     continue
 
+# Write main REPO_MAP.md (project code only, no tests, no underscore files)
 outpath = os.path.join('.', 'docs', 'REPO_MAP.md')
 os.makedirs(os.path.dirname(outpath), exist_ok=True)
 with open(outpath, 'w') as f:
+    f.write('# Repository Map - Project Code\n')
+    f.write('# Files beginning with underscore (_) are user-side supporting tools, not part of the project.\n')
+    f.write('# Test files are in docs/REPO_MAP_TESTS.md\n')
     f.write('\n'.join(results) + '\n')
-print(f'REPO_MAP.md generated with {len(results)} entries')
+print(f'REPO_MAP.md generated with {len(results)} entries (project code)')
+
+# Write REPO_MAP_TESTS.md (test files only)
+test_outpath = os.path.join('.', 'docs', 'REPO_MAP_TESTS.md')
+with open(test_outpath, 'w') as f:
+    f.write('# Repository Map - Test Files\n')
+    f.write('\n'.join(test_results) + '\n')
+print(f'REPO_MAP_TESTS.md generated with {len(test_results)} entries (test files)')
 PYEOF
 
 git add .

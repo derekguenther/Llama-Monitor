@@ -44,7 +44,7 @@ except ImportError:
     AGGREGATOR_AVAILABLE = False
 
 
-app = Flask(__name__, static_folder=None, template_folder='templates')
+app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 app.config["SECRET_KEY"] = "llama-monitor-secret-key"
 
 # Configure SocketIO
@@ -65,6 +65,36 @@ def get_config() -> Any:
     """Get configuration."""
     config_path = find_config()
     return load_config(config_path)
+
+
+# Shared Database instance for read-only access. Centralizing to a single
+# connection (instead of opening a new one per request) removes the concurrent
+# multi-connection access that corrupted the database file.
+_db_instance: Optional[Any] = None
+_db_path: Optional[str] = None
+
+
+def _get_db(db_path: str) -> "Database":
+    """Return a shared, thread-safe Database instance for reads.
+
+    Reuses one connection for all web-server read requests rather than opening
+    a new sqlite3 connection per request. The Database class guards access with
+    an RLock (check_same_thread=False), so it is safe to share across request
+    threads. WAL mode (set in Database.connect) keeps this reader safe alongside
+    the aggregator's writer.
+
+    Args:
+        db_path: Path to the SQLite database file
+
+    Returns:
+        A shared Database instance
+    """
+    global _db_instance, _db_path
+    if _db_instance is None or _db_path != db_path:
+        _db_instance = Database(db_path)
+        _db_instance.connect()
+        _db_path = db_path
+    return _db_instance
 
 
 def fetch_metrics_from_aggregator() -> Optional[Dict[str, Any]]:
@@ -99,11 +129,8 @@ def transform_system_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         System metrics dictionary with nested structure
     """
-    def safe_float(value, default=-1):
-        """Convert None or non-numeric values to default.
-        
-        -1 is a sentinel value for broken data paths and should be preserved for detection.
-        """
+    def safe_float(value, default=0):
+        """Convert None or non-numeric values to default."""
         if value is None:
             return default
         try:
@@ -113,27 +140,27 @@ def transform_system_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
     
     return {
         "cpu": {
-            "percent": safe_float(data.get("cpu_percent"), -1),
+            "percent": safe_float(data.get("cpu_percent")),
             "cores": data.get("cpu_cores", []),
             "count": data.get("cpu_count", 0),
-            "power_w": safe_float(data.get("cpu_power_w"), -1),
+            "power_w": safe_float(data.get("cpu_power_w")),
         },
         "gpu": {
-            "usage": safe_float(data.get("gpu_usage"), -1),
-            "memory_used": safe_float(data.get("gpu_memory_used"), -1),
-            "memory_total": safe_float(data.get("gpu_memory_total"), -1),
-            "temperature_c": safe_float(data.get("gpu_temperature_c"), -1),
-            "fan_speed_rpm": safe_float(data.get("gpu_fan_speed_rpm"), -1),
-            "power_w": safe_float(data.get("gpu_power_w"), -1),
+            "usage": safe_float(data.get("gpu_usage")),
+            "memory_used": safe_float(data.get("gpu_memory_used")),
+            "memory_total": safe_float(data.get("gpu_memory_total")),
+            "temperature_c": safe_float(data.get("gpu_temperature_c")),
+            "fan_speed_rpm": safe_float(data.get("gpu_fan_speed_rpm")),
+            "power_w": safe_float(data.get("gpu_power_w")),
         },
         "memory": {
-            "used": safe_float(data.get("memory_used"), -1),
-            "total": safe_float(data.get("memory_total"), -1),
-            "percent": safe_float(data.get("memory_percent"), -1),
-            "available": safe_float(data.get("memory_available"), -1),
+            "used": safe_float(data.get("memory_used")),
+            "total": safe_float(data.get("memory_total")),
+            "percent": safe_float(data.get("memory_percent")),
+            "available": safe_float(data.get("memory_available")),
         },
         "system": {
-            "power_w": safe_float(data.get("system_power_w"), -1),
+            "power_w": safe_float(data.get("system_power_w")),
         },
         "timestamp": data.get("timestamp", ""),
     }
@@ -148,14 +175,9 @@ def fetch_metrics_from_database(db_path: str) -> Optional[Dict[str, Any]]:
     Returns:
         Metrics data dictionary or None if database unavailable
     """
-    import sqlite3
-
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute(
+        db = _get_db(db_path)
+        row = db.execute_query(
             """
             SELECT timestamp, server_data, system_data, cost_data
             FROM combined_metrics
@@ -163,8 +185,6 @@ def fetch_metrics_from_database(db_path: str) -> Optional[Dict[str, Any]]:
             LIMIT 1
             """
         )
-        row = cursor.fetchone()
-        conn.close()
 
         if row:
             system_data = json.loads(row["system_data"])
@@ -198,6 +218,20 @@ def index() -> str:
     )
 
 
+def _transform_metrics(metrics: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform flat system metrics to nested structure for frontend.
+    
+    The aggregator/cache stores system metrics flat (cpu_percent, gpu_usage, etc.)
+    but the frontend expects nested (system.cpu.percent, system.gpu.usage, etc.).
+    """
+    if metrics and "system" in metrics and isinstance(metrics["system"], dict):
+        system = metrics["system"]
+        # Check if system is flat (has cpu_percent) or already nested (has cpu.percent)
+        if "cpu_percent" in system or "gpu_usage" in system:
+            metrics["system"] = transform_system_metrics(system)
+    return metrics
+
+
 @app.route("/api/metrics/latest")
 def api_latest_metrics():
     """Return latest metrics from metrics_cache, aggregator, or database."""
@@ -206,7 +240,7 @@ def api_latest_metrics():
         try:
             cached = _metrics_cache.get()
             if cached:
-                return jsonify(cached)
+                return jsonify(_transform_metrics(cached))
         except Exception:
             pass
 
@@ -214,14 +248,14 @@ def api_latest_metrics():
     if AGGREGATOR_AVAILABLE:
         aggregator = get_aggregator()
         if aggregator and aggregator.last_metrics:
-            return jsonify(aggregator.last_metrics)
+            return jsonify(_transform_metrics(aggregator.last_metrics))
 
         # Try fetching from aggregator daemon HTTP API
         agg_data = fetch_metrics_from_aggregator()
         if agg_data:
-            return jsonify(agg_data)
+            return jsonify(_transform_metrics(agg_data))
 
-    # Fallback to database
+    # Fallback to database (already transformed by fetch_metrics_from_database)
     config = get_config()
     db_path = config.get("database.path", "llama-monitor.db")
     metrics = fetch_metrics_from_database(db_path)
@@ -273,12 +307,8 @@ def api_range_metrics():
     end = request.args.get("end")
     limit = request.args.get("limit", 100, type=int)
 
-    import sqlite3
-
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        db = _get_db(db_path)
 
         query = "SELECT * FROM combined_metrics WHERE 1=1"
         params = []
@@ -292,9 +322,7 @@ def api_range_metrics():
 
         query += " ORDER BY timestamp DESC LIMIT ?"
 
-        cursor.execute(query, params + [limit])
-        rows = cursor.fetchall()
-        conn.close()
+        rows = db.execute_all(query, params + [limit])
 
         results = []
         for row in rows:
@@ -325,8 +353,7 @@ def api_monthly_cost():
     db_path = config.get("database.path", "llama-monitor.db")
 
     try:
-        db = Database(db_path)
-        db.connect()
+        db = _get_db(db_path)
 
         # Get monthly energy data
         monthly_energy = db.get_monthly_energy(days=30)
@@ -345,8 +372,6 @@ def api_monthly_cost():
                 "cost_usd": cost_usd,
             })
 
-        db.close()
-
         return jsonify({
             "success": True,
             "cost_rate": cost_rate,
@@ -354,44 +379,6 @@ def api_monthly_cost():
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-
-
-@app.route("/api/metrics/list")
-def api_metrics_list():
-    """Return list of available metrics and tables."""
-    config = get_config()
-    db_path = config.get("database.path", "llama-monitor.db")
-
-    import sqlite3
-
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # Get tables
-        cursor.execute(
-            """
-            SELECT name FROM sqlite_master
-            WHERE type='table' AND name LIKE 'metrics_%'
-            """
-        )
-        tables = [row[0] for row in cursor.fetchall()]
-
-        # Get columns for each table
-        metrics_info = {}
-        for table in tables:
-            cursor.execute(f"PRAGMA table_info({table})")
-            columns = [row[1] for row in cursor.fetchall()]
-            metrics_info[table] = columns
-
-        conn.close()
-
-        return jsonify({
-            "tables": tables,
-            "metrics": metrics_info,
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/metrics/historical")
@@ -414,12 +401,8 @@ def api_historical_metrics():
     limit = request.args.get("limit", 1000, type=int)
     sample_interval = request.args.get("sample", 60, type=int)
 
-    import sqlite3
-
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        db = _get_db(db_path)
 
         # Calculate time range based on timeframe if not provided
         now = datetime.now()
@@ -471,12 +454,9 @@ def api_historical_metrics():
             ORDER BY timestamp ASC
         """
 
-        cursor.execute(system_query, (start, end, sample_interval))
-        system_rows = cursor.fetchall()
+        system_rows = db.execute_all(system_query, (start, end, sample_interval))
 
-        cursor.execute(server_query, (start, end, sample_interval))
-        server_rows = cursor.fetchall()
-        conn.close()
+        server_rows = db.execute_all(server_query, (start, end, sample_interval))
 
         # Apply limit to results if specified
         if limit and limit > 0:
@@ -544,12 +524,10 @@ def api_historical_range():
         return jsonify({"error": "start and end timestamps are required"}), 400
 
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        db = _get_db(db_path)
 
         # Get system metrics
-        cursor.execute(
+        system_rows = db.execute_all(
             """
             SELECT
                 timestamp,
@@ -567,10 +545,9 @@ def api_historical_range():
             """,
             (start, end, limit)
         )
-        system_rows = cursor.fetchall()
 
         # Get server metrics
-        cursor.execute(
+        server_rows = db.execute_all(
             """
             SELECT
                 timestamp,
@@ -586,8 +563,6 @@ def api_historical_range():
             """,
             (start, end, limit)
         )
-        server_rows = cursor.fetchall()
-        conn.close()
 
         system_data = []
         for row in system_rows:
@@ -700,12 +675,17 @@ def api_restart_server():
 
 
 def get_db():
-    """Get database instance."""
+    """Get the shared database instance for settings access.
+
+    Returns the same thread-safe Database instance used by all web-server reads,
+    so settings reads/writes share one connection instead of opening a new one
+    per request.
+    """
     if not DB_AVAILABLE:
         return None
     config = get_config()
     db_path = config.get("database.path", "llama-monitor.db")
-    return Database(db_path)
+    return _get_db(db_path)
 
 
 @app.route("/settings")
@@ -949,6 +929,12 @@ def settings_page():
                     <input type="number" id="cost_rate" name="cost_rate" step="0.001" min="0">
                     <div class="hint">Current electricity rate for cost calculations</div>
                 </div>
+
+                <div class="form-group">
+                    <label for="idle_baseline_w">Idle Baseline Power (W)</label>
+                    <input type="number" id="idle_baseline_w" name="idle_baseline_w" step="1" min="0">
+                    <div class="hint">System power draw when idle, used for idle baseline tracking</div>
+                </div>
             </div>
 
             <div class="settings-section">
@@ -1010,6 +996,7 @@ def settings_page():
                 document.getElementById('show_cost').checked = settings.show_cost !== false;
                 document.getElementById('show_temps').checked = settings.show_temps !== false;
                 document.getElementById('cost_rate').value = settings.cost_rate || 0.12;
+                document.getElementById('idle_baseline_w').value = settings.idle_baseline_w || 40;
 
                 // Display current values
                 document.getElementById('current-values').innerHTML = `
@@ -1017,6 +1004,7 @@ def settings_page():
                     <div><strong>Cost Display:</strong> <span class="value-display">${settings.show_cost !== false ? 'Enabled' : 'Disabled'}</span></div>
                     <div><strong>Temp Display:</strong> <span class="value-display">${settings.show_temps !== false ? 'Enabled' : 'Disabled'}</span></div>
                     <div><strong>Electricity Cost:</strong> <span class="value-display">$${parseFloat(settings.cost_rate || 0.12).toFixed(2)}/kWh</span></div>
+                    <div><strong>Idle Baseline:</strong> <span class="value-display">${parseFloat(settings.idle_baseline_w || 40).toFixed(0)} W</span></div>
                 `;
             } catch (error) {
                 showFeedback('Error loading settings: ' + error.message, 'error');
@@ -1028,7 +1016,8 @@ def settings_page():
                 web_refresh_rate: parseInt(document.getElementById('web_refresh_rate').value) || 1,
                 show_cost: document.getElementById('show_cost').checked,
                 show_temps: document.getElementById('show_temps').checked,
-                cost_rate: parseFloat(document.getElementById('cost_rate').value) || 0.12
+                cost_rate: parseFloat(document.getElementById('cost_rate').value) || 0.12,
+                idle_baseline_w: parseFloat(document.getElementById('idle_baseline_w').value) || 40
             };
 
             try {
@@ -1529,7 +1518,8 @@ def api_get_settings():
         "web_refresh_rate": db.get_setting("web_refresh_rate", "1"),
         "show_cost": db.get_setting("show_cost", "true"),
         "show_temps": db.get_setting("show_temps", "true"),
-        "cost_rate": db.get_setting("cost_rate_usd_per_kwh", "0.12")
+        "cost_rate": db.get_setting("cost_rate_usd_per_kwh", "0.12"),
+        "idle_baseline_w": db.get_setting("idle_baseline_w", "40.0")
     }
 
     # Convert to appropriate types
@@ -1552,6 +1542,11 @@ def api_get_settings():
         settings["cost_rate"] = float(settings["cost_rate"])
     except (ValueError, TypeError):
         settings["cost_rate"] = 0.12
+
+    try:
+        settings["idle_baseline_w"] = float(settings["idle_baseline_w"])
+    except (ValueError, TypeError):
+        settings["idle_baseline_w"] = 40.0
 
     return jsonify(settings)
 
@@ -1584,6 +1579,9 @@ def api_set_settings():
         if "cost_rate" in data:
             db.set_setting("cost_rate_usd_per_kwh", float(data["cost_rate"]))
 
+        if "idle_baseline_w" in data:
+            db.set_setting("idle_baseline_w", float(data["idle_baseline_w"]))
+
         return jsonify({"success": True, "message": "Settings saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1600,20 +1598,19 @@ def api_reset_settings():
         return jsonify({"error": "Database not available"}), 500
 
     try:
-        # Ensure database connection is open
-        db.connect()
-
-        # Delete all settings to reset to defaults
-        cursor = db.conn.cursor()
-        cursor.execute("DELETE FROM settings")
-        db.conn.commit()
+        # Delete all settings to reset to defaults (uses the locked connection)
+        db.execute("DELETE FROM settings")
 
         # Re-insert default cost rate
-        cursor.execute(
+        db.execute(
             "INSERT INTO settings (key, value) VALUES (?, ?)",
             ("cost_rate_usd_per_kwh", "0.12")
         )
-        db.conn.commit()
+        # Re-insert default idle baseline
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)",
+            ("idle_baseline_w", "40.0")
+        )
 
         return jsonify({"success": True, "message": "Settings reset to defaults"})
     except Exception as e:
@@ -1643,6 +1640,54 @@ def api_set_cost_rate():
         return jsonify({"success": True, "message": "Cost rate updated"})
     except ValueError:
         return jsonify({"error": "Invalid cost rate value"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Graph preferences API endpoints
+# ======================================================================
+
+@app.route("/api/settings/graph-preferences", methods=["GET"])
+def api_get_graph_preferences():
+    """Get graph display preferences."""
+    prefs = {
+        "chk-gpu-pct": True,
+        "chk-cpu-pct": True,
+        "chk-gpu-power": False,
+        "chk-cpu-power": False,
+        "chk-llama-gpu-pct": False,
+        "chk-llama-cpu-pct": False,
+        "chk-llama-gpu-power": False,
+        "chk-llama-cpu-power": False,
+    }
+    if DB_AVAILABLE:
+        db = get_db()
+        if db:
+            try:
+                for key in prefs:
+                    val = db.get_setting("graph_" + key, None)
+                    if val is not None:
+                        prefs[key] = val.lower() in ("true", "1", "yes")
+            except Exception:
+                pass
+    return jsonify(prefs)
+
+
+@app.route("/api/settings/graph-preferences", methods=["POST"])
+def api_set_graph_preferences():
+    """Save graph display preferences."""
+    if not DB_AVAILABLE:
+        return jsonify({"error": "Database not available"}), 500
+    db = get_db()
+    if not db:
+        return jsonify({"error": "Database not available"}), 500
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    try:
+        for key, value in data.items():
+            db.set_setting("graph_" + key, "true" if value else "false")
+        return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1868,14 +1913,16 @@ def run_server(host="0.0.0.0", port=8080, debug=False, verbose=False):
     print("Press Ctrl+C to stop")
 
     # Use allow_unsafe_werkzeug=True to avoid RuntimeError in production
-    socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True)
+    # use_reloader=False because the server runs in a background thread
+    # (the reloader requires the main thread for signal handling)
+    socketio.run(app, host=host, port=port, debug=debug, use_reloader=False, allow_unsafe_werkzeug=True)
 
 
 # Global server reference for stop_server
 _server_thread = None
 
 
-def start_server(host="0.0.0.0", port=8080, metrics_cache=None, verbose=False):
+def start_server(host="0.0.0.0", port=8080, metrics_cache=None, verbose=False, debug=False):
     """Start the web server in a background thread.
 
     Args:
@@ -1893,7 +1940,7 @@ def start_server(host="0.0.0.0", port=8080, metrics_cache=None, verbose=False):
 
     # Create and start server thread
     def run():
-        run_server(host=host, port=port, debug=False, verbose=verbose)
+        run_server(host=host, port=port, debug=debug, verbose=verbose)
 
     _server_thread = threading.Thread(target=run, daemon=True)
     _server_thread.start()

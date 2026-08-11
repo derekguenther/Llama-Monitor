@@ -12,7 +12,7 @@ class Config:
     DEFAULT_CONFIG = {
         "idle_baseline": {
             "minimum_time_seconds": 5,
-            "power_w": 150.0,
+            "power_w": 40.0,
         },
         "compression": {
             "enabled": True,

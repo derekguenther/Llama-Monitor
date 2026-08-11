@@ -197,7 +197,7 @@ class TUI:
             cost = self.metrics["cost"]
             # Use today's energy if available, otherwise fall back to session energy
             total_wh = cost.get("today_wh") or cost.get("total_wh", 0)
-            cost_rate = getattr(self.config, "cost_rate", 0.12)
+            cost_rate = cost.get("cost_rate", 0.12)
             cost_usd = total_wh / 1000 * cost_rate
 
             cost_str = f" ${format_significant_digits(cost_usd)} "
@@ -240,14 +240,14 @@ class TUI:
 
             # Prompt tokens
             prompt_tokens = server.get("prompt_tokens_total", 0) or 0
-            prompt_rate = server.get("prompt_tokens_seconds", 0) or 0
+            prompt_rate = server.get("prompt_tokens_seconds_instant") or server.get("prompt_tokens_seconds", 0) or 0
             stdscr.addstr(row, 4, f"Prompt tokens:  {prompt_tokens:,}", self.colors.get("normal"))
             stdscr.addstr(row, 25, f"({prompt_rate:,.0f}/s)", self.colors.get("secondary"))
             row += 1
 
             # Generated tokens
             gen_tokens = server.get("tokens_predicted_total", 0) or 0
-            gen_rate = server.get("predicted_tokens_seconds", 0) or 0
+            gen_rate = server.get("predicted_tokens_seconds_instant") or server.get("predicted_tokens_seconds", 0) or 0
             stdscr.addstr(row, 4, f"Generated:      {gen_tokens:,}", self.colors.get("normal"))
             stdscr.addstr(row, 25, f"({gen_rate:,.0f}/s)", self.colors.get("secondary"))
             row += 1
@@ -489,7 +489,7 @@ class TUI:
 
         # Legend
         row += chart_height + 1
-        stdscr.addstr(row, 2, "Legend: GPU = green, CPU = blue, Power = magenta", curses.A_DIM)
+        stdscr.addstr(row, 2, "Legend: GPU = magenta, CPU = green, Power = magenta", curses.A_DIM)
 
         return row + 2
 

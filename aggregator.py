@@ -17,7 +17,7 @@ class Aggregator:
         self,
         server_url: str = "http://localhost:8000",
         db_path: str = "llama-monitor.db",
-        idle_baseline_w: float = 150.0,
+        idle_baseline_w: float = 40.0,
         cost_rate: float = 0.12,
         collect_metrics: bool = True,
     ):
@@ -47,11 +47,8 @@ class Aggregator:
         self.system_collector = SystemMetricsCollector()
         self.cost_calculator = ElectricityCostCalculator(self.db, idle_baseline_w)
 
-    def _safe_float(self, value, default=-1.0):
-        """Convert None or non-numeric values to default.
-        
-        -1 is a sentinel value for broken data paths and should be preserved for detection.
-        """
+    def _safe_float(self, value, default=0.0):
+        """Convert None or non-numeric values to default."""
         if value is None:
             return default
         try:
@@ -254,6 +251,7 @@ class Aggregator:
         )
 
         # Build cost data from energy stats
+        # Store per-interval deltas for historical accuracy, plus cumulative for display
         cost = {
             "gpu_power_w": max(0, gpu_power_w),
             "cpu_power_w": cpu_power_w or 0,
@@ -262,6 +260,9 @@ class Aggregator:
             "gpu_wh": energy_stats["gpu_wh"],
             "cpu_wh": energy_stats["cpu_wh"],
             "total_wh": energy_stats["total_wh"],
+            "delta_gpu_wh": energy_stats.get("delta_gpu_wh", 0),
+            "delta_cpu_wh": energy_stats.get("delta_cpu_wh", 0),
+            "delta_total_wh": energy_stats.get("delta_total_wh", 0),
             "cost_usd": energy_stats["total_wh"] / 1000.0 * self.cost_calculator.cost_rate,
             "today_wh": energy_stats["today_wh"],
             "today_gpu_wh": energy_stats["today_gpu_wh"],
@@ -272,7 +273,7 @@ class Aggregator:
         # Store system data as flattened structure for combined_metrics
         self.db.execute(
             """
-            INSERT INTO combined_metrics (timestamp, server_data, system_data, cost_data)
+            INSERT OR REPLACE INTO combined_metrics (timestamp, server_data, system_data, cost_data)
             VALUES (?, ?, ?, ?)
             """,
             (

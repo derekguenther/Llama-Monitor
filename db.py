@@ -43,8 +43,58 @@ class Database:
                 # This is necessary because the aggregator runs in a background thread
                 self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
                 self.conn.row_factory = sqlite3.Row
+                # WAL mode: allows concurrent readers (web server) alongside the
+                # single writer (aggregator) without corrupting the database file.
+                # Rollback-journal mode + concurrent access causes
+                # "database disk image is malformed".
+                self.conn.execute("PRAGMA journal_mode=WAL")
+                # Wait up to 5s for a lock instead of failing/racing immediately.
+                self.conn.execute("PRAGMA busy_timeout=5000")
+                # synchronous=NORMAL is safe with WAL (fsync only at checkpoint)
+                # and dramatically faster than FULL for high-frequency writes.
+                self.conn.execute("PRAGMA synchronous=NORMAL")
+                self.conn.execute("PRAGMA foreign_keys=ON")
                 self._initialize_schema()
             return self.conn
+
+    def recover_from_corruption(self) -> bool:
+        """Rebuild the database if it is corrupt, so the monitor keeps running.
+
+        Called when a sqlite3.DatabaseError ("database disk image is malformed")
+        is raised during a write. The corrupt file is preserved as a backup for
+        forensics, then a fresh connection + schema are created.
+
+        Returns:
+            True if recovery succeeded, False otherwise.
+        """
+        try:
+            with self._lock:
+                # Close whatever connection state we have
+                if self.conn is not None:
+                    try:
+                        self.conn.close()
+                    except Exception:
+                        pass
+                    self.conn = None
+
+                # Preserve the corrupt file for inspection
+                backup_path = f"{self.db_path}.corrupt-{int(time.time())}"
+                try:
+                    Path(self.db_path).rename(backup_path)
+                except OSError:
+                    pass
+
+                # Reopen fresh; _initialize_schema recreates all tables
+                self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+                self.conn.row_factory = sqlite3.Row
+                self.conn.execute("PRAGMA journal_mode=WAL")
+                self.conn.execute("PRAGMA busy_timeout=5000")
+                self.conn.execute("PRAGMA synchronous=NORMAL")
+                self.conn.execute("PRAGMA foreign_keys=ON")
+                self._initialize_schema()
+                return True
+        except Exception:
+            return False
 
     def close(self) -> None:
         """Close database connection."""
@@ -785,11 +835,13 @@ class Database:
             cursor = self.conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO server_metrics_raw (
+                INSERT OR REPLACE INTO server_metrics_raw (
                     timestamp, prompt_tokens_total, prompt_tokens_seconds,
                     tokens_predicted_total, predicted_tokens_seconds,
-                    requests_processing, requests_deferred, slots_active, slots_processing
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    requests_processing, requests_deferred,
+                    slots_active, slots_processing
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     timestamp,
@@ -846,7 +898,7 @@ class Database:
             cursor = self.conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO system_metrics_raw (
+                INSERT OR REPLACE INTO system_metrics_raw (
                     timestamp, cpu_percent, cpu_cores_percent, cpu_temperature_c,
                     cpu_power_w, gpu_usage, gpu_memory_used_mb, gpu_memory_total_mb,
                     gpu_temperature_c, gpu_fan_speed_rpm, gpu_power_w,
@@ -1250,6 +1302,26 @@ class Database:
             rate: Cost rate in USD per kWh
         """
         self.set_setting("cost_rate_usd_per_kwh", str(rate))
+
+    def get_idle_baseline_w(self) -> float:
+        """Get idle baseline power from settings.
+
+        Returns:
+            Idle baseline power in watts
+        """
+        value = self.get_setting("idle_baseline_w", "40.0")
+        try:
+            return float(value)
+        except ValueError:
+            return 40.0
+
+    def set_idle_baseline_w(self, power_w: float) -> None:
+        """Set idle baseline power in settings.
+
+        Args:
+            power_w: Idle baseline power in watts
+        """
+        self.set_setting("idle_baseline_w", str(power_w))
 
     # Token tracking methods
     # ======================================================================

@@ -285,9 +285,9 @@ def format_metrics_display(metrics: Dict[str, Any]) -> str:
     server = metrics.get("server", {})
     if server:
         prompt_tokens = server.get("prompt_tokens_total", 0)
-        prompt_rate = server.get("prompt_tokens_seconds", 0)
+        prompt_rate = server.get("prompt_tokens_seconds_instant") or server.get("prompt_tokens_seconds", 0) or 0
         generated = server.get("tokens_predicted_total", 0)
-        gen_rate = server.get("predicted_tokens_seconds", 0)
+        gen_rate = server.get("predicted_tokens_seconds_instant") or server.get("predicted_tokens_seconds", 0) or 0
 
         lines.append(f"Prompt tokens:    {prompt_tokens:,} ({prompt_rate:,.0f}/s)")
         lines.append(f"Generated:        {generated:,} ({gen_rate:,.0f}/s)")

@@ -75,6 +75,7 @@ class Monitor:
         port: int = 8080,
         show_stats: bool = False,
         verbose: bool = False,
+        debug: bool = False,
     ):
         """Initialize the monitor.
 
@@ -95,6 +96,7 @@ class Monitor:
         self.port = port
         self.show_stats = show_stats
         self.verbose = verbose
+        self.debug = debug
 
         # Configure logging based on verbose flag
         if verbose:
@@ -151,7 +153,7 @@ class Monitor:
 
         # Initialize aggregator
         cost_rate = self.config.get("electricity.cost_rate", 0.12)
-        idle_baseline = self.config.get("idle_baseline.power_w", 150.0)
+        idle_baseline = self.config.get("idle_baseline.power_w", 40.0)
         collect_metrics = self.config.get("metrics_collection.collect_metrics", True)
         tracked_processes = self.config.get("metrics_collection.tracked_processes", ["llama.cpp"])
 
@@ -173,26 +175,59 @@ class Monitor:
 
     def run_aggregator_loop(self):
         """Background thread to run the aggregator collection loop."""
+        iteration = 0
         while not self._shutdown_event.is_set():
+            loop_start = time.monotonic()
             try:
                 # Collect and store metrics
                 metrics = self.aggregator.collect_all_metrics()
+                print(f"[DEBUG] iter {iteration}: collect_all_metrics keys={list(metrics.keys())}")
+                if iteration == 0:
+                    sys = metrics.get("system", {})
+                    print(f"[DEBUG]   system keys={list(sys.keys())}")
+                    print(f"[DEBUG]   cpu_percent={sys.get('cpu_percent')}, gpu_usage={sys.get('gpu_usage')}")
+                    print(f"[DEBUG]   nested cpu={sys.get('cpu', {})}, gpu={sys.get('gpu', {})}")
+                    svr = metrics.get("server", {})
+                    print(f"[DEBUG]   server keys={list(svr.keys())}")
+
                 self.aggregator.store_raw_metrics(metrics)
                 self.aggregator.compress_if_needed()
                 cost = self.aggregator.calculate_cost()
                 metrics["cost"] = cost
 
-                # Aggregator already returns nested system structure for frontend
-                # No transform needed
+                if iteration == 0:
+                    print(f"[DEBUG]   cost keys={list(cost.keys())}")
+                    print(f"[DEBUG]   session_cost_usd={cost.get('session_cost_usd')}, today_cost={cost.get('today_cost')}")
 
                 # Update shared cache
                 self.metrics_cache.update(metrics)
 
-                # Wait for next interval
-                self._shutdown_event.wait(self.polling_interval)
+                if iteration == 0:
+                    # Verify cache has cost
+                    cached = self.metrics_cache.get()
+                    print(f"[DEBUG]   cache keys={list(cached.keys())}")
+                    print(f"[DEBUG]   cache has cost={'cost' in cached}, cost type={type(cached.get('cost'))}")
+
+                # Wait for next interval, accounting for time already spent on work
+                elapsed = time.monotonic() - loop_start
+                wait_time = max(0.0, self.polling_interval - elapsed)
+                self._shutdown_event.wait(wait_time)
+                iteration += 1
             except Exception as e:
                 # Log error but continue loop
+                import traceback
+                import sqlite3
                 print(f"Error in aggregator loop: {e}")
+                traceback.print_exc()
+                # If the database is corrupt, rebuild it so the monitor recovers
+                # automatically instead of failing every iteration.
+                if isinstance(e, sqlite3.DatabaseError):
+                    print("Database corruption detected; attempting automatic recovery...")
+                    if self.aggregator and hasattr(self.aggregator, "db"):
+                        if self.aggregator.db.recover_from_corruption():
+                            print("Database recovered successfully; resuming normal operation.")
+                        else:
+                            print("Database recovery FAILED; will retry.")
                 self._shutdown_event.wait(1)
 
     def shutdown(self):
@@ -231,7 +266,7 @@ class Monitor:
 
         # Start web server in background thread
         self.web_server_thread = threading.Thread(
-            target=lambda: start_web_server(host="0.0.0.0", port=self.port, metrics_cache=self.metrics_cache, verbose=self.verbose),
+            target=lambda: start_web_server(host="0.0.0.0", port=self.port, metrics_cache=self.metrics_cache, verbose=self.verbose, debug=self.debug),
             daemon=True,
         )
         self.web_server_thread.start()
@@ -327,7 +362,7 @@ class Monitor:
         # Cost - show today's energy
         print("\nCost:")
         if cost:
-            today_wh = cost.get('today_wh') or cost.get('total_energy_wh', 0)
+            today_wh = cost.get('today_wh') or cost.get('total_wh', 0)
             print(f"  Today's Cost:     ${format_significant_digits(cost.get('total_cost', 0))}")
             print(f"  Today's Energy:   {format_significant_digits(today_wh)} Wh")
         else:
@@ -440,6 +475,12 @@ def parse_args() -> argparse.Namespace:
         "--verbose",
         action="store_true",
         help="Enable verbose logging (INFO level for werkzeug, socketio, engineio)",
+    )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable Flask debug mode (auto-reload on code changes, detailed error pages)",
     )
 
     return parser.parse_args()
@@ -576,6 +617,7 @@ def main():
         show_stats=args.stats,
         port=args.port,
         verbose=args.verbose,
+        debug=args.debug,
     )
 
     # Set up signal handlers for graceful shutdown

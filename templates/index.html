@@ -687,14 +687,12 @@
                 <div class="card">
                     <h2>Usage (60s)</h2>
                     <div class="graph-checkboxes" id="usage-checkboxes">
+                        <label><input type="checkbox" id="chk-gpu-pct-f" checked> GPU %(ƒ)</label>
                         <label><input type="checkbox" id="chk-gpu-pct" checked> GPU %</label>
+                        <label><input type="checkbox" id="chk-cpu-pct-f" checked> CPU %(ƒ)</label>
                         <label><input type="checkbox" id="chk-cpu-pct" checked> CPU %</label>
-                        <label><input type="checkbox" id="chk-gpu-power"> GPU ⚡</label>
-                        <label><input type="checkbox" id="chk-cpu-power"> CPU ⚡</label>
-                        <label><input type="checkbox" id="chk-llama-gpu-pct"> ƒ GPU %</label>
-                        <label><input type="checkbox" id="chk-llama-cpu-pct"> ƒ CPU %</label>
-                        <label><input type="checkbox" id="chk-llama-gpu-power"> ƒ GPU ⚡</label>
-                        <label><input type="checkbox" id="chk-llama-cpu-power"> ƒ CPU ⚡</label>
+                        <label><input type="checkbox" id="chk-sys-power-f"> System ⚡(ƒ)</label>
+                        <label><input type="checkbox" id="chk-sys-power"> System ⚡</label>
                     </div>
                     <div class="graph-container">
                         <canvas id="combined-usage-graph" class="graph-canvas"></canvas>
@@ -707,11 +705,11 @@
                     <div class="power-grid">
                         <div class="power-item">
                             <div class="power-value" id="gpu-power-1">- W</div>
-                            <div class="power-label">GPU Power</div>
+                            <div class="power-label">GPU Power (Filtered)</div>
                         </div>
                         <div class="power-item">
                             <div class="power-value" id="cpu-power-1">- W</div>
-                            <div class="power-label">CPU Power</div>
+                            <div class="power-label">CPU Power (Filtered)</div>
                         </div>
                         <div class="power-item">
                             <div class="power-value" id="sys-power-1">- W</div>
@@ -788,7 +786,9 @@
             filteredGpu: [],
             filteredCpu: [],
             filteredGpuPower: [],
-            filteredCpuPower: []
+            filteredCpuPower: [],
+            sysPower: [],
+            filteredSysPower: []
         };
         const MAX_HISTORY = 60;
 
@@ -898,14 +898,12 @@
                 data: {
                     labels: [],
                     datasets: [
-                        { label: 'GPU %', data: [], borderColor: '#00ff88', backgroundColor: 'rgba(0,255,136,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-gpu-pct' },
-                        { label: 'CPU %', data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-cpu-pct' },
-                        { label: 'GPU Power', data: [], borderColor: '#ff4444', backgroundColor: 'rgba(255,68,68,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-gpu-power', hidden: true },
-                        { label: 'CPU Power', data: [], borderColor: '#ff8800', backgroundColor: 'rgba(255,136,0,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-cpu-power', hidden: true },
-                        { label: 'ƒ GPU %', data: [], borderColor: '#66ffbb', backgroundColor: 'rgba(102,255,187,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-llama-gpu-pct', hidden: true },
-                        { label: 'ƒ CPU %', data: [], borderColor: '#66e7ff', backgroundColor: 'rgba(102,231,255,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-llama-cpu-pct', hidden: true },
-                        { label: 'ƒ GPU Power', data: [], borderColor: '#cc2222', backgroundColor: 'rgba(204,34,34,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-llama-gpu-power', hidden: true },
-                        { label: 'ƒ CPU Power', data: [], borderColor: '#cc6600', backgroundColor: 'rgba(204,102,0,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-llama-cpu-power', hidden: true }
+                        { label: 'GPU %(ƒ)', data: [], borderColor: '#00ff88', backgroundColor: 'rgba(0,255,136,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-gpu-pct-f' },
+                        { label: 'GPU %', data: [], borderColor: '#00cc44', backgroundColor: 'rgba(0,204,68,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-gpu-pct' },
+                        { label: 'CPU %(ƒ)', data: [], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-cpu-pct-f' },
+                        { label: 'CPU %', data: [], borderColor: '#0d7f9c', backgroundColor: 'rgba(13,127,156,0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-cpu-pct' },
+                        { label: 'System ⚡(ƒ)', data: [], borderColor: '#ff4444', backgroundColor: 'rgba(255,68,68,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-sys-power-f', hidden: true, yAxisID: 'y1' },
+                        { label: 'System ⚡', data: [], borderColor: '#cc2222', backgroundColor: 'rgba(204,34,34,0.1)', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, chkId: 'chk-sys-power', hidden: true, yAxisID: 'y1' }
                     ]
                 },
                 options: {
@@ -916,9 +914,6 @@
                         mode: 'index',
                         intersect: false
                     },
-                    plugins: {
-                        legend: { display: false }
-                    },
                     layout: {
                          padding: {
                              top: 5,
@@ -926,8 +921,6 @@
                              bottom: 5,
                              left: 5
                          }
-
-
                     },
                     scales: {
                         y: {
@@ -935,12 +928,54 @@
                             grid: { color: '#2a3b5c' },
                             ticks: { color: '#888' }
                         },
+                        y1: {
+                            type: 'linear',
+                            display: false,
+                            position: 'right',
+                            suggestedMin: 0,
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#ff4444' },
+                            title: { display: true, text: 'System ⚡', color: '#ff4444' }
+                        },
                         x: {
                             display: false
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    var i = context.dataIndex;
+                                    var label = context.dataset.label;
+                                    var val = context.parsed.y;
+                                    var pVal = null, pLabel = '';
+                                    if (context.datasetIndex === 0) {
+                                        pVal = historyData.filteredGpuPower[i];
+                                        pLabel = 'GPU ⚡(ƒ)';
+                                    } else if (context.datasetIndex === 1) {
+                                        pVal = historyData.gpuPower[i];
+                                        pLabel = 'GPU ⚡';
+                                    } else if (context.datasetIndex === 2) {
+                                        pVal = historyData.filteredCpuPower[i];
+                                        pLabel = 'CPU ⚡(ƒ)';
+                                    } else if (context.datasetIndex === 3) {
+                                        pVal = historyData.cpuPower[i];
+                                        pLabel = 'CPU ⚡';
+                                    }
+                                    if (pVal != null) {
+                                        return label + ': ' + val.toFixed(1) + '%  /  ' + pLabel + ': ' + pVal.toFixed(0) + ' W';
+                                    }
+                                    return label + ': ' + val.toFixed(0) + ' W';
+                                }
+                            }
                         }
                     }
                 }
             });
+            combinedUsageChart.options.scales.y1.display = false;
 
             tokensChart = new Chart(tokensCtx, {
                 type: 'line',
@@ -992,7 +1027,7 @@
                             type: 'linear',
                             display: true,
                             position: 'left',
-                            suggestedMin: 0,
+                            min: 0,
                             grid: { color: '#2a3b5c' },
                             ticks: { color: '#00d4ff', callback: function(v) { return v.toFixed(0); } },
                             title: { display: true, text: 'Tokens Processed/s', color: '#00d4ff' }
@@ -1001,7 +1036,7 @@
                             type: 'linear',
                             display: true,
                             position: 'right',
-                            suggestedMin: 0,
+                            min: 0,
                             grid: { drawOnChartArea: false },
                             ticks: { color: '#ffd93d', callback: function(v) { return v.toFixed(0); } },
                             title: { display: true, text: 'Tokens Generated/s', color: '#ffd93d' }
@@ -1066,7 +1101,7 @@
                 const response = await fetch('/api/metrics/monthly-cost');
                 if (!response.ok) throw new Error('Failed to fetch monthly cost');
                 const data = await response.json();
-                if (data.success && data.data) {
+                if (data.success && Array.isArray(data.data) && data.data.length > 0) {
                     monthlyCostChart.data.labels = data.data.map(entry => entry.date);
                     monthlyCostChart.data.datasets[0].data = data.data.map(entry => Math.max(0, entry.cost_usd));
                     monthlyCostChart.update();
@@ -1178,7 +1213,7 @@
             // Power
             const gpuPower = gpu.power_w ?? null;
             const cpuPower = cpu.power_w ?? null;
-            const sysPowerTotal = system.system_power_w ?? null;
+            const sysPowerTotal = system.system?.power_w ?? null;
             const validGpu = gpuPower !== null && gpuPower >= 0;
             const validCpu = cpuPower !== null && cpuPower >= 0;
             // Compute filtered (llama.cpp contribution) values
@@ -1193,9 +1228,15 @@
             }
             const gpuUtil = gpu.usage || 0;
             const cpuUtil = cpu.percent || 0;
-            const filteredGpuPower = (validGpu && gpuUtil > 0) ? (llamaGpuUtil / gpuUtil) * gpuPower : (validGpu ? gpuPower : 0);
-            const filteredCpuPower = (validCpu && cpuUtil > 0) ? (llamaCpuUtil / cpuUtil) * cpuPower : (validCpu ? cpuPower : 0);
-            const filteredSysPower = (validGpu || validCpu) ? (validGpu ? filteredGpuPower : 0) + (validCpu ? filteredCpuPower : 0) : 0;
+            const hasProcessGpu = Object.keys(procGpu).length > 0;
+            const hasProcessCpu = Object.keys(rawCpu).length > 0;
+            const filteredGpuPower = hasProcessGpu && validGpu && gpuUtil > 0
+                ? (llamaGpuUtil / gpuUtil) * gpuPower
+                : 0;
+            const filteredCpuPower = hasProcessCpu && validCpu && cpuUtil > 0
+                ? (llamaCpuUtil / cpuUtil) * cpuPower
+                : 0;
+            const filteredSysPower = filteredGpuPower + filteredCpuPower;
             if (validGpu || validCpu) {
                 document.getElementById('gpu-power-1').textContent = (validGpu ? filteredGpuPower.toFixed(0) : '-') + ' W';
                 document.getElementById('cpu-power-1').textContent = (validCpu ? filteredCpuPower.toFixed(0) : '-') + ' W';
@@ -1211,14 +1252,14 @@
                 // Use session_cost_usd or total_cost for session cost display
                 const sessionCost = cost.session_cost_usd ?? cost.total_cost ?? null;
                 if (sessionCost != null && sessionCost >= 0) {
-                    document.getElementById('session-cost').textContent = '$' + sessionCost.toFixed(4);
+                    document.getElementById('session-cost').textContent = '$' + sessionCost.toFixed(2);
                 } else {
                     document.getElementById('session-cost').textContent = '-';
                 }
                 // Update today's cost
                 const todayCost = cost.today_cost ?? null;
                 if (todayCost != null && todayCost >= 0) {
-                    document.getElementById('today-cost').textContent = '$' + todayCost.toFixed(4);
+                    document.getElementById('today-cost').textContent = '$' + todayCost.toFixed(2);
                 } else {
                     document.getElementById('today-cost').textContent = '-';
                 }
@@ -1256,13 +1297,17 @@
             for (const proc of Object.values(rawCpu)) {
                 if (proc.cpu_percent != null) llamaCpuUtil += proc.cpu_percent;
             }
+            const hasProcessGpu2 = Object.keys(process_gpu).length > 0;
+            const hasProcessCpu2 = Object.keys(rawCpu).length > 0;
             const filteredGpu = gpuUtil > 0 ? Math.min(llamaGpuUtil, gpuUtil) : 0;
             const filteredCpu = cpuUtil > 0 ? Math.min(llamaCpuUtil, cpuUtil) : 0;
-            const filteredGpuPower = gpuUtil > 0 ? (llamaGpuUtil / gpuUtil) * gpuPower : 0;
-            const filteredCpuPower = cpuUtil > 0 ? (llamaCpuUtil / cpuUtil) * cpuPower : 0;
+            const filteredGpuPower = hasProcessGpu2 && gpuUtil > 0 ? (llamaGpuUtil / gpuUtil) * gpuPower : 0;
+            const filteredCpuPower = hasProcessCpu2 && cpuUtil > 0 ? (llamaCpuUtil / cpuUtil) * cpuPower : 0;
 
             // Always append data — even when idle, append zeros so the graph
             // shows a smooth decline to zero instead of flashing blank.
+            var sysPower = (system.system?.power_w != null) ? system.system.power_w : (gpuPower + cpuPower);
+            var filteredSysPower = filteredGpuPower + filteredCpuPower;
             historyData.gpu.push(gpuUtil);
             historyData.cpu.push(cpuUtil);
             historyData.gpuPower.push(gpuPower);
@@ -1271,6 +1316,8 @@
             historyData.filteredCpu.push(filteredCpu);
             historyData.filteredGpuPower.push(filteredGpuPower);
             historyData.filteredCpuPower.push(filteredCpuPower);
+            historyData.sysPower.push(sysPower);
+            historyData.filteredSysPower.push(filteredSysPower);
             historyData.promptTokens.push(tokensProcessedPerSec);
             historyData.tokens.push(tokensGeneratedPerSec);
             historyData.labels.push(new Date().toLocaleTimeString());
@@ -1285,20 +1332,20 @@
                 historyData.filteredCpu.shift();
                 historyData.filteredGpuPower.shift();
                 historyData.filteredCpuPower.shift();
+                historyData.sysPower.shift();
+                historyData.filteredSysPower.shift();
                 historyData.tokens.shift();
                 historyData.promptTokens.shift();
                 historyData.labels.shift();
             }
 
-            // Update combined usage chart (all 8 datasets)
-            combinedUsageChart.data.datasets[0].data = historyData.gpu;
-            combinedUsageChart.data.datasets[1].data = historyData.cpu;
-            combinedUsageChart.data.datasets[2].data = historyData.gpuPower;
-            combinedUsageChart.data.datasets[3].data = historyData.cpuPower;
-            combinedUsageChart.data.datasets[4].data = historyData.filteredGpu;
-            combinedUsageChart.data.datasets[5].data = historyData.filteredCpu;
-            combinedUsageChart.data.datasets[6].data = historyData.filteredGpuPower;
-            combinedUsageChart.data.datasets[7].data = historyData.filteredCpuPower;
+            // Update combined usage chart (6 datasets)
+            combinedUsageChart.data.datasets[0].data = historyData.filteredGpu;
+            combinedUsageChart.data.datasets[1].data = historyData.gpu;
+            combinedUsageChart.data.datasets[2].data = historyData.filteredCpu;
+            combinedUsageChart.data.datasets[3].data = historyData.cpu;
+            combinedUsageChart.data.datasets[4].data = historyData.filteredSysPower;
+            combinedUsageChart.data.datasets[5].data = historyData.sysPower;
             combinedUsageChart.data.labels = historyData.labels;
             combinedUsageChart.update('none');
 
@@ -1499,7 +1546,7 @@
             }
             const sessionCost = cost.session_cost_usd ?? null;
             if (sessionCost != null && sessionCost >= 0) {
-                document.getElementById('session-cost').textContent = '$' + sessionCost.toFixed(4);
+                document.getElementById('session-cost').textContent = '$' + sessionCost.toFixed(2);
             } else {
                 document.getElementById('session-cost').textContent = '-';
             }
@@ -1520,7 +1567,7 @@
             if (totalCostEl) {
                 const totalCost = cost.session_cost_usd ?? null;
                 if (totalCost != null && totalCost >= 0) {
-                    totalCostEl.textContent = '$' + totalCost.toFixed(4);
+                    totalCostEl.textContent = '$' + totalCost.toFixed(2);
                 } else {
                     totalCostEl.textContent = '-';
                 }
@@ -1664,7 +1711,7 @@
                                 <td>${vendor.vendor_name} ${vendor.is_local_server ? '(Local)' : ''}</td>
                                 <td>$${vendor.rate_usd_per_token.toFixed(6)}</td>
                                 <td>${vendor.total_tokens.toLocaleString()}</td>
-                                <td class="cost-column">$${vendor.cost_usd.toFixed(4)}</td>
+                                <td class="cost-column">$${vendor.cost_usd.toFixed(2)}</td>
                             </tr>
                         `;
                     }
@@ -1685,7 +1732,17 @@
         // Graph preferences helpers
         function toggleDataset(chkId, visible) {
             const dataset = combinedUsageChart.data.datasets.find(d => d.chkId === chkId);
-            if (dataset) { dataset.hidden = !visible; combinedUsageChart.update('none'); }
+            if (dataset) {
+                dataset.hidden = !visible;
+                // Show/hide right y-axis when System ⚡ datasets toggle
+                if (chkId === 'chk-sys-power-f' || chkId === 'chk-sys-power') {
+                    var anySysPowerVisible = combinedUsageChart.data.datasets.some(function(d) {
+                        return (d.chkId === 'chk-sys-power-f' || d.chkId === 'chk-sys-power') && !d.hidden;
+                    });
+                    combinedUsageChart.options.scales.y1.display = anySysPowerVisible;
+                }
+                combinedUsageChart.update('none');
+            }
         }
         async function loadGraphPreferences() {
             try {
@@ -1703,8 +1760,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            initCharts();
-            initSlotCharts();
+            try { initCharts(); } catch(e) { console.error('initCharts error:', e); }
+            try { initSlotCharts(); } catch(e) { console.error('initSlotCharts error:', e); }
             fetchMetrics();
             setInterval(fetchMetrics, CONFIG.refreshRate);
             fetchMonthlyCost();

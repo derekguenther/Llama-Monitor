@@ -1,3 +1,21 @@
+# NOTE: This file is a supporting utility, NOT part of the llama-monitor project itself.
+# Files beginning with underscore (_) are user-side tools that support project development
+# but are not part of the core application codebase.
+#
+# KNOWN COMMENT ISSUES (audit 9kf.20):
+# 1. Line ~21: "Let http.server handle the chunking naturally, avoid double-chunking headers"
+#    -> Misleading. The code strips transfer-encoding, which breaks HTTP chunked transfer.
+#       The proxy re-buffers the full response instead of streaming it.
+# 2. Line ~26: "Read and write in chunks to support SSE (Server-Sent Events) streaming"
+#    -> Wrong. By stripping transfer-encoding, SSE streaming doesn't work. The 4096-byte
+#       chunks are just internal read buffers, not real HTTP streaming.
+# 3. Lines ~57-58: "Llama.cpp leaks its secret media marker in /props. If fed back to itself,
+#    it crashes. Scrub it completely from the payload before llama.cpp ever sees it."
+#    -> Dramatic overstatement. The <__media_...__> marker is a special internal token that
+#       can cause issues if echoed back. Scrubbing is reasonable, but calling it a "secret
+#       media marker" and "crash fix" is misleading.
+# These issues are documented but not fixed, as the file may not be in active use.
+
 import http.server
 import socketserver
 import urllib.request

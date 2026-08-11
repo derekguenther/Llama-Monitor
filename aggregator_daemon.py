@@ -20,6 +20,7 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
+from idle_baseline import IdleBaselineTracker
 
 try:
     import socketio
@@ -35,6 +36,8 @@ from db import Database
 from server_metrics import ServerMetricsCollector
 from system_metrics import SystemMetricsCollector
 from electricity_cost import ElectricityCostCalculator
+# Import base aggregator for delegation
+from aggregator import Aggregator as BaseAggregator
 
 
 class Aggregator:
@@ -66,8 +69,14 @@ class Aggregator:
             tracked_processes=self.config.get("metrics_collection.tracked_processes", ["llama.cpp"])
         )
 
+        # Idle baseline tracker
+        idle_baseline_config = self.config.get("idle_baseline", {})
+        idle_min_time = idle_baseline_config.get("minimum_time_seconds", 5)
+        self.idle_tracker = IdleBaselineTracker(self.db, config=self.config, minimum_time_seconds=idle_min_time)
+
         # Cost calculator
-        self.cost_calculator = ElectricityCostCalculator(self.db)
+        idle_baseline_power = idle_baseline_config.get("power_w", 40.0)
+        self.cost_calculator = ElectricityCostCalculator(self.db, idle_baseline_w=idle_baseline_power)
 
         # State
         self.running = False
@@ -94,9 +103,6 @@ class Aggregator:
             Dictionary with timestamped metrics from all sources
         """
         timestamp = int(time.time())
-        # Delegate collection to aggregator module to reduce duplication
-        metrics = self.aggregator.collect_all_metrics() if hasattr(self, "aggregator") else {}
-
         # Collect server metrics
         server_data = self.server_collector.collect()
         if server_data:
@@ -110,6 +116,13 @@ class Aggregator:
 
         # Collect per-process GPU metrics
         process_gpu_metrics = self._extract_process_gpu_metrics(system_data)
+
+        # Track idle baseline
+        cpu_percent = system_metrics.get("cpu_percent", -1)
+        gpu_percent = system_metrics.get("gpu_usage", -1)
+        system_power = system_metrics.get("system_power_w", -1)
+        if cpu_percent >= 0 and gpu_percent >= 0 and system_power >= 0:
+            self.idle_tracker.check_idle(cpu_percent, gpu_percent, system_power)
 
         # Calculate cost
         cost_data = self._calculate_cost(system_metrics)
@@ -216,6 +229,7 @@ class Aggregator:
                 "cores": cpu.get("cores", []),
                 "count": cpu.get("count", 0),
                 "power_w": safe_float(cpu.get("power_w")),
+                "process_cpu": cpu.get("process_cpu", {}),
             },
             "gpu": {
                 "usage": safe_float(gpu.get("usage")),
@@ -256,11 +270,15 @@ class Aggregator:
         gpu_power = max(0, system_metrics.get("gpu_power_w", 0))
         cpu_power = max(0, system_metrics.get("cpu_power_w", 0))
 
-        # Use a fixed duration for each calculation (1 second since we poll frequently)
-        duration = 1.0
+        # Track actual time since last collection for accurate energy deltas
+        now = time.time()
+        if not hasattr(self, '_last_cost_time'):
+            self._last_cost_time = now
+        duration = now - self._last_cost_time
+        self._last_cost_time = now
 
-        # Get base cost calculation from calculate_power_cost
-        base_cost = self.cost_calculator.calculate_power_cost(
+        # Use update_power_readings to properly update session totals and get deltas
+        delta = self.cost_calculator.update_power_readings(
             gpu_power_w=gpu_power,
             cpu_power_w=cpu_power,
             duration_seconds=duration
@@ -275,6 +293,7 @@ class Aggregator:
 
         # Add today's energy stats from database for display
         today_stats = self.cost_calculator.get_today_stats()
+        base_cost = {}
         if today_stats:
             base_cost["today_wh"] = _clamp(today_stats.get("total_wh"))
             base_cost["today_gpu_wh"] = _clamp(today_stats.get("gpu_wh"))
@@ -286,14 +305,24 @@ class Aggregator:
             base_cost["today_cpu_wh"] = 0
             base_cost["today_cost"] = 0
 
-        # Add session cumulative energy (total_wh from cost_calculator)
+        # Store per-interval delta values from update_power_readings
+        base_cost["delta_total_wh"] = _clamp(delta.get("total_energy"))
+        base_cost["delta_gpu_wh"] = _clamp(delta.get("gpu_energy"))
+        base_cost["delta_cpu_wh"] = _clamp(delta.get("cpu_energy"))
+
+        # Add session cumulative energy (from cost_calculator's running totals)
         base_cost["total_wh"] = _clamp(self.cost_calculator.total_energy_wh)
+        base_cost["session_gpu_wh"] = _clamp(self.cost_calculator.gpu_energy_wh)
+        base_cost["session_cpu_wh"] = _clamp(self.cost_calculator.cpu_energy_wh)
 
         # Add session cost for frontend display
         base_cost["session_cost_usd"] = _clamp(self.cost_calculator.calculate_cost(
             self.cost_calculator.total_energy_wh
         ))
         base_cost["total_cost"] = base_cost["session_cost_usd"]
+
+        # Include cost_rate so consumers (tui, frontend) don't need config file lookup
+        base_cost["cost_rate"] = self.cost_calculator.cost_rate
 
         return base_cost
 
@@ -309,6 +338,12 @@ class Aggregator:
             timestamp=metrics["timestamp"],
             metrics=server,
             table="server_metrics_raw"
+        )
+
+        # Track token usage for cost comparison
+        self.cost_calculator.update_token_tracking(
+            prompt_tokens=server.get("prompt_tokens_total", 0),
+            generated_tokens=server.get("tokens_predicted_total", 0),
         )
 
         # Store system metrics
@@ -341,7 +376,7 @@ class Aggregator:
 
         self.db.execute(
             """
-            INSERT INTO combined_metrics (timestamp, server_data, system_data, cost_data)
+            INSERT OR REPLACE INTO combined_metrics (timestamp, server_data, system_data, cost_data)
             VALUES (?, ?, ?, ?)
             """,
             (
@@ -614,8 +649,6 @@ class MetricsHandler(BaseHTTPRequestHandler):
             self._handle_latest_metrics()
         elif path == "/api/metrics/range":
             self._handle_range_metrics(query)
-        elif path == "/api/metrics/list":
-            self._handle_metrics_list()
         elif path == "/api/status":
             self._handle_status()
         elif path == "/api/shutdown":
@@ -704,31 +737,6 @@ class MetricsHandler(BaseHTTPRequestHandler):
             "limit": limit,
             "count": len(results),
             "data": results,
-        })
-
-    def _handle_metrics_list(self) -> None:
-        """Handle /api/metrics/list endpoint."""
-        if not self.aggregator:
-            self.send_error(503, "Aggregator not initialized")
-            return
-
-        # Get available tables
-        tables = [row[0] for row in self.aggregator.db.execute_all(
-            """
-            SELECT name FROM sqlite_master
-            WHERE type='table' AND name LIKE 'metrics_%'
-            """
-        )]
-
-        # Get columns for each table
-        metrics_info = {}
-        for table in tables:
-            columns = [row[1] for row in self.aggregator.db.execute_all(f"PRAGMA table_info({table})")]
-            metrics_info[table] = columns
-
-        self.send_json_response({
-            "tables": tables,
-            "metrics": metrics_info,
         })
 
     def _handle_status(self) -> None:
@@ -925,4 +933,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-from aggregator import Aggregator

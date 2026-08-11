@@ -14,7 +14,7 @@ call conda activate llama.cpp
 
 :: Executable & Model Paths
 set SERVER_BIN=C:\Users\ClaudeCode\Documents\windows_llama.cpp\vendor\llama.cpp\build\bin\Release\llama-server.exe
-set MODEL_PATH=D:\AI\LLMs\General Use\DeepSeek v4\DeepSeek-V4-Flash-UD-IQ3_XXS-00001-of-00004.gguf
+set MODEL_PATH=D:\AI\LLMs\General Use\DeepSeek v4\DeepSeek-V4-Flash-0731-UD-IQ3_XXS-00001-of-00004.gguf
 set SLOT_PATH=D:\AI\LLMs\General Use\DeepSeek v4\llama.cpp save slots
 set JINJATEMPLATE_PATH=D:\AI\LLMs\General Use\DeepSeek v4\chat_template.jinja
 
@@ -24,20 +24,23 @@ start /affinity FFFF /b /wait "" "%SERVER_BIN%" ^
     --chat-template-file "%JINJATEMPLATE_PATH%" ^
     --alias qwen3-coder-next ^
     --host 0.0.0.0 ^
-    --port 8001 ^
+    --port 8000 ^
     --jinja ^
     --reasoning on ^
     --reasoning-format deepseek ^
     --metrics ^
     --ctx-size 131072 ^
-    --parallel 1 ^
+    --parallel 5 ^
+    --cache-prompt ^
+    --cache-reuse 256 ^
+    --kv-unified ^
     --cache-type-k q8_0 ^
     --cache-type-v q8_0 ^
     --cont-batching ^
     --flash-attn on ^
-    --load-mode mmap ^
+    --load-mode none ^
     --n-gpu-layers all ^
-    --n-cpu-moe 41 ^
+    --n-cpu-moe 42 ^
     --temp 1.0 ^
     --top-p 1.0 ^
     --min-p 0.05 ^

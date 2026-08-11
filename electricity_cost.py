@@ -13,7 +13,7 @@ class ElectricityCostCalculator:
     def __init__(
         self,
         database: Database,
-        idle_baseline_w: float = 150.0,  # Default idle power
+        idle_baseline_w: float = 40.0,  # Default idle power
     ):
         """Initialize the calculator.
 
@@ -288,6 +288,9 @@ class ElectricityCostCalculator:
             "total_wh": self.total_energy_wh,
             "gpu_wh": self.gpu_energy_wh,
             "cpu_wh": self.cpu_energy_wh,
+            "delta_total_wh": total_energy,
+            "delta_gpu_wh": gpu_energy,
+            "delta_cpu_wh": cpu_energy,
             "today_wh": self.today_energy_wh,
             "today_gpu_wh": self.today_gpu_wh,
             "today_cpu_wh": self.today_cpu_wh,
