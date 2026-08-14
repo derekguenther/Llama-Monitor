@@ -1,0 +1,37 @@
+# llama-raw-capture-tool configuration
+# A copy of this file is written into each session dir for provenance.
+
+# Which .bat to wrap (per-model). Default: _DeepSeek v4.bat
+launch_script: "_DeepSeek v4.bat"
+
+# llama.cpp base URL; must match the .bat's --port
+server_url: "http://127.0.0.1:8000"
+
+# llama-monitor base URL (for /api/metrics/latest)
+monitor_url: "http://127.0.0.1:8001"
+
+# Optional model filter; used as /metrics?model=... (omit to get global metrics)
+# model: "deepseek-v4"
+
+poll_interval: 1        # s; /slots + /metrics + monitor + nvml/psutil
+typeperf_interval: 1    # s; -si for typeperf
+tail_poll_interval: 0.1 # s; log-file tail cadence (bounds anchor error)
+
+output_dir: "DebugTools/llama-raw-capture-tool/sessions"
+
+sources:
+  console:  true
+  slots:    true
+  metrics:  true
+  props:    true
+  typeperf: true
+  nvml:     true
+  monitor:  true
+
+# Injected into the .bat (--log-file / --log-prompts-dir derived from session dir)
+capture_flags:
+  - "--no-log-colors"
+  - "--log-prefix"
+  - "--log-timestamps"
+  - "-lv"
+  - "5"
