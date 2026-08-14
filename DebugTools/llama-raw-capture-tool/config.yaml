@@ -29,9 +29,11 @@ sources:
   monitor:  true
 
 # Injected into the .bat (--log-file / --log-prompts-dir derived from session dir)
+# Note: verbosity is left at llama.cpp's default (-lv 5 would add ~100k lines
+# of debug noise with no extra ground-truth events, since the timing events we
+# parse are info/warn level and appear at any verbosity).
 capture_flags:
-  - "--no-log-colors"
+  - "--log-colors"
+  - "off"
   - "--log-prefix"
   - "--log-timestamps"
-  - "-lv"
-  - "5"

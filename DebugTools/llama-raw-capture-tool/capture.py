@@ -53,6 +53,7 @@ DEFAULT_CONFIG = {
     "poll_interval": 1,
     "typeperf_interval": 1,
     "tail_poll_interval": 0.1,
+    "props_retry_interval": 10.0,
     "output_dir": "DebugTools/llama-raw-capture-tool/sessions",
     "sources": {
         "console": True,
@@ -412,7 +413,16 @@ def poll_metrics(session: Session, stop: threading.Event) -> None:
 
 def fetch_props(session: Session) -> None:
     url = session.config["server_url"].rstrip("/") + "/props"
-    data = http_get_json(url)
+    # /props is one-shot. Retry at a coarse interval (default 10s) until the
+    # server is ready -- llama-server can take over a minute to load a model --
+    # stopping only when the capture is told to close (Ctrl+C/Ctrl+Break).
+    interval = session.config.get("props_retry_interval", 10.0)
+    data = None
+    while not session.stop_event.is_set():
+        data = http_get_json(url)
+        if data is not None:
+            break
+        _sleep_interruptible(session.stop_event, interval)
     if data is not None:
         write_json(session.session_dir / session.files["props"], data)
 
@@ -743,16 +753,58 @@ def write_wrapper_bat(session: Session, content: str) -> Path:
     return wrapper
 
 
+def install_windows_ctrl_handler(session: "Session") -> None:
+    """Install a Windows console ctrl handler so Ctrl+C/Ctrl+Break stop capture.
+
+    On Windows, ``llama-server.exe`` runs in the same console as the launcher,
+    so a plain Ctrl+C (``KeyboardInterrupt``) can be delivered to the child
+    instead of Python. This installs ``SetConsoleCtrlHandler`` so both
+    CTRL_C_EVENT and CTRL_BREAK_EVENT set the stop event, guaranteeing a
+    graceful teardown. No-op on non-Windows (dev/test).
+    """
+    if not IS_WINDOWS:
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        CTRL_C_EVENT = 0
+        CTRL_BREAK_EVENT = 1
+        PHANDLER_ROUTINE = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+
+        def handler(ctrl_type: int) -> bool:
+            if ctrl_type in (CTRL_C_EVENT, CTRL_BREAK_EVENT):
+                session.stop_event.set()
+                return True
+            return False
+
+        # Keep a strong reference so the callback isn't garbage-collected.
+        session._ctrl_handler = PHANDLER_ROUTINE(handler)
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(session._ctrl_handler, True)
+    except Exception:
+        # Fall back to default KeyboardInterrupt handling if ctypes is unavailable.
+        pass
+
+
 def spawn_launcher(
     session: Session, flags: List[str], wrapper: Path
 ) -> Optional[int]:
     """Spawn the wrapper ``.bat`` with capture flags as args.
 
     Returns the spawned cmd PID (for process-tree teardown) or None on failure.
+
+    On Windows the launcher is spawned in its own process group
+    (``CREATE_NEW_PROCESS_GROUP``) so that console Ctrl+C is delivered to the
+    Python orchestrator rather than being swallowed by ``llama-server.exe``
+    (which the injected ``.bat`` runs in the same console via ``start /b /wait``).
     """
     if IS_WINDOWS:
         cmd = [str(wrapper)] + flags
-        proc = subprocess.Popen(cmd, cwd=str(session.session_dir))
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(session.session_dir),
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
         session.spawned_cmd_pid = proc.pid
         session.launch_proc = proc
         return proc.pid
@@ -961,6 +1013,7 @@ def run_capture(config: Dict[str, Any], duration: Optional[float] = None) -> Ses
     # Build capture flags and spawn.
     flags = derived_capture_flags(config, session_dir)
     session.files["console"] = "console.jsonl"
+    install_windows_ctrl_handler(session)
     spawn_launcher(session, flags, wrapper)
 
     # Resolve llama PID and start the tailer immediately (parallel with readiness).

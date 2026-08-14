@@ -47,51 +47,51 @@ SESSION_LAYOUT = {
 CONSOLE_PATTERNS = {
     "server_load_model": re.compile(r"loading model '(?P<model_path>[^']*)'"),
     "server_context_init": re.compile(
-        r"initializing, n_slots = (?P<n_slots>\d+), "
-        r"n_ctx_slot = (?P<n_ctx_slot>\d+), kv_unified = '(?P<kv_unified>[^']*)'"
+        r"initializing, n_slots\s*=\s*(?P<n_slots>\d+), "
+        r"n_ctx_slot\s*=\s*(?P<n_ctx_slot>\d+), kv_unified = '(?P<kv_unified>[^']*)'"
     ),
     "server_model_loaded": re.compile(r"model loaded"),
     "server_listening": re.compile(
         r"listening on (?P<host>http://[^:]+):(?P<port>\d+)"
     ),
-    "server_cancel_task": re.compile(r"cancel task, id_task = (?P<id_task>\d+)"),
+    "server_cancel_task": re.compile(r"cancel task, id_task\s*=\s*(?P<id_task>\d+)"),
     "slot_selection_lcp": re.compile(
-        r"selected slot by LCP similarity, f_sim_best = (?P<f_sim_best>[^,]+), "
-        r"\(> (?P<thold>[^)]+)\) thold\), f_keep = (?P<f_keep>[^,]+)"
+        r"selected slot by LCP similarity, f_sim_best\s*=\s*(?P<f_sim_best>[^,]+), "
+        r"\(> (?P<thold>[^)]+)\) thold\), f_keep\s*=\s*(?P<f_keep>[^,]+)"
     ),
     "slot_selection_lru": re.compile(
-        r"selected slot by LRU, t_last = (?P<t_last>[^,]+)"
+        r"selected slot by LRU, t_last\s*=\s*(?P<t_last>[^,]+)"
     ),
-    "slot_launch": re.compile(r"processing task, is_child = (?P<is_child>\d+)"),
+    "slot_launch": re.compile(r"processing task, is_child\s*=\s*(?P<is_child>\d+)"),
     "slot_release": re.compile(
-        r"stop processing: n_tokens = (?P<n_tokens>\d+), truncated = (?P<truncated>\d+)"
+        r"stop processing: n_tokens\s*=\s*(?P<n_tokens>\d+), truncated\s*=\s*(?P<truncated>\d+)"
     ),
     "prompt_process": re.compile(
-        r"prompt processing, n_tokens = (?P<n_tokens>\d+), "
-        r"progress = (?P<progress>[^,]+), t = (?P<t>[^ ]+) s / "
-        r"(?P<tps>[^ ]+) tokens/s"
+        r"prompt processing, n_tokens\s*=\s*(?P<n_tokens>\d+), "
+        r"progress\s*=\s*(?P<progress>[^,]+), t\s*=\s*(?P<t>[^ ]+) s / "
+        r"(?P<tps>[\d.]+) tokens(?: per second|/s)"
     ),
     "slot_gen_rate": re.compile(
-        r"n_decoded = (?P<n_decoded>\d+), tg = (?P<tg>[^,]+) t/s, "
-        r"tg_3s = (?P<tg_3s>[^,]+) t/s"
+        r"n_decoded\s*=\s*(?P<n_decoded>\d+), tg\s*=\s*(?P<tg>[\d.]+) t/s, "
+        r"tg_3s\s*=\s*(?P<tg_3s>[\d.]+) t/s"
     ),
     "gen_prompt_eval_time": re.compile(
-        r"prompt eval time = (?P<t_ms>[^ ]+) ms / (?P<n_tokens>\d+) tokens"
+        r"prompt eval time\s*=\s*(?P<t_ms>[^ ]+) ms / (?P<n_tokens>\d+) tokens"
     ),
     "gen_eval_time": re.compile(
-        r"eval time = (?P<t_ms>[^ ]+) ms / (?P<n_tokens>\d+) tokens"
+        r"eval time\s*=\s*(?P<t_ms>[^ ]+) ms / (?P<n_tokens>\d+) tokens"
     ),
     "gen_total_time": re.compile(
-        r"total time = (?P<t_ms>[^ ]+) ms / (?P<n_tokens>\d+) tokens"
+        r"total time\s*=\s*(?P<t_ms>[^ ]+) ms / (?P<n_tokens>\d+) tokens"
     ),
-    "gen_graphs_reused": re.compile(r"graphs reused = (?P<graphs_reused>\d+)"),
+    "gen_graphs_reused": re.compile(r"graphs reused\s*=\s*(?P<graphs_reused>\d+)"),
 }
 
 # --------------------------------------------------------------------------- #
 # Console event parsing
 # --------------------------------------------------------------------------- #
 
-SLOT_HEADER_RE = re.compile(r"id (\d+) \| task (\d+) \|")
+SLOT_HEADER_RE = re.compile(r"id\s+(\d+)\s*\|\s*task\s+(\d+)\s*\|")
 
 
 def extract_slot_task(text: str) -> Dict[str, Any]:
