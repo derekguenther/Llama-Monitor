@@ -49,7 +49,7 @@ APPEND_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_APPEND
 DEFAULT_CONFIG = {
     "launch_script": "_DeepSeek v4.bat",
     "server_url": "http://127.0.0.1:8000",
-    "monitor_url": "http://127.0.0.1:8001",
+    "monitor_url": "http://127.0.0.1:8080",
     "poll_interval": 1,
     "typeperf_interval": 1,
     "tail_poll_interval": 0.1,
@@ -101,6 +101,8 @@ class Session:
     launch_proc: Optional[subprocess.Popen] = None
     typeperf_proc: Optional[subprocess.Popen] = None
     consistency: Optional[Dict[str, Any]] = None
+    source_status: Dict[str, str] = field(default_factory=dict)
+    capture_log: Optional[Path] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -389,6 +391,39 @@ def http_get_text(url: str, timeout: float = 3.0) -> Optional[str]:
         return None
 
 
+def log_source_failure(session: Session, source: str, detail: str) -> None:
+    """Record a source failure to capture.log (deduplicated per source).
+
+    The first failure for a given source is appended with a wall-clock stamp;
+    subsequent failures while the source stays failed are not re-logged (so we
+    don't spam the log once per poll). Recovery is not auto-logged; the final
+    status is recorded in manifest.json.
+    """
+    if session.source_status.get(source) == "failed":
+        return  # already logged this failure; avoid spam
+    session.source_status[source] = "failed"
+    stamp = wallclock_stamp()["wallclock_iso"]
+    line = f"{stamp} [failure] {source}: {detail}"
+    _append_capture_log(session, line)
+
+
+def log_source_ok(session: Session, source: str) -> None:
+    """Mark a source as reachable/ok (clears a prior failure state)."""
+    if session.source_status.get(source) != "failed":
+        session.source_status.setdefault(source, "ok")
+        return
+    session.source_status[source] = "ok"
+    stamp = wallclock_stamp()["wallclock_iso"]
+    _append_capture_log(session, f"{stamp} [ok] {source}: reachable")
+
+
+def _append_capture_log(session: Session, line: str) -> None:
+    if session.capture_log is None:
+        session.capture_log = session.session_dir / "capture.log"
+    with open(session.capture_log, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+
 def poll_slots(session: Session, stop: threading.Event) -> None:
     url = session.config["server_url"].rstrip("/") + "/slots"
     out = session.session_dir / session.files["slots"]
@@ -396,6 +431,9 @@ def poll_slots(session: Session, stop: threading.Event) -> None:
         data = http_get_json(url)
         if data is not None:
             stamp_and_append(out, {"type": "slots", "data": data})
+            log_source_ok(session, "slots")
+        else:
+            log_source_failure(session, "slots", f"GET {url}")
         _sleep_interruptible(stop, session.config.get("poll_interval", 1))
 
 
@@ -408,6 +446,9 @@ def poll_metrics(session: Session, stop: threading.Event) -> None:
         text = http_get_text(url)
         if text is not None:
             stamp_and_append(out, {"type": "metrics", "data": text})
+            log_source_ok(session, "metrics")
+        else:
+            log_source_failure(session, "metrics", f"GET {url}")
         _sleep_interruptible(stop, session.config.get("poll_interval", 1))
 
 
@@ -422,9 +463,13 @@ def fetch_props(session: Session) -> None:
         data = http_get_json(url)
         if data is not None:
             break
+        log_source_failure(session, "props", f"GET {url}")
         _sleep_interruptible(session.stop_event, interval)
     if data is not None:
+        log_source_ok(session, "props")
         write_json(session.session_dir / session.files["props"], data)
+    else:
+        log_source_failure(session, "props", f"GET {url} (gave up at close)")
 
 
 def poll_monitor(session: Session, stop: threading.Event) -> None:
@@ -434,6 +479,9 @@ def poll_monitor(session: Session, stop: threading.Event) -> None:
         data = http_get_json(url)
         if data is not None:
             stamp_and_append(out, {"type": "monitor", "data": data})
+            log_source_ok(session, "monitor")
+        else:
+            log_source_failure(session, "monitor", f"GET {url}")
         _sleep_interruptible(stop, session.config.get("poll_interval", 1))
 
 
@@ -932,6 +980,8 @@ def write_manifest(session: Session, end_wallclock: str) -> None:
         "files": session.files,
         "anchor": session.anchors,
         "host": _host_info(session),
+        "source_status": session.source_status,
+        "capture_log": "capture.log",
     }
     write_json(session.session_dir / "manifest.json", manifest)
 
