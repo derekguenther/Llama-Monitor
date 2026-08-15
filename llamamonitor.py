@@ -15,6 +15,8 @@ from aggregator import Aggregator
 from config import Config, get_config, reload_config, find_config
 from db import Database
 
+logger = logging.getLogger(__name__)
+
 
 
 def format_significant_digits(value: float, digits: int = 4) -> str:
@@ -181,14 +183,14 @@ class Monitor:
             try:
                 # Collect and store metrics
                 metrics = self.aggregator.collect_all_metrics()
-                print(f"[DEBUG] iter {iteration}: collect_all_metrics keys={list(metrics.keys())}")
+                logger.info("[DEBUG] iter %s: collect_all_metrics keys=%s", iteration, list(metrics.keys()))
                 if iteration == 0:
                     sys = metrics.get("system", {})
-                    print(f"[DEBUG]   system keys={list(sys.keys())}")
-                    print(f"[DEBUG]   cpu_percent={sys.get('cpu_percent')}, gpu_usage={sys.get('gpu_usage')}")
-                    print(f"[DEBUG]   nested cpu={sys.get('cpu', {})}, gpu={sys.get('gpu', {})}")
+                    logger.info("[DEBUG]   system keys=%s", list(sys.keys()))
+                    logger.info("[DEBUG]   cpu_percent=%s, gpu_usage=%s", sys.get('cpu_percent'), sys.get('gpu_usage'))
+                    logger.info("[DEBUG]   nested cpu=%s, gpu=%s", sys.get('cpu', {}), sys.get('gpu', {}))
                     svr = metrics.get("server", {})
-                    print(f"[DEBUG]   server keys={list(svr.keys())}")
+                    logger.info("[DEBUG]   server keys=%s", list(svr.keys()))
 
                 self.aggregator.store_raw_metrics(metrics)
                 self.aggregator.compress_if_needed()
@@ -196,8 +198,8 @@ class Monitor:
                 metrics["cost"] = cost
 
                 if iteration == 0:
-                    print(f"[DEBUG]   cost keys={list(cost.keys())}")
-                    print(f"[DEBUG]   session_cost_usd={cost.get('session_cost_usd')}, today_cost={cost.get('today_cost')}")
+                    logger.info("[DEBUG]   cost keys=%s", list(cost.keys()))
+                    logger.info("[DEBUG]   session_cost_usd=%s, today_cost=%s", cost.get('session_cost_usd'), cost.get('today_cost'))
 
                 # Update shared cache
                 self.metrics_cache.update(metrics)
@@ -205,8 +207,8 @@ class Monitor:
                 if iteration == 0:
                     # Verify cache has cost
                     cached = self.metrics_cache.get()
-                    print(f"[DEBUG]   cache keys={list(cached.keys())}")
-                    print(f"[DEBUG]   cache has cost={'cost' in cached}, cost type={type(cached.get('cost'))}")
+                    logger.info("[DEBUG]   cache keys=%s", list(cached.keys()))
+                    logger.info("[DEBUG]   cache has cost=%s, cost type=%s", 'cost' in cached, type(cached.get('cost')))
 
                 # Wait for next interval, accounting for time already spent on work
                 elapsed = time.monotonic() - loop_start
