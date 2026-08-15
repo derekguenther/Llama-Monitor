@@ -33,6 +33,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -65,11 +66,10 @@ DEFAULT_CONFIG = {
         "monitor": True,
     },
     "capture_flags": [
-        "--no-log-colors",
+        "--log-colors",
+        "off",
         "--log-prefix",
         "--log-timestamps",
-        "-lv",
-        "5",
     ],
 }
 
@@ -512,6 +512,24 @@ def parse_relative_timestamp_us(text: str) -> Optional[int]:
     return ((minutes * 60 + seconds) * 1_000_000) + (ms * 1000) + us
 
 
+def _file_creation_time(path: Path) -> Tuple[Optional[str], Optional[int]]:
+    """Return (iso, epoch_us) of the file's creation time, if available.
+
+    On Windows ``st_ctime`` is the NTFS creation time (the secondary anchor
+    cross-check); on POSIX it is the inode change time, so we return None on
+    non-Windows to avoid a misleading cross-check.
+    """
+    if not IS_WINDOWS:
+        return None, None
+    try:
+        st = path.stat()
+        creation_s = st.st_ctime
+        iso = datetime.fromtimestamp(creation_s).isoformat(timespec="milliseconds")
+        return iso, int(creation_s * 1_000_000)
+    except Exception:
+        return None, None
+
+
 def tail_log(session: Session, stop: threading.Event) -> None:
     """Tail llama-server.log, stamping each line with capture-side wall-clock.
 
@@ -552,6 +570,10 @@ def tail_log(session: Session, stop: threading.Event) -> None:
                                 "wallclock_iso"
                             ]
                             session.anchors["method"] = "first_log_line"
+                            # Secondary anchor cross-check: log file creation time.
+                            session.anchors["file_creation_iso"], session.anchors[
+                                "file_creation_epoch_us"
+                            ] = _file_creation_time(log_file)
                         record = {"type": "console", "line": text, "R_us": R_us}
                         record.update(stamp)
                         _append_text(
@@ -715,7 +737,9 @@ def build_typeperf_counters() -> List[str]:
                 timeout=30,
             ).stdout
             paths = _select_counter_paths(out)
-            counters.extend(paths[:1])  # keep representative counters per object
+            # Full-raw per spec (Source 5): keep every counter of the object
+            # (per-core, per-process, memory, GPU-adapter, Energy Meter power).
+            counters.extend(paths)
     except Exception:
         return _fallback_counters()
     if not counters:
@@ -739,9 +763,7 @@ def _select_counter_paths(qx_output: str) -> List[str]:
     paths = []
     for line in qx_output.splitlines():
         line = line.strip()
-        if not line or line.startswith(("\\Processor", "\\GPU", "\\Memory", "\\Process", "\\Energy")):
-            # heuristic: keep lines that look like counter paths (start with \\)
-            pass
+        # Counter paths start with ``\\``; ignore the blank/header lines.
         if line.startswith("\\"):
             paths.append(line)
     return paths
@@ -867,27 +889,47 @@ def spawn_launcher(
 
 
 def resolve_llama_pid(session: Session) -> Optional[int]:
-    """Resolve the spawned ``llama-server.exe`` PID via WMIC parent resolution.
+    """Resolve the spawned ``llama-server.exe`` PID via parent-child lookup.
 
-    On non-Windows, resolves to the launched child's PID for dev/test.
+    The launcher is spawned as ``cmd`` (``spawned_cmd_pid``); ``llama-server.exe``
+    is its descendant. We walk the process tree from the spawned cmd PID so we
+    match *our* instance, not any other concurrent llama-server.exe. On
+    non-Windows, resolves to the launched child's PID for dev/test.
     """
     if not IS_WINDOWS:
         return session.spawned_cmd_pid
+    root_pid = session.spawned_cmd_pid
+    if root_pid is None:
+        return None
     try:
         out = subprocess.run(
-            ["wmic", "process", "where", "Name='llama-server.exe'", "get", "ProcessId"],
+            ["wmic", "process", "get", "ProcessId,ParentProcessId,Name"],
             capture_output=True,
             text=True,
             timeout=15,
         ).stdout
-        pids = [
-            int(p) for p in out.split() if p.strip().isdigit()
-        ]
-        if pids:
-            return pids[-1]
+        children: Dict[int, List[int]] = {}
+        name_of: Dict[int, str] = {}
+        for raw in out.splitlines():
+            parts = raw.split()
+            if len(parts) < 3:
+                continue
+            pid = int(parts[0]) if parts[0].isdigit() else None
+            ppid = int(parts[1]) if parts[1].isdigit() else None
+            if pid is None or ppid is None:
+                continue
+            name_of[pid] = parts[2]
+            children.setdefault(ppid, []).append(pid)
+        # BFS from the spawned cmd to find a descendant named llama-server.exe.
+        stack = [root_pid]
+        while stack:
+            cur = stack.pop(0)
+            if name_of.get(cur, "").lower() == "llama-server.exe":
+                return cur
+            stack.extend(children.get(cur, []))
     except Exception:
         pass
-    return session.spawned_cmd_pid
+    return root_pid
 
 
 def teardown_process_tree(session: Session) -> None:
@@ -902,11 +944,10 @@ def teardown_process_tree(session: Session) -> None:
             )
         except Exception:
             pass
-        # Handle a pause-blocked cmd by sending Enter as a fallback.
-        try:
-            subprocess.run(["cmd", "/c", "echo.>NUL"], capture_output=True)
-        except Exception:
-            pass
+        # NOTE: a ``pause``-blocked cmd cannot be dismissed from here -- its
+        # stdin is not attached to this process, so there is no way to send the
+        # Enter key. taskkill /T /F already force-kills the whole tree, which
+        # terminates any pause prompt; no no-op fallback is attempted.
     elif pid is not None:
         # Non-Windows fallback: terminate the launch process tree.
         _terminate_linux_tree(pid)
@@ -929,20 +970,53 @@ def _terminate_linux_tree(pid: int) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def consistency_check(session: Session) -> bool:
-    """Verify the responding server matches the session (best-effort).
+_BANNER_MODEL_RE = re.compile(r"loading model '(?P<model_path>[^']*)'")
 
-    Compares the server's model banner/id from ``/props`` against the log's
-    model line when both are available; returns False on divergence.
+
+def consistency_check(session: Session) -> bool:
+    """Verify the API server on ``server_url`` is the one writing this session's
+    ``llama-server.log`` (spec step 8); fail the session if they diverge.
+
+    Compares the log banner's model path against the server's ``/props``
+    model_name/alias. On divergence, records a failure on the session (so the
+    manifest/report reflects it) and returns False. Returns True when it cannot
+    be determined (no log line yet, no props) or when they agree.
     """
     props = http_get_json(session.config["server_url"].rstrip("/") + "/props")
-    if props is None:
-        return True  # cannot verify; not an abort
-    # Best-effort: record the props alias/id for later cross-checking.
-    session.consistency = {
-        "model": props.get("model_name") or props.get("alias") or None,
-        "id": props.get("id") or None,
-    }
+    props_model = None
+    props_id = None
+    if props is not None:
+        props_model = props.get("model_name") or props.get("alias") or None
+        props_id = props.get("id") or None
+    session.consistency = {"model": props_model, "id": props_id}
+
+    # Read the log banner model line from llama-server.log.
+    log_path = session.session_dir / "llama-server.log"
+    banner_model = None
+    try:
+        if log_path.exists():
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+            m = _BANNER_MODEL_RE.search(text)
+            if m:
+                banner_model = m.group("model_path")
+    except OSError:
+        banner_model = None
+
+    if props_model is not None and banner_model:
+        # Compare basenames to tolerate path/alias differences.
+        import os as _os
+
+        props_base = _os.path.basename(str(props_model)).lower()
+        banner_base = _os.path.basename(banner_model).lower()
+        if props_base and banner_base and props_base != banner_base:
+            session.consistency["error"] = (
+                f"model mismatch: /props={props_model} vs log banner={banner_model}"
+            )
+            log_source_failure(
+                session, "consistency",
+                f"/props model '{props_model}' != log banner '{banner_model}'",
+            )
+            return False
     return True
 
 
@@ -1066,14 +1140,16 @@ def run_capture(config: Dict[str, Any], duration: Optional[float] = None) -> Ses
     install_windows_ctrl_handler(session)
     spawn_launcher(session, flags, wrapper)
 
-    # Resolve llama PID and start the tailer immediately (parallel with readiness).
-    session.llama_pid = resolve_llama_pid(session)
+    # Start the tailer IMMEDIATELY so it attaches the instant --log-file appears
+    # (anchor precondition: attach delay would bias every converted timestamp).
+    # PID resolution runs in parallel afterward, not gating the tailer.
     threads = []
     tail_thread = threading.Thread(
         target=tail_log, args=(session, session.stop_event), daemon=True
     )
     tail_thread.start()
     threads.append(tail_thread)
+    session.llama_pid = resolve_llama_pid(session)
 
     # Start source pollers.
     sources = config["sources"]
@@ -1100,8 +1176,15 @@ def run_capture(config: Dict[str, Any], duration: Optional[float] = None) -> Ses
         t.start()
         threads.append(t)
 
-    # Consistency check (best-effort).
-    consistency_check(session)
+    # Consistency check (spec step 8): verify the responding server is the one
+    # writing this session's log. On divergence, fail the session gracefully
+    # (set stop_event so teardown runs; no leaked processes).
+    if not consistency_check(session):
+        log_source_failure(
+            session, "consistency",
+            session.consistency.get("error", "consistency check failed"),
+        )
+        session.stop_event.set()
 
     try:
         if duration is not None:

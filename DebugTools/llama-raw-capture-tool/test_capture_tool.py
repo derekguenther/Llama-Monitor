@@ -361,6 +361,122 @@ def test_write_outputs(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# capture.py -- PID resolution (M2)
+# --------------------------------------------------------------------------- #
+
+
+def test_resolve_llama_pid_non_windows_uses_spawned_pid(monkeypatch):
+    monkeypatch.setattr(capture, "IS_WINDOWS", False)
+    session = capture.Session(
+        session_dir=Path("/tmp"), session_id="s", config={}
+    )
+    session.spawned_cmd_pid = 1234
+    assert capture.resolve_llama_pid(session) == 1234
+
+
+# --------------------------------------------------------------------------- #
+# postprocess.py -- anchor self-checks (B2)
+# --------------------------------------------------------------------------- #
+
+
+def test_anchor_self_checks_file_creation_skew_flags(tmp_path):
+    anchor = {
+        "log_epoch_us": 1_750_000_000_000_000,
+        "first_line_wallclock_epoch_us": 1_750_000_000_000_000,
+        "first_line_R_us": 0,
+        # created 30s later than the anchor -> large skew -> uncertain
+        "file_creation_epoch_us": 1_750_000_030_000_000,
+    }
+    events = []
+    findings = []
+    uncertain = postprocess._anchor_self_checks(anchor, events, findings)
+    assert uncertain is True
+    assert any(f["rule"] == "file_creation_skew" for f in findings)
+
+
+def test_anchor_self_checks_file_creation_ok(tmp_path):
+    anchor = {
+        "log_epoch_us": 1_750_000_000_000_000,
+        "first_line_wallclock_epoch_us": 1_750_000_000_000_000,
+        "first_line_R_us": 0,
+        "file_creation_epoch_us": 1_750_000_002_000_000,  # 2s -> within tol
+    }
+    uncertain = postprocess._anchor_self_checks(anchor, [], [])
+    assert uncertain is False
+
+
+def test_anchor_self_checks_prompt_clock_misalignment():
+    anchor = {"log_epoch_us": 1_750_000_000_000_000}
+    # Prompt filename ms far outside console R_us window -> misalignment.
+    events = [
+        {
+            "source": "prompt",
+            "payload": {"prompt_file": "000000900000.txt"},
+        },
+        {
+            "source": "console",
+            "payload": {"R_us": 100_000},  # 100 ms
+        },
+    ]
+    findings = []
+    uncertain = postprocess._anchor_self_checks(anchor, events, findings)
+    assert uncertain is True
+    assert any(f["rule"] == "prompt_clock_alignment" for f in findings)
+
+
+def test_anchor_self_checks_activity_window_disjoint():
+    anchor = {"log_epoch_us": 1_750_000_000_000_000}
+    events = [
+        {
+            "source": "console",
+            "ts": "2026-08-13T09:15:30.000-07:00",
+        },
+        {
+            "source": "slots",
+            "payload": {"state": "processing"},
+            "ts": "2026-08-13T09:16:30.000-07:00",  # 60s later, disjoint
+        },
+    ]
+    findings = []
+    uncertain = postprocess._anchor_self_checks(anchor, events, findings)
+    assert uncertain is True
+    assert any(f["rule"] == "activity_window" for f in findings)
+
+
+def test_write_anchor_uncertain_writes_manifest(tmp_path):
+    manifest = {"session_id": "s1", "anchor": {"method": "first_log_line"}}
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+    postprocess._write_anchor_uncertain(tmp_path, True)
+    updated = json.loads((tmp_path / "manifest.json").read_text())
+    assert updated["anchor_uncertain"] is True
+    assert updated["session_id"] == "s1"  # preserved other fields
+
+
+# --------------------------------------------------------------------------- #
+# postprocess.py -- parse_slots task_id (m3)
+# --------------------------------------------------------------------------- #
+
+
+def test_parse_slots_task_id_uses_id_task(tmp_path):
+    slots = [
+        {
+            "type": "slots",
+            "wallclock_iso": "2026-08-13T09:15:31.000-07:00",
+            "data": [
+                {"id": 4, "task": 999, "id_task": 184, "state": "processing"},
+            ],
+        }
+    ]
+    with open(tmp_path / "slots.jsonl", "w") as f:
+        for rec in slots:
+            f.write(json.dumps(rec) + "\n")
+    events = postprocess.parse_slots(tmp_path)
+    assert len(events) == 1
+    # task_id should come from id_task, not the stale 'task' field.
+    assert events[0]["task_id"] == 184
+
+
+# --------------------------------------------------------------------------- #
 # Helpers / fixtures
 # --------------------------------------------------------------------------- #
 

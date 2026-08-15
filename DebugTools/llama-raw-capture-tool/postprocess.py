@@ -44,6 +44,13 @@ SESSION_LAYOUT = {
     "postprocessed": "postprocessed",
 }
 
+# Anchor self-check tolerances (see spec "Timestamps & Correlation").
+# File creation time vs first-line-derived anchor; must be small (a big skew
+# means the tailer attached late, biasing every converted timestamp).
+FILE_CREATION_SKEW_TOLERANCE_S = 15.0
+# Prompt-file filename clock vs log-prefix clock drift tolerance (ms).
+PROMPT_CLOCK_TOLERANCE_MS = 5_000
+
 CONSOLE_PATTERNS = {
     "server_load_model": re.compile(r"loading model '(?P<model_path>[^']*)'"),
     "server_context_init": re.compile(
@@ -176,6 +183,21 @@ def load_anchor(session_dir: Path) -> Dict[str, Any]:
         return {}
 
 
+def _write_anchor_uncertain(session_dir: Path, uncertain: bool) -> None:
+    """Set ``anchor_uncertain`` on manifest.json, preserving all other fields."""
+    manifest_path = session_dir / SESSION_LAYOUT["manifest"]
+    if not os.path.exists(manifest_path):
+        return
+    try:
+        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        manifest["anchor_uncertain"] = uncertain
+        Path(manifest_path).write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
 def convert_relative_to_wallclock(anchor: Dict[str, Any], R_us) -> Optional[str]:
     """Convert a relative log time ``R`` (µs) to wall-clock ISO using anchor.
 
@@ -213,7 +235,7 @@ def parse_slots(session_dir: Path) -> List[Dict[str, Any]]:
                 "source": "slots",
                 "event": "slot_state",
                 "slot_id": slot.get("id"),
-                "task_id": slot.get("task"),
+                "task_id": slot.get("id_task"),
                 "payload": {
                     k: slot.get(k)
                     for k in (
@@ -545,6 +567,153 @@ def _summarize(events: List[Dict[str, Any]]) -> Dict[str, int]:
 # --------------------------------------------------------------------------- #
 
 
+def _anchor_self_checks(anchor: Dict[str, Any], events: List[Dict[str, Any]],
+                        findings: List[Dict[str, Any]],
+                        session_dir: Optional[Path] = None) -> bool:
+    """Run the mandatory anchor self-checks (spec Timestamps & Correlation).
+
+    Returns True if any check fails (timestamps ``anchor_uncertain``), else
+    False. Checks:
+      * File creation time vs the first-log-line-derived anchor.
+      * Prompt-file filename clock (ms since start) vs the log-prefix clock.
+      * Activity-window overlap (systematic offset flags a bad anchor).
+    A failed check must be reported, not silently swallowed.
+    """
+    uncertain = False
+    log_epoch = anchor.get("log_epoch_us")
+    first_epoch = anchor.get("first_line_wallclock_epoch_us")
+    first_R = anchor.get("first_line_R_us")
+    created_epoch = anchor.get("file_creation_epoch_us")
+
+    # --- File creation time cross-check ---
+    if created_epoch and log_epoch and first_epoch is not None and first_R is not None:
+        expected_epoch = first_epoch - (first_R if first_R is not None else 0)
+        skew_s = abs(created_epoch - expected_epoch) / 1_000_000
+        if skew_s > FILE_CREATION_SKEW_TOLERANCE_S:
+            uncertain = True
+            findings.append(
+                {
+                    "pair": "anchor",
+                    "rule": "file_creation_skew",
+                    "status": "divergence",
+                    "message": (
+                        f"log file creation time differs from first-line-derived "
+                        f"anchor by {skew_s:.1f}s (>{FILE_CREATION_SKEW_TOLERANCE_S:.0f}s); "
+                        f"possible late attach"
+                    ),
+                }
+            )
+        else:
+            findings.append(
+                {
+                    "pair": "anchor",
+                    "rule": "file_creation_skew",
+                    "status": "ok",
+                    "message": f"log file creation time within {skew_s:.1f}s of anchor",
+                }
+            )
+
+    # --- Prompt-file clock cross-check (G7) ---
+    prompt_ms = []
+    for e in events:
+        if e["source"] == "prompt" and e.get("payload", {}).get("prompt_file"):
+            stem = e["payload"]["prompt_file"][:-4] if e["payload"]["prompt_file"].endswith(".txt") else ""
+            try:
+                prompt_ms.append(int(stem))
+            except ValueError:
+                continue
+    console_R = [
+        e.get("payload", {}).get("R_us")
+        for e in events
+        if e["source"] == "console" and e.get("payload", {}).get("R_us") is not None
+    ]
+    console_R = [r for r in console_R if isinstance(r, (int, float))]
+    # Typed console events drop R_us; pull the raw log-prefix R window straight
+    # from console.jsonl so the prompt-clock cross-check is not silently skipped.
+    if not console_R and session_dir is not None:
+        for rec in read_jsonl_tolerant(session_dir / SESSION_LAYOUT["console"]):
+            r = rec.get("R_us")
+            if isinstance(r, (int, float)):
+                console_R.append(r)
+    if prompt_ms and console_R and log_epoch:
+        lo, hi = min(console_R), max(console_R)
+        tol = PROMPT_CLOCK_TOLERANCE_MS
+        outside = [ms for ms in prompt_ms if ms < lo - tol or ms > hi + tol]
+        if outside:
+            uncertain = True
+            findings.append(
+                {
+                    "pair": "anchor",
+                    "rule": "prompt_clock_alignment",
+                    "status": "divergence",
+                    "message": (
+                        f"{len(outside)}/{len(prompt_ms)} prompt filename clocks "
+                        f"({min(prompt_ms)}..{max(prompt_ms)} ms) fall outside "
+                        f"log-prefix window ({lo}..{hi} ms); anchor may be wrong"
+                    ),
+                }
+            )
+        else:
+            findings.append(
+                {
+                    "pair": "anchor",
+                    "rule": "prompt_clock_alignment",
+                    "status": "ok",
+                    "message": (
+                        f"prompt filename clocks align with log-prefix clock "
+                        f"(window {lo}..{hi} ms)"
+                    ),
+                }
+            )
+    elif prompt_ms and not console_R:
+        findings.append(
+            {
+                "pair": "anchor",
+                "rule": "prompt_clock_alignment",
+                "status": "skipped",
+                "message": "no console R_us values to cross-check prompt clocks against",
+            }
+        )
+
+    # --- Activity-window check (systematic offset) ---
+    console_ts = [
+        e.get("ts") for e in events if e["source"] == "console" and e.get("ts")
+    ]
+    slot_processing = [
+        e.get("ts")
+        for e in events
+        if e["source"] == "slots"
+        and e.get("payload", {}).get("state") == "processing"
+        and e.get("ts")
+    ]
+    if console_ts and slot_processing:
+        def _iso_to_us(s):
+            try:
+                from datetime import datetime as _dt
+                dt = _dt.fromisoformat(s.replace("Z", "+00:00"))
+                return int(dt.timestamp() * 1_000_000)
+            except Exception:
+                return None
+        c_lo = _iso_to_us(min(console_ts))
+        c_hi = _iso_to_us(max(console_ts))
+        s_lo = _iso_to_us(min(slot_processing))
+        s_hi = _iso_to_us(max(slot_processing))
+        if c_lo and c_hi and s_lo and s_hi and (c_hi < s_lo or s_hi < c_lo):
+            uncertain = True
+            findings.append(
+                {
+                    "pair": "anchor",
+                    "rule": "activity_window",
+                    "status": "divergence",
+                    "message": (
+                        "console activity and /slots processing windows are "
+                        "disjoint; systematic offset suggests an anchor error"
+                    ),
+                }
+            )
+    return uncertain
+
+
 def build_divergence_report(stream: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Correlate events across sources and flag mismatches.
 
@@ -565,6 +734,9 @@ def build_divergence_report(stream: Dict[str, Any]) -> List[Dict[str, Any]]:
             }
         )
         return findings
+
+    # Mandatory anchor self-checks; record uncertainty for the manifest.
+    stream["anchor_uncertain"] = _anchor_self_checks(anchor, events, findings)
 
     console = [e for e in events if e["source"] == "console"]
     metrics = [e for e in events if e["source"] == "metrics"]
@@ -778,6 +950,9 @@ def replay_through_monitor(session_dir: Path, stream: Dict[str, Any]) -> List[Di
             "step": "import",
             "status": "ok",
             "message": f"replay imported: {', '.join(MONITOR_REPLAY_IMPORTS.keys())}",
+            # Pin the monitor version/source so drift is detectable: the monitor
+            # prints its version only in main(), so fingerprint the module files.
+            "monitor_pin": _monitor_pin(),
         }
     )
 
@@ -827,6 +1002,26 @@ def _try_import(module_name: str, attr: str):
     try:
         mod = __import__(module_name, fromlist=[attr])
         return getattr(mod, attr, None)
+    except Exception:
+        return None
+
+
+def _monitor_pin() -> Optional[Dict[str, Any]]:
+    """Pin the monitor source so replay drift is detectable across runs.
+
+    The monitor's version is only printed from ``main()`` and not exposed as a
+    constant, so we fingerprint the imported module files (path + mtime + size)
+    as a stable proxy. Returns None when the modules are unavailable.
+    """
+    try:
+        mod = __import__("server_metrics")
+        path = mod.__file__
+        st = os.stat(path)
+        return {
+            "module": path,
+            "mtime": st.st_mtime,
+            "size": st.st_size,
+        }
     except Exception:
         return None
 
@@ -880,6 +1075,12 @@ def write_outputs(session_dir: Path) -> Dict[str, str]:
     stream = build_event_stream(session_dir)
     findings = build_divergence_report(stream)
     replay = replay_through_monitor(session_dir, stream)
+
+    # Write the anchor-uncertainty verdict back into manifest.json so consumers
+    # know whether the session's timestamps are trustworthy (spec mandates this
+    # be reported, not silently converted).
+    if stream.get("anchor_uncertain") is not None:
+        _write_anchor_uncertain(session_dir, stream["anchor_uncertain"])
 
     events_path = out_dir / "events.jsonl"
     with open(events_path, "w", encoding="utf-8") as f:
