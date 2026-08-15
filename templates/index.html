@@ -753,8 +753,7 @@
         <!-- Controls -->
         <div class="controls">
             <button class="btn btn-primary" id="refresh-btn"><i class="fa-solid fa-sync"></i> Refresh Now</button>
-            <button class="btn btn-secondary" id="toggle-cost-btn"><i class="fa-solid fa-dollar-sign"></i> Toggle Cost</button>
-            <button class="btn btn-secondary" id="toggle-temps-btn"><i class="fa-solid fa-temperature-arrow-up"></i> Toggle Temps</button>
+            <button class="btn btn-secondary" id="toggle-temps-btn" hidden><i class="fa-solid fa-temperature-arrow-up"></i> Toggle Temps</button>
             <a href="/cost-comparison" class="btn btn-secondary"><i class="fa-solid fa-dollar-sign"></i> Cost Comparison</a>
             <span style="align-self: center; color: #888; font-size: 0.9rem;">
                 Last updated: <span id="last-updated">Never</span>
@@ -775,7 +774,6 @@
         };
 
         // State
-        let costDisplayEnabled = CONFIG.showCost;
         let historyData = {
             gpu: [],
             cpu: [],
@@ -1097,7 +1095,7 @@
 
         // Fetch monthly cost data
         async function fetchMonthlyCost() {
-            if (!costDisplayEnabled) return;
+            if (!CONFIG.showCost) return;
             try {
                 const response = await fetch('/api/metrics/monthly-cost');
                 if (!response.ok) throw new Error('Failed to fetch monthly cost');
@@ -1262,7 +1260,7 @@
             }
 
             // Cost
-            if (costDisplayEnabled) {
+            if (CONFIG.showCost) {
                 // Use session_cost_usd or total_cost for session cost display
                 const sessionCost = cost.session_cost_usd ?? cost.total_cost ?? null;
                 if (sessionCost != null && sessionCost >= 0) {
@@ -1634,17 +1632,6 @@
 
         // Event listeners
         document.getElementById('refresh-btn').addEventListener('click', fetchMetrics);
-
-        document.getElementById('toggle-cost-btn').addEventListener('click', function() {
-            costDisplayEnabled = !costDisplayEnabled;
-            this.classList.toggle('active');
-            fetchMetrics();
-        });
-
-        document.getElementById('toggle-temps-btn').addEventListener('click', function() {
-            this.classList.toggle('active');
-            // Temp toggle logic would go here
-        });
 
         // Token Accumulator and Vendor Comparison Modal
         const tokenAccumulator = document.getElementById('token-accumulator');
