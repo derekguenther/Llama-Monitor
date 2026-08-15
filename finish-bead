@@ -13,7 +13,7 @@ echo "Generating Repository Map..."
 python3 << 'PYEOF' || { echo "ERROR: Failed to generate REPO_MAP.md"; exit 1; }
 import os, re, sys
 
-EXCLUDE_DIRS = {'.git', 'node_modules', '.worktrees', '.claude-history', 'backup'}
+EXCLUDE_DIRS = {'.git', 'node_modules', '.worktrees', '.claude-history', 'backup', 'DebugTools'}
 INCLUDE_EXTS = {'.py', '.gd', '.js', '.sh'}
 
 def get_docstring(lines, idx):
