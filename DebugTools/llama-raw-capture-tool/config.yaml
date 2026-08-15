@@ -9,7 +9,7 @@ server_url: "http://127.0.0.1:8000"
 
 # llama-monitor base URL (for /api/metrics/latest)
 # The monitor web server listens on port 8080 by default (see llamamonitor.py --port).
-monitor_url: "http://127.0.0.1:8080"
+monitor_url: "http://127.0.0.1:8081"
 
 # Optional model filter; used as /metrics?model=... (omit to get global metrics)
 # model: "deepseek-v4"
