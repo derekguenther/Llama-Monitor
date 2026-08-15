@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Aggregator module for llama-monitor."""
 
+import logging
 import time
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
 
 from db import Database
 from electricity_cost import ElectricityCostCalculator
@@ -84,8 +89,25 @@ class Aggregator:
         # Calculate CPU percent: prioritize process CPU if available, otherwise use total OS CPU
         process_cpu = cpu.get("process_cpu", {})
         if process_cpu:
-            # Sum all tracked process CPU percentages, filtering out -1 values
-            cpu_percent = sum(self._safe_float(p.get("cpu_percent")) for p in process_cpu.values())
+            # Average the summed per-process CPU percentages across logical cores.
+            # Each process cpu_percent is a % of total system capacity, so summing
+            # them can reach cpu_count*100% (e.g. 1200% on 12 cores). Divide by the
+            # logical core count to normalize to 0-100%.
+            cpu_count = self._safe_float(cpu.get("count"))
+            raw_sum = sum(self._safe_float(p.get("cpu_percent")) for p in process_cpu.values())
+            if cpu_count and cpu_count > 0:
+                cpu_percent = raw_sum / cpu_count
+            else:
+                cpu_percent = raw_sum
+            if cpu_percent > 100.0:
+                # Clamping every collection cycle is a strong signal that this
+                # normalization is incorrect, so log it loudly (no rate limiting).
+                logger.warning(
+                    "CPU usage clamped to 100%% (raw summed CPU=%.1f%% across %d cores); "
+                    "repeated clamping may indicate the normalization is wrong",
+                    raw_sum, int(cpu_count or 0),
+                )
+                cpu_percent = 100.0
         else:
             # Fall back to total OS CPU
             cpu_percent = self._safe_float(cpu.get("percent"))
