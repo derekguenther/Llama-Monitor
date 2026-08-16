@@ -574,6 +574,10 @@ def tail_log(session: Session, stop: threading.Event) -> None:
                             session.anchors["file_creation_iso"], session.anchors[
                                 "file_creation_epoch_us"
                             ] = _file_creation_time(log_file)
+                            # Persist the anchor immediately so a hard kill before
+                            # teardown doesn't lose it (postprocess can also recover
+                            # from the console stream, but this is more robust).
+                            _persist_anchor(session)
                         record = {"type": "console", "line": text, "R_us": R_us}
                         record.update(stamp)
                         _append_text(
@@ -1038,6 +1042,22 @@ def _host_info(session: Session) -> Dict[str, Any]:
     except Exception:
         pass
     return info
+
+
+def _persist_anchor(session: Session) -> None:
+    """Write the anchor to an early, standalone file (survives hard kills).
+
+    The full manifest is only written at graceful teardown; if the capture is
+    killed abruptly (Ctrl+Break / process kill), the in-memory anchor would be
+    lost. Persisting it as soon as it is computed gives postprocess a durable
+    anchor even when manifest.json is missing.
+    """
+    if not session.anchors.get("log_epoch_us"):
+        return
+    try:
+        write_json(session.session_dir / "anchor.json", session.anchors)
+    except Exception:
+        pass
 
 
 def write_manifest(session: Session, end_wallclock: str) -> None:

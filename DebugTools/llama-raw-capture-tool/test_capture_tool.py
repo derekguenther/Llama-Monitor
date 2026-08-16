@@ -375,6 +375,67 @@ def test_resolve_llama_pid_non_windows_uses_spawned_pid(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# postprocess.py -- anchor recovery when manifest missing
+# --------------------------------------------------------------------------- #
+
+
+def test_load_anchor_recovers_from_console_when_no_manifest(tmp_path):
+    # No manifest.json; console.jsonl has stamped records (R_us + wallclock).
+    (tmp_path / "console.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "console",
+                "line": "0.00.045.713 I cmn x: y",
+                "R_us": 45713,
+                "wallclock_iso": "2026-08-15T03:41:15.418-05:00",
+                "wallclock_epoch_us": 1786783275418843,
+            }
+        )
+        + "\n"
+    )
+    anchor = postprocess.load_anchor(tmp_path)
+    assert anchor.get("log_epoch_us") == 1786783275418843 - 45713
+    assert anchor.get("recovered") is True
+    assert anchor.get("method") == "recovered_from_console"
+
+
+def test_load_anchor_prefers_manifest_when_present(tmp_path):
+    manifest = {
+        "anchor": {
+            "method": "first_log_line",
+            "log_epoch_us": 1_750_000_000_000_000,
+        }
+    }
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest))
+    (tmp_path / "console.jsonl").write_text(
+        json.dumps(
+            {
+                "R_us": 999,
+                "wallclock_epoch_us": 1_750_000_000_999_000,
+            }
+        )
+        + "\n"
+    )
+    anchor = postprocess.load_anchor(tmp_path)
+    # Manifest anchor wins; not marked recovered.
+    assert anchor.get("log_epoch_us") == 1_750_000_000_000_000
+    assert not anchor.get("recovered")
+
+
+def test_load_anchor_recovers_from_anchor_json(tmp_path):
+    # Early anchor.json written by capture.py at anchor time.
+    (tmp_path / "anchor.json").write_text(
+        json.dumps({"method": "first_log_line", "log_epoch_us": 1_234_567})
+    )
+    anchor = postprocess.load_anchor(tmp_path)
+    assert anchor.get("log_epoch_us") == 1_234_567
+
+
+def test_load_anchor_empty_when_nothing_available(tmp_path):
+    assert postprocess.load_anchor(tmp_path) == {}
+
+
+# --------------------------------------------------------------------------- #
 # postprocess.py -- anchor self-checks (B2)
 # --------------------------------------------------------------------------- #
 
@@ -463,7 +524,7 @@ def test_parse_slots_task_id_uses_id_task(tmp_path):
             "type": "slots",
             "wallclock_iso": "2026-08-13T09:15:31.000-07:00",
             "data": [
-                {"id": 4, "task": 999, "id_task": 184, "state": "processing"},
+                {"id": 4, "task": 999, "id_task": 184, "is_processing": True},
             ],
         }
     ]
@@ -474,6 +535,28 @@ def test_parse_slots_task_id_uses_id_task(tmp_path):
     assert len(events) == 1
     # task_id should come from id_task, not the stale 'task' field.
     assert events[0]["task_id"] == 184
+    # Real /slots API has is_processing (bool), mapped to state.
+    assert events[0]["payload"]["is_processing"] is True
+    assert events[0]["payload"]["state"] == "processing"
+
+
+def test_parse_slots_maps_is_processing_to_state(tmp_path):
+    slots = [
+        {
+            "type": "slots",
+            "wallclock_iso": "2026-08-13T09:15:31.000-07:00",
+            "data": [
+                {"id": 0, "is_processing": False},
+                {"id": 1, "is_processing": True},
+            ],
+        }
+    ]
+    with open(tmp_path / "slots.jsonl", "w") as f:
+        for rec in slots:
+            f.write(json.dumps(rec) + "\n")
+    events = postprocess.parse_slots(tmp_path)
+    states = [e["payload"].get("state") for e in events]
+    assert states == ["idle", "processing"]
 
 
 # --------------------------------------------------------------------------- #

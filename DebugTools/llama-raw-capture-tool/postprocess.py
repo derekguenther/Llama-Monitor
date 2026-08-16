@@ -42,6 +42,7 @@ SESSION_LAYOUT = {
     "monitor": "monitor-api.jsonl",
     "prompts": "prompts",
     "postprocessed": "postprocessed",
+    "anchor_json": "anchor.json",
 }
 
 # Anchor self-check tolerances (see spec "Timestamps & Correlation").
@@ -172,15 +173,63 @@ def read_jsonl_tolerant(path: Path) -> List[Dict[str, Any]]:
 
 
 def load_anchor(session_dir: Path) -> Dict[str, Any]:
-    """Load the anchor from manifest.json; return {} if missing/invalid."""
+    """Load the anchor from manifest.json; return {} if missing/invalid.
+
+    If the manifest is absent (e.g. the capture was hard-killed before
+    teardown wrote it), recover the anchor from the console stream: every
+    stamped console line carries ``wallclock_epoch_us`` and ``R_us``, so
+    ``log_epoch_us = wallclock_epoch_us(first_line) - R_us(first_line)``
+    recovers the same value the tailer computed in-memory.
+    """
     manifest_path = session_dir / SESSION_LAYOUT["manifest"]
-    if not os.path.exists(manifest_path):
-        return {}
+    anchor = {}
+    if os.path.exists(manifest_path):
+        try:
+            manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+            anchor = manifest.get("anchor") or {}
+        except Exception:
+            anchor = {}
+
+    if not anchor.get("log_epoch_us"):
+        # Fallback 1: early anchor.json written by capture.py at anchor time.
+        anchor_json = session_dir / "anchor.json"
+        if os.path.exists(anchor_json):
+            try:
+                anchor = json.loads(Path(anchor_json).read_text(encoding="utf-8")) or {}
+            except Exception:
+                anchor = {}
+    if not anchor.get("log_epoch_us"):
+        # Fallback 2: derive from the first stamped console record.
+        derived = _derive_anchor_from_console(session_dir)
+        if derived:
+            anchor.update(derived)
+            anchor["recovered"] = True
+    return anchor
+
+
+def _derive_anchor_from_console(session_dir: Path) -> Dict[str, Any]:
+    """Recover ``log_epoch_us`` from the first stamped console record.
+
+    Returns {} when there are no usable stamped console records. The first
+    record's ``wallclock_epoch_us - R_us`` is the process-start anchor, per
+    spec (first log line has R ~= 0).
+    """
+    console_path = session_dir / SESSION_LAYOUT["console"]
     try:
-        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
-        return manifest.get("anchor") or {}
-    except Exception:
-        return {}
+        for rec in read_jsonl_tolerant(console_path):
+            epoch = rec.get("wallclock_epoch_us")
+            r = rec.get("R_us")
+            if isinstance(epoch, int) and isinstance(r, (int, float)):
+                return {
+                    "method": "recovered_from_console",
+                    "log_epoch_us": epoch - int(r),
+                    "first_line_R_us": r,
+                    "first_line_wallclock_epoch_us": epoch,
+                    "first_line_wallclock_iso": rec.get("wallclock_iso"),
+                }
+    except OSError:
+        pass
+    return {}
 
 
 def _write_anchor_uncertain(session_dir: Path, uncertain: bool) -> None:
@@ -220,7 +269,15 @@ def convert_relative_to_wallclock(anchor: Dict[str, Any], R_us) -> Optional[str]
 
 
 def parse_slots(session_dir: Path) -> List[Dict[str, Any]]:
-    """Expand raw /slots arrays into per-slot events with wall-clock stamps."""
+    """Expand raw /slots arrays into per-slot events with wall-clock stamps.
+
+    The llama-server ``/slots`` API reports per-slot fields keyed by
+    ``is_processing`` (bool), ``id_task``, ``n_prompt_tokens``,
+    ``n_prompt_tokens_processed``, ``n_prompt_tokens_cache``, ``params``,
+    ``next_token``. There is no ``state`` string field. We map
+    ``is_processing`` to a ``state`` of ``"processing"``/``"idle"`` so the
+    activity-correlation rules can consume it uniformly.
+    """
     events: List[Dict[str, Any]] = []
     for rec in read_jsonl_tolerant(session_dir / SESSION_LAYOUT["slots"]):
         iso = rec.get("wallclock_iso")
@@ -230,6 +287,8 @@ def parse_slots(session_dir: Path) -> List[Dict[str, Any]]:
         for slot in data:
             if not isinstance(slot, dict):
                 continue
+            is_proc = slot.get("is_processing")
+            state = "processing" if is_proc is True else "idle" if is_proc is False else None
             ev = {
                 "ts": iso,
                 "source": "slots",
@@ -239,13 +298,15 @@ def parse_slots(session_dir: Path) -> List[Dict[str, Any]]:
                 "payload": {
                     k: slot.get(k)
                     for k in (
-                        "state", "n_ctx", "n_prompt_tokens",
+                        "state", "n_ctx", "is_processing", "n_prompt_tokens",
                         "n_prompt_tokens_processed", "n_prompt_tokens_cache",
-                        "n_gen_tokens", "id_task",
+                        "id_task", "speculative", "next_token",
                     )
                     if k in slot
                 },
             }
+            if state is not None:
+                ev["payload"]["state"] = state
             events.append(ev)
     return events
 
