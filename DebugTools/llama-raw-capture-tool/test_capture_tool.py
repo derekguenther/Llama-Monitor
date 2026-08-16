@@ -375,6 +375,57 @@ def test_resolve_llama_pid_non_windows_uses_spawned_pid(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# capture.py -- console ctrl handler (CTRL_CLOSE on X button)
+# --------------------------------------------------------------------------- #
+
+
+def test_ctrl_handler_handles_close_break_and_ctrl_c(monkeypatch):
+    import threading
+
+    # Force the handler installation path even on non-Windows (dev/test).
+    monkeypatch.setattr(capture, "IS_WINDOWS", True)
+
+    import ctypes
+    from ctypes import wintypes
+
+    captured_handler = {}
+
+    class FakeWINFUNCTYPE:
+        def __init__(self, *a, **k):
+            pass
+
+        def __call__(self, fn):
+            return fn
+
+    def fake_set_console_ctrl_handler(callback, add):
+        captured_handler["cb"] = callback
+        return True
+
+    fake_kernel32 = type("K", (), {"SetConsoleCtrlHandler": staticmethod(fake_set_console_ctrl_handler)})
+    fake_windll = type("W", (), {"kernel32": fake_kernel32()})
+    monkeypatch.setattr(ctypes, "windll", fake_windll(), raising=False)
+    monkeypatch.setattr(ctypes, "WINFUNCTYPE", FakeWINFUNCTYPE, raising=False)
+
+    session = capture.Session(session_dir=Path("/tmp"), session_id="s", config={})
+    session.stop_event = threading.Event()
+    capture.install_windows_ctrl_handler(session)
+
+    cb = captured_handler["cb"]
+    assert callable(cb)
+
+    # Ctrl+C, Ctrl+Break, and Ctrl+Close (X button) all set the stop event.
+    for event_id in (0, 1, 2):
+        session.stop_event.clear()
+        assert cb(event_id) is True
+        assert session.stop_event.is_set()
+
+    # An unrelated event is not handled and does not stop capture.
+    session.stop_event.clear()
+    assert cb(999) is False
+    assert not session.stop_event.is_set()
+
+
+# --------------------------------------------------------------------------- #
 # postprocess.py -- anchor recovery when manifest missing
 # --------------------------------------------------------------------------- #
 

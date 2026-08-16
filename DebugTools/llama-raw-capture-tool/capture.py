@@ -828,13 +828,19 @@ def write_wrapper_bat(session: Session, content: str) -> Path:
 
 
 def install_windows_ctrl_handler(session: "Session") -> None:
-    """Install a Windows console ctrl handler so Ctrl+C/Ctrl+Break stop capture.
+    """Install a Windows console ctrl handler so console exit signals stop capture.
 
     On Windows, ``llama-server.exe`` runs in the same console as the launcher,
     so a plain Ctrl+C (``KeyboardInterrupt``) can be delivered to the child
-    instead of Python. This installs ``SetConsoleCtrlHandler`` so both
-    CTRL_C_EVENT and CTRL_BREAK_EVENT set the stop event, guaranteeing a
-    graceful teardown. No-op on non-Windows (dev/test).
+    instead of Python. This installs ``SetConsoleCtrlHandler`` so Ctrl+C,
+    Ctrl+Break, *and* the console-close signal (X button) all set the stop
+    event, guaranteeing a graceful teardown (including manifest write).
+
+    Without handling ``CTRL_CLOSE_EVENT``, clicking the window's X button falls
+    through to default handling, which hard-terminates the process before
+    teardown can write manifest.json — silently dropping the anchor and end
+    metadata. Handling it gives teardown a grace window (~5s) to finish.
+    No-op on non-Windows (dev/test).
     """
     if not IS_WINDOWS:
         return
@@ -844,10 +850,11 @@ def install_windows_ctrl_handler(session: "Session") -> None:
 
         CTRL_C_EVENT = 0
         CTRL_BREAK_EVENT = 1
+        CTRL_CLOSE_EVENT = 2
         PHANDLER_ROUTINE = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
 
         def handler(ctrl_type: int) -> bool:
-            if ctrl_type in (CTRL_C_EVENT, CTRL_BREAK_EVENT):
+            if ctrl_type in (CTRL_C_EVENT, CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT):
                 session.stop_event.set()
                 return True
             return False
