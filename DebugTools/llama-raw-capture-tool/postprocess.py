@@ -697,9 +697,14 @@ def _anchor_self_checks(anchor: Dict[str, Any], events: List[Dict[str, Any]],
             if isinstance(r, (int, float)):
                 console_R.append(r)
     if prompt_ms and console_R and log_epoch:
+        # Prompt filenames are ms since start; console_R is µs since start.
+        # Convert prompt_ms to µs so both share a unit before comparing.
         lo, hi = min(console_R), max(console_R)
-        tol = PROMPT_CLOCK_TOLERANCE_MS
-        outside = [ms for ms in prompt_ms if ms < lo - tol or ms > hi + tol]
+        tol = PROMPT_CLOCK_TOLERANCE_MS * 1000  # tolerance in µs
+        outside = [
+            ms for ms in prompt_ms
+            if ms * 1000 < lo - tol or ms * 1000 > hi + tol
+        ]
         if outside:
             uncertain = True
             findings.append(
@@ -710,7 +715,8 @@ def _anchor_self_checks(anchor: Dict[str, Any], events: List[Dict[str, Any]],
                     "message": (
                         f"{len(outside)}/{len(prompt_ms)} prompt filename clocks "
                         f"({min(prompt_ms)}..{max(prompt_ms)} ms) fall outside "
-                        f"log-prefix window ({lo}..{hi} ms); anchor may be wrong"
+                        f"log-prefix window ({lo / 1000:.1f}..{hi / 1000:.1f} ms); "
+                        f"anchor may be wrong"
                     ),
                 }
             )
@@ -722,7 +728,7 @@ def _anchor_self_checks(anchor: Dict[str, Any], events: List[Dict[str, Any]],
                     "status": "ok",
                     "message": (
                         f"prompt filename clocks align with log-prefix clock "
-                        f"(window {lo}..{hi} ms)"
+                        f"(window {lo / 1000:.1f}..{hi / 1000:.1f} ms)"
                     ),
                 }
             )

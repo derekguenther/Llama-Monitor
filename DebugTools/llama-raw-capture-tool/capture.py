@@ -47,6 +47,12 @@ from common import wallclock_stamp
 
 APPEND_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_APPEND
 
+# How long resolve_llama_pid keeps retrying the process-tree BFS before giving
+# up and falling back to the spawned cmd PID (seconds). The launcher cmd runs
+# conda activate / the .bat before llama-server.exe appears, so the first
+# snapshot often races the server spawn.
+PID_RESOLVE_TIMEOUT_S = 10.0
+
 DEFAULT_CONFIG = {
     "launch_script": "_DeepSeek v4.bat",
     "server_url": "http://127.0.0.1:8000",
@@ -912,34 +918,45 @@ def resolve_llama_pid(session: Session) -> Optional[int]:
     root_pid = session.spawned_cmd_pid
     if root_pid is None:
         return None
-    try:
-        out = subprocess.run(
-            ["wmic", "process", "get", "ProcessId,ParentProcessId,Name"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        ).stdout
-        children: Dict[int, List[int]] = {}
-        name_of: Dict[int, str] = {}
-        for raw in out.splitlines():
-            parts = raw.split()
-            if len(parts) < 3:
-                continue
-            pid = int(parts[0]) if parts[0].isdigit() else None
-            ppid = int(parts[1]) if parts[1].isdigit() else None
-            if pid is None or ppid is None:
-                continue
-            name_of[pid] = parts[2]
-            children.setdefault(ppid, []).append(pid)
-        # BFS from the spawned cmd to find a descendant named llama-server.exe.
-        stack = [root_pid]
-        while stack:
-            cur = stack.pop(0)
-            if name_of.get(cur, "").lower() == "llama-server.exe":
-                return cur
-            stack.extend(children.get(cur, []))
-    except Exception:
-        pass
+    # The launcher spawns cmd, which then runs conda activate / the .bat before
+    # llama-server.exe appears. A single BFS snapshot may run before the server
+    # process exists and fall back to the cmd PID, so NVML/psutil would sample
+    # the wrong process for the whole session. Retry the BFS briefly.
+    deadline = time.monotonic() + PID_RESOLVE_TIMEOUT_S
+    while time.monotonic() < deadline:
+        try:
+            out = subprocess.run(
+                ["wmic", "process", "get", "ProcessId,ParentProcessId,Name"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            ).stdout
+            children: Dict[int, List[int]] = {}
+            name_of: Dict[int, str] = {}
+            for raw in out.splitlines():
+                parts = raw.split()
+                if len(parts) < 3:
+                    continue
+                pid = int(parts[0]) if parts[0].isdigit() else None
+                ppid = int(parts[1]) if parts[1].isdigit() else None
+                if pid is None or ppid is None:
+                    continue
+                name_of[pid] = parts[2]
+                children.setdefault(ppid, []).append(pid)
+            # BFS from the spawned cmd to find a descendant named llama-server.exe.
+            stack = [root_pid]
+            while stack:
+                cur = stack.pop(0)
+                if name_of.get(cur, "").lower() == "llama-server.exe":
+                    return cur
+                stack.extend(children.get(cur, []))
+        except Exception:
+            pass
+        # Brief pause before retrying; leave enough room for a final attempt.
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(0.25, remaining))
     return root_pid
 
 

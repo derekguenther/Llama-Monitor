@@ -426,6 +426,33 @@ def test_ctrl_handler_handles_close_break_and_ctrl_c(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# capture.py -- _persist_anchor (hard-kill anchor durability)
+# --------------------------------------------------------------------------- #
+
+
+def test_persist_anchor_writes_anchor_json(tmp_path):
+    session = capture.Session(
+        session_dir=tmp_path, session_id="s", config={}
+    )
+    session.anchors["log_epoch_us"] = 1_234_567
+    session.anchors["method"] = "first_log_line"
+    capture._persist_anchor(session)
+    anchor_path = tmp_path / "anchor.json"
+    assert anchor_path.exists()
+    written = json.loads(anchor_path.read_text())
+    assert written["log_epoch_us"] == 1_234_567
+    assert written["method"] == "first_log_line"
+
+
+def test_persist_anchor_noop_without_anchor(tmp_path):
+    session = capture.Session(
+        session_dir=tmp_path, session_id="s", config={}
+    )
+    capture._persist_anchor(session)
+    assert not (tmp_path / "anchor.json").exists()
+
+
+# --------------------------------------------------------------------------- #
 # postprocess.py -- anchor recovery when manifest missing
 # --------------------------------------------------------------------------- #
 
@@ -519,7 +546,9 @@ def test_anchor_self_checks_file_creation_ok(tmp_path):
 
 def test_anchor_self_checks_prompt_clock_misalignment():
     anchor = {"log_epoch_us": 1_750_000_000_000_000}
-    # Prompt filename ms far outside console R_us window -> misalignment.
+    # Prompt filename ms (900,000 ms = 900 s) far outside console R_us window
+    # (100 ms window) -> misalignment. Units: prompt is ms, R_us is µs; the
+    # comparison must convert to a common unit.
     events = [
         {
             "source": "prompt",
@@ -534,6 +563,31 @@ def test_anchor_self_checks_prompt_clock_misalignment():
     uncertain = postprocess._anchor_self_checks(anchor, events, findings)
     assert uncertain is True
     assert any(f["rule"] == "prompt_clock_alignment" for f in findings)
+
+
+def test_anchor_self_checks_prompt_clock_aligned_no_flag():
+    # Prompt filename ms (60,000 ms = 60 s) INSIDE the console R_us window
+    # (10,000,000..100,000,000 µs = 10..100 s). Must NOT flag a divergence.
+    anchor = {"log_epoch_us": 1_750_000_000_000_000}
+    events = [
+        {
+            "source": "prompt",
+            "payload": {"prompt_file": "000000060000.txt"},  # 60,000 ms
+        },
+        {
+            "source": "console",
+            "payload": {"R_us": 10_000_000},  # 10 s in µs
+        },
+        {
+            "source": "console",
+            "payload": {"R_us": 100_000_000},  # 100 s in µs
+        },
+    ]
+    findings = []
+    uncertain = postprocess._anchor_self_checks(anchor, events, findings)
+    assert uncertain is False
+    assert not any(f["rule"] == "prompt_clock_alignment" and f["status"] == "divergence"
+                   for f in findings)
 
 
 def test_anchor_self_checks_activity_window_disjoint():
