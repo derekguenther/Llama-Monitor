@@ -781,11 +781,16 @@ def _anchor_self_checks(anchor: Dict[str, Any], events: List[Dict[str, Any]],
     return uncertain
 
 
-def build_divergence_report(stream: Dict[str, Any]) -> List[Dict[str, Any]]:
+def build_divergence_report(
+    stream: Dict[str, Any], session_dir: Optional[Path] = None
+) -> List[Dict[str, Any]]:
     """Correlate events across sources and flag mismatches.
 
     Each finding has ``pair``, ``rule``, ``status`` (ok|warn|divergence|skipped),
     and a message. Rules are defined per source pair rather than raw inequality.
+
+    ``session_dir`` (when given) lets anchor self-checks that need raw source
+    files (e.g. console.jsonl for the prompt-clock cross-check) read them.
     """
     findings: List[Dict[str, Any]] = []
     events = stream["events"]
@@ -803,7 +808,7 @@ def build_divergence_report(stream: Dict[str, Any]) -> List[Dict[str, Any]]:
         return findings
 
     # Mandatory anchor self-checks; record uncertainty for the manifest.
-    stream["anchor_uncertain"] = _anchor_self_checks(anchor, events, findings)
+    stream["anchor_uncertain"] = _anchor_self_checks(anchor, events, findings, session_dir)
 
     console = [e for e in events if e["source"] == "console"]
     metrics = [e for e in events if e["source"] == "metrics"]
@@ -1140,7 +1145,7 @@ def write_outputs(session_dir: Path) -> Dict[str, str]:
     out_dir.mkdir(exist_ok=True)
 
     stream = build_event_stream(session_dir)
-    findings = build_divergence_report(stream)
+    findings = build_divergence_report(stream, session_dir)
     replay = replay_through_monitor(session_dir, stream)
 
     # Write the anchor-uncertainty verdict back into manifest.json so consumers

@@ -590,6 +590,30 @@ def test_anchor_self_checks_prompt_clock_aligned_no_flag():
                    for f in findings)
 
 
+def test_anchor_self_checks_prompt_clock_uses_session_dir_fallback(tmp_path):
+    # Events carry NO console R_us (typed console events drop it), but
+    # console.jsonl on disk has R_us. The fallback must read it via session_dir.
+    anchor = {"log_epoch_us": 1_750_000_000_000_000}
+    (tmp_path / "console.jsonl").write_text(
+        json.dumps({"type": "console", "R_us": 10_000_000}) + "\n" +
+        json.dumps({"type": "console", "R_us": 100_000_000}) + "\n"
+    )
+    events = [
+        {
+            "source": "prompt",
+            "payload": {"prompt_file": "000000060000.txt"},  # 60,000 ms, inside window
+        },
+        # No console R_us in events payloads.
+        {"source": "console", "payload": {}},
+    ]
+    findings = []
+    uncertain = postprocess._anchor_self_checks(anchor, events, findings, tmp_path)
+    assert uncertain is False
+    # The check should be "ok" (data found via fallback), not "skipped".
+    pf = [f for f in findings if f["rule"] == "prompt_clock_alignment"]
+    assert pf and pf[0]["status"] == "ok"
+
+
 def test_anchor_self_checks_activity_window_disjoint():
     anchor = {"log_epoch_us": 1_750_000_000_000_000}
     events = [

@@ -56,7 +56,7 @@ PID_RESOLVE_TIMEOUT_S = 10.0
 DEFAULT_CONFIG = {
     "launch_script": "_DeepSeek v4.bat",
     "server_url": "http://127.0.0.1:8000",
-    "monitor_url": "http://127.0.0.1:8080",
+    "monitor_url": "http://127.0.0.1:8081",
     "poll_interval": 1,
     "typeperf_interval": 1,
     "tail_poll_interval": 0.1,
@@ -925,11 +925,14 @@ def resolve_llama_pid(session: Session) -> Optional[int]:
     deadline = time.monotonic() + PID_RESOLVE_TIMEOUT_S
     while time.monotonic() < deadline:
         try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
             out = subprocess.run(
                 ["wmic", "process", "get", "ProcessId,ParentProcessId,Name"],
                 capture_output=True,
                 text=True,
-                timeout=15,
+                timeout=min(5.0, remaining),
             ).stdout
             children: Dict[int, List[int]] = {}
             name_of: Dict[int, str] = {}
@@ -945,8 +948,12 @@ def resolve_llama_pid(session: Session) -> Optional[int]:
                 children.setdefault(ppid, []).append(pid)
             # BFS from the spawned cmd to find a descendant named llama-server.exe.
             stack = [root_pid]
+            seen = set()
             while stack:
                 cur = stack.pop(0)
+                if cur in seen:
+                    continue
+                seen.add(cur)
                 if name_of.get(cur, "").lower() == "llama-server.exe":
                     return cur
                 stack.extend(children.get(cur, []))
