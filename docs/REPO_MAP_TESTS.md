@@ -61,6 +61,13 @@ test_config.py:class TestConfigIntegration(unittest.TestCase):  # Integration te
 test_config.py:    def test_aggregator_config_attributes(self):  # Test that Aggregator can access all required config attributes.
 test_context_limit_path.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_context_limit_path.py:def test_context_limit_data_path():  # Verify the context limit is read from data.props, not data.server.props.
+test_cpu_normalization.py:def _build_aggregator():
+test_cpu_normalization.py:def _make_system_metrics(cpu_count, process_cpu_values):  # Build a system_metrics dict with the given CPU data.
+test_cpu_normalization.py:class TestCpuNormalization(unittest.TestCase):
+test_cpu_normalization.py:    def test_clamped_to_100_when_sum_equals_core_capacity(self):
+test_cpu_normalization.py:    def test_clamps_and_warns_when_avg_exceeds_100(self):
+test_cpu_normalization.py:    def test_no_clamp_when_avg_within_range(self):
+test_cpu_normalization.py:    def test_fallback_to_os_cpu_when_no_process_cpu(self):
 test_crosshair.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_crosshair.py:def test_crosshair_implementation():  # Verify crosshair plugin is implemented for the CPU/GPU graph.
 test_daily_cost_naming.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
