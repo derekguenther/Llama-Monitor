@@ -2,6 +2,16 @@
 
 Real-time monitoring dashboard for llama.cpp servers with TUI and Web interfaces.
 
+## Goal
+
+The primary goal of llama-monitor is to **power-meter llama.cpp itself** — to
+attribute energy cost to running the local model (e.g. `llama-server.exe`) so
+it can be compared against the cost of using a remote/hosted model. Cost
+tracking therefore aims to reflect what llama.cpp is actually costing to run,
+**not** the total power the machine consumes at all times. System-wide
+activity unrelated to llama.cpp (games, video streaming, compilation, etc.)
+should be excluded or separated from llama.cpp's attributable power draw.
+
 ## Overview
 
 llama-monitor provides a single-pane view of your llama.cpp server's performance and system resources:
