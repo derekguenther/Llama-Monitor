@@ -1687,6 +1687,17 @@ class Database:
             )
             compressed += cursor.rowcount
 
+            # Purge raw rows that were just folded into 1m buckets so the
+            # database does not grow without bound. Only delete rows within the
+            # compressed window [last_bucket, current_bucket).
+            for table in ("server_metrics_raw", "system_metrics_raw",
+                          "process_gpu_metrics_raw", "process_cpu_metrics_raw"):
+                cursor.execute(
+                    f"DELETE FROM {table} WHERE timestamp >= ? AND timestamp < ?",
+                    (last_bucket, current_bucket),
+                )
+                compressed += cursor.rowcount
+
             self.conn.commit()
 
         return compressed
@@ -1822,6 +1833,17 @@ class Database:
                 (last_bucket, current_bucket),
             )
             compressed += cursor.rowcount
+
+            # Purge 1m rows that were just folded into 1h buckets so the
+            # database does not grow without bound. Only delete rows whose
+            # bucket_start falls within the compressed window.
+            for table in ("server_metrics_1m", "system_metrics_1m",
+                          "process_gpu_metrics_1m", "process_cpu_metrics_1m"):
+                cursor.execute(
+                    f"DELETE FROM {table} WHERE bucket_start >= ? AND bucket_start < ?",
+                    (last_bucket, current_bucket),
+                )
+                compressed += cursor.rowcount
 
             self.conn.commit()
 

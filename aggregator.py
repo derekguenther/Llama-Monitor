@@ -307,12 +307,33 @@ class Aggregator:
         )
 
     def compress_if_needed(self) -> None:
-        """Compress data if needed based on time intervals."""
-        # Check if we should compress to 1-minute
+        """Compress data if needed based on time intervals.
+
+        Compresses raw metrics into 1m buckets and 1m into 1h buckets, purging
+        the source rows so the database does not grow without bound. After a
+        purge, the database file is VACUUMed (throttled to hourly) so deleted
+        pages are reclaimed and the file shrinks.
+        """
+        # Compress to 1-minute (also purges folded raw rows)
         self.db.compress_to_1m()
 
-        # Check if we should compress to 1-hour
+        # Compress to 1-hour (also purges folded 1m rows) and reclaim disk
+        # space at most hourly, since VACUUM rebuilds the entire database file.
         self.db.compress_to_1h()
+        self._vacuum_throttled()
+
+    def _vacuum_throttled(self) -> None:
+        """Run VACUUM to reclaim disk space, but no more than once per hour.
+
+        VACUUM rebuilds the entire database file, so it is expensive to run on
+        every aggregation cycle. Throttling it to hourly keeps the file from
+        growing without bound while avoiding constant full-file rebuilds.
+        """
+        now = time.time()
+        last = getattr(self, "_last_vacuum_time", 0)
+        if now - last >= 3600:
+            self.db.vacuum()
+            self._last_vacuum_time = now
 
     def calculate_cost(self) -> Dict[str, Any]:
         """Calculate current session cost.
