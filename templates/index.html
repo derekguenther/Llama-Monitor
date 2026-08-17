@@ -1217,7 +1217,10 @@
             const sysPowerTotal = system.system?.power_w ?? null;
             const validGpu = gpuPower !== null && gpuPower >= 0;
             const validCpu = cpuPower !== null && cpuPower >= 0;
-            // Compute filtered (llama.cpp contribution) values
+            // Compute filtered (llama.cpp contribution) values.
+            // GPU: llama's per-process GPU utilization (NVML) as a fraction of total
+            // GPU usage. Without NVML, process_gpu is empty so hasProcessGpu is false
+            // and filtered GPU power stays 0 (correct — we cannot attribute without data).
             let llamaGpuUtil = 0, llamaCpuUtil = 0;
             const procGpu = data.process_gpu || {};
             for (const proc of Object.values(procGpu)) {
@@ -1228,14 +1231,24 @@
                 if (proc.cpu_percent != null) llamaCpuUtil += proc.cpu_percent;
             }
             const gpuUtil = gpu.usage || 0;
-            const cpuUtil = cpu.percent || 0;
+            const cpuCount = cpu.count || 1;
             const hasProcessGpu = Object.keys(procGpu).length > 0;
             const hasProcessCpu = Object.keys(rawCpu).length > 0;
             const filteredGpuPower = hasProcessGpu && validGpu && gpuUtil > 0
-                ? (llamaGpuUtil / gpuUtil) * gpuPower
+                ? Math.min(llamaGpuUtil / gpuUtil, 1) * gpuPower
                 : 0;
+            // CPU: per-process cpu_percent from psutil is on a per-core scale (0-100
+            // per core, can exceed 100). Normalize llama's raw per-process sum by the
+            // core count to express it as a 0-100 fraction of total system capacity.
+            // The denominator is the TRUE total OS CPU usage (system_raw.cpu.percent,
+            // covering ALL processes) rather than cpu.percent which the aggregator
+            // derives from tracked processes only. This yields llama's genuine share
+            // of total CPU wattage; clamp to [0,1] so llama can't be attributed more
+            // power than the CPU actually draws.
+            const cpuUtil = data.system_raw?.cpu?.percent || cpu.percent || 0;
+            const llamaCpuUtilNorm = cpuCount > 0 ? llamaCpuUtil / cpuCount : llamaCpuUtil;
             const filteredCpuPower = hasProcessCpu && validCpu && cpuUtil > 0
-                ? (llamaCpuUtil / cpuUtil) * cpuPower
+                ? Math.min(llamaCpuUtilNorm / cpuUtil, 1) * cpuPower
                 : 0;
             const filteredSysPower = filteredGpuPower + filteredCpuPower;
             if (validGpu || validCpu) {
@@ -1283,6 +1296,7 @@
             // Add new data points
             const gpuUtil = system.gpu?.usage || 0;
             const cpuUtil = system.cpu?.percent || 0;
+            const cpuCount = system.cpu?.count || 1;
             const gpuPower = system.gpu?.power_w || 0;
             const cpuPower = system.cpu?.power_w || 0;
             // Use llama.cpp's own instantaneous token/sec gauges (prompt_tokens_seconds /
@@ -1307,8 +1321,12 @@
             const hasProcessCpu2 = Object.keys(rawCpu).length > 0;
             const filteredGpu = gpuUtil > 0 ? Math.min(llamaGpuUtil, gpuUtil) : 0;
             const filteredCpu = cpuUtil > 0 ? Math.min(llamaCpuUtil, cpuUtil) : 0;
-            const filteredGpuPower = hasProcessGpu2 && gpuUtil > 0 ? (llamaGpuUtil / gpuUtil) * gpuPower : 0;
-            const filteredCpuPower = hasProcessCpu2 && cpuUtil > 0 ? (llamaCpuUtil / cpuUtil) * cpuPower : 0;
+            // Normalize llama's raw per-process CPU (per-core scale) by core count so it
+            // shares the same 0-100 scale as the true total OS CPU; clamp to [0,1].
+            const llamaCpuUtilNorm = cpuCount > 0 ? llamaCpuUtil / cpuCount : llamaCpuUtil;
+            const totalCpuUtil = data.system_raw?.cpu?.percent || cpuUtil || 0;
+            const filteredGpuPower = hasProcessGpu2 && gpuUtil > 0 ? Math.min(llamaGpuUtil / gpuUtil, 1) * gpuPower : 0;
+            const filteredCpuPower = hasProcessCpu2 && totalCpuUtil > 0 ? Math.min(llamaCpuUtilNorm / totalCpuUtil, 1) * cpuPower : 0;
 
             // Always append data — even when idle, append zeros so the graph
             // shows a smooth decline to zero instead of flashing blank.
