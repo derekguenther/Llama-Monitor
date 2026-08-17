@@ -202,8 +202,17 @@ class ServerMetricsCollector:
                 else:
                     progress = 0.0
 
-            n_cache = _v("n_prompt_tokens_cache")
-            n_tokens = n_cache + n_prompt_tokens_processed + n_gen_tokens
+            # Context used: prefer the server-provided n_tokens if present
+            # (authoritative), otherwise recompute from the fields that are
+            # actually available. The real llama.cpp /slots schema has no
+            # n_tokens or n_gen_tokens fields; n_prompt_tokens_processed +
+            # n_prompt_tokens_cache is the correct context occupancy in that case.
+            explicit_n_tokens = slot.get("n_tokens")
+            if explicit_n_tokens is not None:
+                n_tokens = explicit_n_tokens
+            else:
+                n_cache = _v("n_prompt_tokens_cache")
+                n_tokens = n_cache + n_prompt_tokens_processed + n_gen_tokens
 
             result.append(
                 {
