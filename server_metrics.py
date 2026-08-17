@@ -187,13 +187,17 @@ class ServerMetricsCollector:
 
             slot_state = slot.get("state")
             progress = slot.get("progress")
+            is_processing = slot.get("is_processing", False)
             n_prompt_tokens = _v("n_prompt_tokens")
             n_prompt_tokens_processed = _v("n_prompt_tokens_processed")
             n_gen_tokens = _v("n_gen_tokens")
 
-            # Normalize state: None (from JSON null) means idle
+            # Normalize state: None (from JSON null) means idle.
+            # llama.cpp /slots does not provide a "state" field; it uses the
+            # boolean "is_processing" instead. Derive state from is_processing
+            # when state is absent so progress and active-slot counting work.
             if slot_state is None:
-                slot_state = "idle"
+                slot_state = "processing" if is_processing else "idle"
 
             # Calculate progress when actively processing
             if progress is None:

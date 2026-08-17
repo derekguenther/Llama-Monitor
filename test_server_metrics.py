@@ -331,6 +331,50 @@ class TestParseSlots(unittest.TestCase):
         self.assertEqual(result[0]["state"], "idle")
         self.assertEqual(result[0]["progress"], 0.0)
 
+    def test_parse_slots_is_processing_derives_state_and_progress(self):
+        """Slots with is_processing=true should get state=processing and progress.
+
+        llama.cpp /slots does not include a "state" field; it uses the boolean
+        "is_processing". Progress must be derived from n_prompt_tokens_processed
+        / n_prompt_tokens when is_processing is true (previously stuck at 0).
+        """
+        slots = [
+            # Mid prompt-eval: progress should be partial
+            {
+                "id": 0,
+                "is_processing": True,
+                "n_prompt_tokens": 200,
+                "n_prompt_tokens_processed": 100,
+            },
+            # Fully processed prompt (generation): progress should be 1.0
+            {
+                "id": 1,
+                "is_processing": True,
+                "n_prompt_tokens": 4096,
+                "n_prompt_tokens_processed": 4096,
+            },
+            # Idle slot: no progress
+            {"id": 2, "is_processing": False},
+        ]
+
+        result = self.collector._parse_slots(slots)
+
+        self.assertEqual(len(result), 3)
+        # is_processing=True -> state=processing and computed progress
+        self.assertEqual(result[0]["state"], "processing")
+        self.assertAlmostEqual(result[0]["progress"], 100 / 200)
+        self.assertEqual(result[1]["state"], "processing")
+        self.assertAlmostEqual(result[1]["progress"], 1.0)
+        # is_processing=False -> idle, progress 0
+        self.assertEqual(result[2]["state"], "idle")
+        self.assertEqual(result[2]["progress"], 0.0)
+
+    def test_parse_slots_explicit_state_priority(self):
+        """An explicit state field should take priority over is_processing."""
+        slots = [{"id": 0, "state": "idle", "is_processing": True}]
+        result = self.collector._parse_slots(slots)
+        self.assertEqual(result[0]["state"], "idle")
+
 
 class TestFormatMetricsDisplay(unittest.TestCase):
     """Tests for format_metrics_display function."""
