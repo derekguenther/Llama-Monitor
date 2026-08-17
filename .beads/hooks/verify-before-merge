@@ -26,33 +26,44 @@ echo "Check 1: Llama Monitor running on Windows..."
 # ports (the web server defaults to 8080, the aggregator daemon API to 8081),
 # NOT on llama.cpp's port 8000. 8000 is llama-server's own /metrics endpoint.
 #
-# The monitor host/port is configurable via LLAMA_MONITOR_URL so it can be
-# pointed at the correct monitor port in any environment. Defaults to the
-# aggregator daemon API (port 8081), which is the monitor's live data endpoint.
-MONITOR_URL="${LLAMA_MONITOR_URL:-http://host.docker.internal:8081}"
+# A single monitor may be reachable at more than one host/port (e.g. the copy
+# running inside this docker container on 8080 AND a copy on the Windows host on
+# 8081). LLAMA_MONITOR_URLS accepts a space-separated list of monitor base URLs
+# to probe; if ANY of them is reachable and actively running, the merge is
+# aborted. Defaults to checking both the local docker container (localhost:8080)
+# and the Windows host (host.docker.internal:8081), so a running monitor is
+# caught wherever it lives.
+#
+# The aggregator daemon API (/api/status) is the monitor's live data endpoint.
+MONITOR_URLS="${LLAMA_MONITOR_URLS:-http://localhost:8080 http://host.docker.internal:8081}"
 
 if command -v curl >/dev/null 2>&1; then
-    # Try to connect to the Windows host's Llama Monitor using its /api/status
-    # health endpoint. A successful JSON response with a "status" field means
-    # the monitor (or its aggregator daemon) is reachable.
-    MONITOR_RESPONSE=$(curl -s --connect-timeout 2 "${MONITOR_URL}/api/status" 2>/dev/null) || MONITOR_RESPONSE=""
-    if [ -n "$MONITOR_RESPONSE" ] && echo "$MONITOR_RESPONSE" | grep -q '"status"'; then
-        echo "  WARNING: Llama Monitor appears to be running on Windows (${MONITOR_URL})!"
-        echo "  The database may be corrupted if we proceed with the merge."
+    MONITOR_FOUND=""
+    for MONITOR_URL in ${MONITOR_URLS}; do
+        # Try to connect to the Llama Monitor using its /api/status health
+        # endpoint. A successful JSON response with a "status" field means the
+        # monitor (or its aggregator daemon) is reachable at this URL.
+        MONITOR_RESPONSE=$(curl -s --connect-timeout 2 "${MONITOR_URL}/api/status" 2>/dev/null) || MONITOR_RESPONSE=""
+        if [ -n "$MONITOR_RESPONSE" ] && echo "$MONITOR_RESPONSE" | grep -q '"status"'; then
+            echo "  WARNING: Llama Monitor appears to be running at ${MONITOR_URL}!"
+            echo "  The database may be corrupted if we proceed with the merge."
+            MONITOR_FOUND=1
 
-        # Check whether the monitor reports itself as actively running.
-        # If the aggregator reports a non-running/stopped status, it is safe to
-        # proceed; otherwise abort to avoid corrupting a live database.
-        if echo "$MONITOR_RESPONSE" | grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
-            echo "  ERROR: Llama Monitor is actively running. Aborting merge."
-            echo "  Please stop Llama Monitor on Windows before merging,"
-            echo "  or set LLAMA_MONITOR_URL to the correct monitor endpoint."
-            exit 1
-        else
-            echo "  Monitor is reachable but not actively running - safe to proceed"
+            # Check whether the monitor reports itself as actively running.
+            # If the aggregator reports a non-running/stopped status, it is safe
+            # to proceed; otherwise abort to avoid corrupting a live database.
+            if echo "$MONITOR_RESPONSE" | grep -q '"status"[[:space:]]*:[[:space:]]*"running"'; then
+                echo "  ERROR: Llama Monitor is actively running at ${MONITOR_URL}. Aborting merge."
+                echo "  Please stop Llama Monitor before merging,"
+                echo "  or set LLAMA_MONITOR_URLS to the correct monitor endpoints."
+                exit 1
+            else
+                echo "  Monitor at ${MONITOR_URL} is reachable but not actively running - safe to proceed"
+            fi
         fi
-    else
-        echo "  OK: Llama Monitor is not reachable at ${MONITOR_URL}"
+    done
+    if [ -z "$MONITOR_FOUND" ]; then
+        echo "  OK: Llama Monitor is not reachable at any of: ${MONITOR_URLS}"
     fi
 else
     echo "  WARNING: curl not available, cannot check Llama Monitor status"
