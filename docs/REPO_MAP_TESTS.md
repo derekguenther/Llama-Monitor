@@ -321,6 +321,8 @@ test_tokens_idle_reset.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.a
 test_tokens_idle_reset.py:def test_tokens_graph_no_reset_on_idle():  # Verify Tokens/Sec graph does NOT reset to [0] on idle — appends zeros instead.
 test_total_cost_label.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_total_cost_label.py:def test_total_cost_label():  # Verify Total Cost label is present above the monthly total.
+test_verbose_gating.py:SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "llamamonitor.py")
+test_verbose_gating.py:def test_debug_gated_by_verbose():
 test_web_server_settings.py:class TestSettingsEndpoints(unittest.TestCase):  # Tests for settings API endpoints.
 test_web_server_settings.py:    def setUp(self):  # Create test client and temp database.
 test_web_server_settings.py:    def tearDown(self):  # Clean up.
