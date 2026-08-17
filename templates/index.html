@@ -1285,9 +1285,14 @@
             const cpuUtil = system.cpu?.percent || 0;
             const gpuPower = system.gpu?.power_w || 0;
             const cpuPower = system.cpu?.power_w || 0;
-            // Use instantaneous rates when available, fall back to cumulative averages
-            const tokensGeneratedPerSec = serverMetrics.predicted_tokens_seconds_instant != null ? serverMetrics.predicted_tokens_seconds_instant : (serverMetrics.predicted_tokens_seconds || 0);
-            const tokensProcessedPerSec = serverMetrics.prompt_tokens_seconds_instant != null ? serverMetrics.prompt_tokens_seconds_instant : (serverMetrics.prompt_tokens_seconds || 0);
+            // Use llama.cpp's own instantaneous token/sec gauges (prompt_tokens_seconds /
+            // predicted_tokens_seconds) which are accurate during activity. These gauges
+            // hold stale values when idle, so gate on requests_processing to show 0 when
+            // nothing is running (matches llama.cpp logging). Delta-computed _instant
+            // fields are noisy (0 most of the time, spiking to 500+) so are no longer used.
+            const isProcessing = serverMetrics.requests_processing > 0;
+            const tokensGeneratedPerSec = isProcessing ? (serverMetrics.predicted_tokens_seconds || 0) : 0;
+            const tokensProcessedPerSec = isProcessing ? (serverMetrics.prompt_tokens_seconds || 0) : 0;
 
             // Calculate filtered llama.cpp values
             let llamaGpuUtil = 0, llamaCpuUtil = 0;
