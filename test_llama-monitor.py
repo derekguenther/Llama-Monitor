@@ -14,7 +14,10 @@ TEST_FILES = [
     "test_imports.py",
 ]
 
-LLAMA_MONITOR_DIR = "C:/Users/ClaudeCode/Documents/llama-monitor"
+# Directory containing this test runner. Using the file location (rather than
+# a hardcoded path) makes the runner cross-platform — it works both in the
+# Linux docker sandbox and on Windows.
+LLAMA_MONITOR_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def run_tests():
