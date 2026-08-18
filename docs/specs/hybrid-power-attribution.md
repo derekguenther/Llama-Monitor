@@ -73,21 +73,35 @@ Therefore "sum over ALL processes" is NOT available from `process_cpu`; it equal
 llama sum and would force `llama_cpu_share = 1.0`, reintroducing the Netflix bug for CPU.
 
 The denominator must therefore be the **total system utilization** for the component,
-which IS collected:
+which IS collected. **CRITICAL UNIT SEMANTICS:**
+
+- `psutil.cpu_percent()` (→ `cpu.percent`) is the **average across all logical cores**,
+  bounded ~0-100% — already a **fraction of total system capacity**.
+- Per-process `proc.info["cpu_percent"]` is **single-core relative** (core-equivalents):
+  a single busy thread reports ~100% regardless of core count, and N threads sum to
+  N×100%. It is NOT a fraction of system capacity.
+
+These two are in DIFFERENT units, differing by a factor of `cpu_count`. The numerator
+must be normalized by core count to match the denominator's unit:
 
 ```
-llama_cpu_share = clamp( sum(process_cpu[proc].cpu_percent for llama procs) / cpu.percent , 0, 1 )
+llama_cpu_share = clamp( ( sum(process_cpu[proc].cpu_percent for llama procs) / cpu.count ) / cpu.percent, 0, 1 )
 llama_gpu_share = clamp( sum(process_gpu[proc].gpu_utilization for llama procs) / gpu.usage, 0, 1 )
 ```
 
-- `cpu.percent` is the total CPU utilization (the `percent` field of `_collect_cpu`,
-  same unit as the per-process `cpu_percent` — both are % of system capacity over the
-  poll interval).
-- `gpu.usage` is the total GPU utilization (same unit as per-process `gpu_utilization`).
-- Both numerator and denominator are in the SAME unit, so no `cpu_count` normalization
-  is applied on either side (aggregator.py's `cpu_percent/cpu_count` normalization at
-  lines 96-99 is for a different display purpose and must NOT be used for share).
+Equivalently, `llama_cpu_share = clamp( sum(llama percents) / (cpu.percent * cpu.count), 0, 1 )`.
+
+- `cpu.count` is the logical core count (the `count` field of `_collect_cpu`).
+- This is the SAME normalization `aggregator.py:96-110` already applies to the summed
+  per-process percents (divide by cpu_count), which is the correct precedent.
+- `gpu.usage` and per-process `gpu_utilization` are BOTH bounded 0-100% (same unit), so
+  `llama_gpu_share` needs NO `cpu_count`-style normalization.
 - If `cpu.percent`/`gpu.usage` is 0 or absent → share = 0.
+
+**Worked example (8-core):** llama busy 1 thread (sum=100%), other apps busy 3 cores,
+`cpu.percent` = 50%. True share = 1/4 = 25%.
+`(100 / 8) / 50 = 12.5 / 50 = 0.25` ✓ (the un-normalized `100/50 = 2 → clamped to 1.0`
+would be WRONG).
 
 ### 2.4 Blame Categories (exhaustive, sum to totalPower)
 
@@ -144,8 +158,9 @@ The aggregators compute the shares and `llama_running` from the process data alr
 present at their call sites, and pass them into `update_power_readings`.
 
 **In `aggregator.py`** (`store_raw_metrics`, around lines 242-258):
-- `llama_cpu_share` = clamp( sum(process_cpu[proc]["cpu_percent"] for llama procs) /
-  cpu.percent, 0, 1 ). If `cpu.percent` is 0 or absent, share = 0.
+- `llama_cpu_share` = clamp( ( sum(process_cpu[proc]["cpu_percent"] for llama procs) /
+  cpu.count ) / cpu.percent, 0, 1 ). If `cpu.percent` or `cpu.count` is 0/absent,
+  share = 0.
 - `llama_gpu_share` = clamp( sum(process_gpu[proc]["gpu_utilization"] for llama procs) /
   gpu.usage, 0, 1 ). If `gpu.usage` is 0 or absent, share = 0.
 - `llama_running` = True if any `llama-server.exe` entry exists in `process_cpu` or
@@ -153,13 +168,14 @@ present at their call sites, and pass them into `update_power_readings`.
 
 **In `aggregator_daemon.py`** (`_calculate_cost`, line 261):
 - Same computation from the `system_metrics` it already has (`cpu.process_cpu` +
-  `cpu.percent`, `process_gpu` + `gpu.usage`).
+  `cpu.percent` + `cpu.count`, `process_gpu` + `gpu.usage`).
 - Pass into the shared `update_power_readings` call at line 281.
 
 Both aggregators use a **shared pure helper**
 `compute_attribution_inputs(cpu, gpu) -> (llama_cpu_share, llama_gpu_share, llama_running)`
 living in one place (e.g. `electricity_cost.py`) and imported by both aggregators — no
-divergence.
+divergence. The helper consumes `cpu.count` (already collected as the `count` field), so
+no new sensor is needed — only the helper's contract and the caller wiring include it.
 
 ### 4.2 Store Raw Primitives per Interval
 
@@ -328,6 +344,10 @@ displayed llama.cpp cost breakdown:
 - **Non-NVML systems (S7):** on systems without NVML, `gpu.usage` is the `-1` sentinel, so
   `llama_gpu_share` is always 0 there (correct per this sanitization). Document this so
   future "GPU share is always 0" is understood, not treated as a bug.
+- **First-call `cpu_percent` (G3-new):** `psutil.cpu_percent()` with `interval=None`
+  returns 0.0 on the first invocation (no prior sample to diff). The first interval will
+  report `llama_cpu_share = 0` and attribute all CPU delta to baseline/unattributed.
+  This is benign; acknowledge it so it isn't misread as a bug.
 
 ### 5.2 State Transitions
 
@@ -359,11 +379,13 @@ displayed llama.cpp cost breakdown:
   - Division by zero: cpuUtil=0 or gpuUtil=0 → shares 0, no crash.
   - `-1`/None inputs → sanitized to 0, no `-1` in output.
   - Idle baseline EMA converges to measured idle value.
-  - **CPU share denominator (B1):** a multi-core case where sum(llama percents) is large
-    but `cpu.percent` is smaller → share computed against `cpu.percent` and clamped, NOT
-    degenerating to 1.0.
+  - **CPU share denominator (B1):** the worked example — llama 1 thread (sum=100%),
+    other apps 3 cores, `cpu.percent`=50%, `cpu.count`=8 → `(100/8)/50 = 0.25`, NOT
+    clamped to 1.0. Assert the correct fractional share (25%), not the clamped-wrong
+    result. Clamping only triggers on genuinely impossible inputs (share > 1).
   - **Caller wiring:** `compute_attribution_inputs` returns correct shares/running from a
-    sample process snapshot where `process_cpu` contains only llama procs.
+    sample process snapshot where `process_cpu` contains only llama procs, using
+    `cpu.count` for normalization.
 - **Property test**: randomized inputs → `sum == totalPower` invariant holds when both
   components present (note: §5.1 zeroes missing components, which by design breaks the
   invariant — scope the property test to both-present inputs).
@@ -387,6 +409,12 @@ displayed llama.cpp cost breakdown:
   attribution.
 - Does NOT collect all-process CPU percents (the collector filters to tracked processes;
   the denominator is the existing total `cpu.percent`).
+- **Note (S1):** the pre-existing standalone filtered metric (`aggregator.py:252`
+  `cpu_power_total * (cpu_percent_process / cpu_percent_total)` and frontend
+  `filteredCpuPower` index.html:1236) contains the SAME single-core vs system-average
+  unit mismatch for a single process. This spec fixes the attribution math server-side;
+  the standalone display is out of scope but shares the same unit limitation — future
+  readers should not treat it as a discrepancy.
 - Backward compatibility: existing raw-power behavior remains available as the "system"
   view; stored hybrid cost is the new default llama.cpp cost.
 
@@ -399,8 +427,9 @@ displayed llama.cpp cost breakdown:
    `compute_attribution_inputs` helper for caller-side share derivation (B1).
 3. **Per-component math**: activityDelta, llamaShare, and blame categories computed per
    CPU/GPU component and summed.
-4. **llamaShare clamped** to [0,1]; **denominator = total component util**
-   (`cpu.percent`/`gpu.usage`), NOT an all-process sum (B1).
+4. **llamaShare clamped** to [0,1]; CPU **numerator normalized by `cpu.count`** to match
+   the system-average `cpu.percent` denominator (B1); GPU uses `gpu.usage` directly
+   (same unit).
 5. **Separate `power_attribution` table** with retention via compression (G4) and
    timestamp PK + INSERT OR REPLACE dedup.
 6. **Per-component baseline fallback** (22W/14W); EMA calibration coexists with legacy
