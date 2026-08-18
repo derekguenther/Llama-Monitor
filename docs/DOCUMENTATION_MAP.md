@@ -31,6 +31,12 @@ Index of notable documentation files in this project. Load the one you need.
 | `memory/database-corruption-hypotheses.md` | Database corruption bugs | Root cause hypotheses for llama-monitor.db corruption issues |
 | `memory/database-corruption-fixes.md` | Database corruption fixes | Applied fixes for database corruption |
 
+## Technical Specs
+
+| File | When to Read | Description |
+|------|-------------|-------------|
+| `docs/specs/` | Before implementing a design decision | Draft specs reviewed by the spec-reviewer agent. Each spec documents a feature before code is written, and is verified against by the code-reviewer agent after implementation. |
+
 ## Superpowers / Chrome MCP
 
 | File | When to Read | Description |

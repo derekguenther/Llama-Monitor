@@ -30,6 +30,14 @@
    - If Chrome unavailable → see [Troubleshoot Chrome](troubleshoot-chrome.md)
    - If issues found → set bead to `Open` with findings
 
+### When Chrome functional review is required
+
+Chrome functional review is **always** required when a bead changes the webpage or the data flow that feeds it (HTML/templates, JS, API endpoints, metrics aggregation that reaches the dashboard). For these, do not skip Chrome testing.
+
+Chrome functional review may be **skipped** only for changes with no visible component — e.g. pure logging changes, config files that do not affect data flow, or backend-only fixes with no UI/dashboard impact. When skipping, note the skip reason in the review outcome.
+
+When in doubt, run the Chrome functional review — do not skip it.
+
 ## Outcomes
 
 **If review fails:**
@@ -41,8 +49,8 @@
 
 ## Critical Guardrails
 
-- **Always** verify Chrome functional review completed - if unavailable, troubleshoot harder (see [Troubleshoot Chrome](troubleshoot-chrome.md))
+- **Always** verify Chrome functional review completed for webpage/data-flow changes - if unavailable, troubleshoot harder (see [Troubleshoot Chrome](troubleshoot-chrome.md))
 - Never skip test verification
-- **Never silently skip Chrome functional review**
+- **Never silently skip Chrome functional review** (only skip for logging/config changes with no visible component, and note the skip reason)
 - Always check for -1 values in numeric displays
 - If uncertain → set Needs_human_input, don't guess
