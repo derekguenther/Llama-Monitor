@@ -1,6 +1,6 @@
 # Spec: Hybrid Power Attribution for llama-monitor
 
-**Status:** Draft for spec-reviewer review
+**Status:** Draft for spec-reviewer review (rev 3)
 **Related beads:** llama-monitor-ym0 (reopened), llama-monitor-h9z0 (design tracking)
 **Date:** 2026-08-18
 **Author:** Agent (per user's design decision)
@@ -34,53 +34,79 @@ nothing.
 ## 2. Design Decision (User-Selected: HYBRID "Direct + baseline" model)
 
 The model separates total power into an idle baseline and an activity delta, then
-attributes the delta by utilization share.
+attributes the delta by utilization share. The math is **per-component** (CPU and GPU
+computed separately, then summed).
 
-### 2.1 Core Equation
+### 2.1 Per-Component Core Equation
 
-```
-totalPower = idleBaseline + activityDelta
-activityDelta = max(0, totalPower - idleBaseline)
-```
-
-### 2.2 Attribution of the Activity Delta
-
-The activity delta splits by utilization share (per component, CPU and GPU separately):
+For each component `c ∈ {cpu, gpu}`:
 
 ```
-llamaDirectDelta = llamaShare * activityDelta
-otherAppsDelta  = (1 - llamaShare) * activityDelta
+totalPower_c = measured total power of component c
+activityDelta_c = max(0, totalPower_c - idleBaseline_c)
 ```
 
-Where `llamaShare` is the fraction of total utilization attributable to llama.cpp:
+### 2.2 Per-Component Attribution of the Activity Delta
 
 ```
-llamaShare_cpu = llamaCpuUtil / cpuUtil      # llama.cpp CPU share
-llamaShare_gpu = llamaGpuUtil / gpuUtil      # llama.cpp GPU share
+llamaDirect_c = llamaShare_c * activityDelta_c
+otherApps_c  = (1 - llamaShare_c) * activityDelta_c
 ```
 
-This is the same "Filtered" ratio already computed in the frontend
-(`templates/index.html` lines 1233-1239): `filteredGpuPower = (llamaGpuUtil/gpuUtil)*gpuPower`.
+Where `llamaShare_c` is clamped to `[0, 1]`:
 
-### 2.3 Blame Categories (exhaustive, sum to totalPower)
+```
+llamaShare_c = clamp( llamaUtil_c / util_c, 0, 1 )
+llamaUtil_c  = sum of llama.cpp per-process util for component c (from process_cpu/process_gpu)
+util_c       = total utilization of component c
+```
 
-1. **llama.cpp direct** = `llamaDirectDelta` (share of the activity delta attributable to
-   llama.cpp).
-2. **llama.cpp baseline** = `idleBaseline`, blamed ONLY while `llama-server.exe` is
-   running.
-3. **otherApps** = `otherAppsDelta`.
-4. **unattributed** = idle baseline when llama.cpp NOT running + measurement residual.
+`llamaShare` is clamped because summed per-process `cpu_percent` values are each a % of
+system capacity and can exceed the reported system util; without clamping,
+`otherApps_c` would go negative.
 
-### 2.4 llama.cpp Default Cost
+### 2.3 Consistent Utilization Normalization (CPU)
+
+Per-process CPU percents are each a % of **system capacity**, so their sum can exceed
+100% on multi-core systems. To compute a correct share, both numerator and denominator
+must be in the SAME unit:
+
+- **Numerator** `llamaUtil_cpu` = sum of llama.cpp per-process `cpu_percent`.
+- **Denominator** `util_cpu` = the un-normalized total CPU utilization.
+
+Do NOT mix a normalized total (e.g. `cpu_percent / cpu_count`) with an un-normalized
+numerator. The share must be computed from **both sides in the same unit** (both raw
+per-process-style percents, or both normalized). Concretely: `util_cpu` = the summed
+per-process `cpu_percent` across ALL processes (the true system utilization), and
+`llamaShare_cpu = sum(llama process percents) / sum(all process percents)`, clamped to
+[0,1]. If only total `cpu.percent` is available without a process breakdown, fall back to
+`llamaShare_cpu = sum(llama percents) / cpu.percent`, but do not divide by `cpu_count`.
+
+The GPU side has no such unit mismatch: both numerator and denominator are % utilization
+of the same GPU.
+
+### 2.4 Blame Categories (exhaustive, sum to totalPower)
+
+1. **llama.cpp direct** = `llamaDirect_cpu + llamaDirect_gpu`.
+2. **llama.cpp baseline** = `idleBaseline_cpu + idleBaseline_gpu`, blamed ONLY while
+   `llama-server.exe` is running.
+3. **otherApps** = `otherApps_cpu + otherApps_gpu`.
+4. **unattributed** = idle baseline (cpu+gpu) when llama.cpp NOT running + measurement
+   residual (any gap between the sum of categories and totalPower).
+
+**Invariant:** `direct + baseline + otherApps + unattributed == totalPower` (within
+floating-point residual).
+
+### 2.5 llama.cpp Default Cost
 
 ```
 llama.cpp cost = direct + baseline (the hybrid)
 ```
 
-### 2.5 Netflix Case Resolution
+### 2.6 Netflix Case Resolution
 
-- **llama.cpp idle + Netflix active**: `llamaDirectDelta = 0`. llama.cpp gets only the
-  baseline (blamed because it's running), NOT the Netflix delta.
+- **llama.cpp idle + Netflix active**: `llamaShare_c = 0`, so `llamaDirect_c = 0`.
+  llama.cpp gets only the baseline (blamed because it's running), NOT the Netflix delta.
 - **Both active**: the delta splits proportionally by utilization share.
 
 ## 3. Foundations Verified in Current Code
@@ -93,40 +119,167 @@ llama.cpp cost = direct + baseline (the hybrid)
   `idle_baseline_w` (config 40W) is stored and NEVER used.
 - GPU idle ~14W, CPU idle ~22W (true idle ~36W from capture); **baselines differ per
   component**.
+- BOTH aggregators (`aggregator.py` and `aggregator_daemon.py`) call
+  `update_power_readings()` — centralizing the hybrid computation in
+  `electricity_cost.py` fixes both paths at once.
 
 ## 4. Implementation Plan
 
-### 4.1 Store Raw Primitives per Interval
+### 4.1 Caller-Side Share Computation (NEW — resolves B1)
 
-Store per interval (in `combined_metrics` and/or a new table), NOT baked into cost:
+The aggregators compute the shares and `llama_running` from the process data already
+present at their call sites, and pass them into `update_power_readings`.
 
-- `llama_cpu_share` — llama.cpp CPU utilization share (0.0-1.0)
-- `llama_gpu_share` — llama.cpp GPU utilization share (0.0-1.0)
+**In `aggregator.py`** (`store_raw_metrics`, around lines 242-258, where it already
+iterates `process_cpu`):
+- `llama_cpu_share` = clamp( sum(process_cpu[proc]["cpu_percent"] for llama procs) /
+  sum(process_cpu[proc]["cpu_percent"] for ALL procs), 0, 1 ). If the all-process sum is
+  0 or absent, share = 0.
+- `llama_gpu_share` = clamp( sum(process_gpu[proc]["gpu_utilization"] for llama procs) /
+  gpu.usage, 0, 1 ). If `gpu.usage` is 0 or absent, share = 0.
+- `llama_running` = True if any `llama-server.exe` entry exists in `process_cpu` or
+  `process_gpu` this interval.
+- Pass these into `update_power_readings` alongside the power values.
+
+**In `aggregator_daemon.py`** (`_calculate_cost`, line 261):
+- Same computation from the `system_metrics` it already has (it has `cpu.process_cpu` and
+  `process_gpu` in the flattened/system metrics).
+- `llama_running` from presence of `llama-server.exe` in the process snapshot.
+- Pass into the shared `update_power_readings` call at line 281.
+
+Both aggregators use a **shared helper** (a pure function, e.g.
+`compute_attribution_inputs(cpu, gpu) -> (llama_cpu_share, llama_gpu_share, llama_running)`)
+so the share logic lives in one place (e.g. `electricity_cost.py` or `system_metrics.py`)
+and both aggregators import it — avoiding divergence.
+
+### 4.2 Store Raw Primitives per Interval
+
+Store per interval in a new `power_attribution` table (NOT nullable columns on
+`combined_metrics` — see §4.6), one row per timestamp:
+
+- `timestamp`
+- `llama_cpu_share` — llama.cpp CPU utilization share (clamped 0.0-1.0)
+- `llama_gpu_share` — llama.cpp GPU utilization share (clamped 0.0-1.0)
 - `total_cpu_power_w` — total CPU power
 - `total_gpu_power_w` — total GPU power
-- `idle_baseline_cpu_w` — per-component CPU idle baseline (auto-calibrated)
-- `idle_baseline_gpu_w` — per-component GPU idle baseline (auto-calibrated)
+- `idle_baseline_cpu_w` — per-component CPU idle baseline
+- `idle_baseline_gpu_w` — per-component GPU idle baseline
 - `llama_running` — bool, whether llama-server.exe was running this interval
+- `direct_wh`, `baseline_wh`, `other_apps_wh`, `unattributed_wh` — the four per-interval
+  blame-category energy (watts × duration_hours), so monthly/session views are simple
+  `SUM()` queries.
 
-### 4.2 Auto-Calibrate Idle Baseline
+### 4.3 Auto-Calibrate Idle Baseline (Per-Component)
 
-Replace hardcoded 40W with per-component auto-calibration from
-`calculate_idle_baseline()`:
+Replace hardcoded 40W with per-component auto-calibration:
 
-- When CPU+GPU both < 5% (idle), record cpu_power as `idle_baseline_cpu_w` and gpu_power
-  as `idle_baseline_gpu_w` (moving average or last-known-good).
-- This reflects measured ~36W (CPU 22W + GPU 14W) instead of assumed 40W.
+- When CPU+GPU both < 5% (idle), record `cpu_power_w` as `idle_baseline_cpu_w` and
+  `gpu_power_w` as `idle_baseline_gpu_w`.
+- **Exponential moving average** with a long window (e.g. decay α = 0.01 per 1s poll,
+  ~100s time constant) so it converges to the measured idle without chasing noise.
+- Calibration runs regardless of whether llama.cpp is running (the baseline is blamed
+  only while llama.cpp runs, but the calibration is a system property).
+- **First-run fallback**: until calibrated, default `idle_baseline_cpu_w = 22.0` and
+  `idle_baseline_gpu_w = 14.0` (from the measured capture), not a single 40W scalar.
 
-### 4.3 Compute Views at Display Time
+**Reconciliation with existing `IdleBaselineTracker` (G2):**
+- The daemon's existing `IdleBaselineTracker` (aggregator_daemon.py:75) writes scalar
+  `system_power_w` to the `idle_baseline` table (db.py:503) and `calculate_idle_baseline()`
+  returns a scalar. These remain for backward-compat / the scalar "system idle" metric.
+- The NEW per-component EMA calibration is a **separate mechanism** living in
+  `electricity_cost.py` (a new method, e.g. `calibrate_idle_baseline(cpu_power_w,
+  gpu_power_w, cpu_percent, gpu_percent)`), storing `idle_baseline_cpu_w` /
+  `idle_baseline_gpu_w` in a settings row. It does NOT modify the existing
+  `IdleBaselineTracker` or `idle_baseline` table.
+- The two coexist; the new per-component baselines drive the hybrid attribution, the
+  legacy scalar baseline remains for the system-idle display.
 
-Do NOT bake attribution into the stored cost. Compute blame categories at display time
-from the raw primitives. The cost calculator accumulates
-`(blameCategorySum) * duration * rate`.
+**Runtime + restart persistence (G3):**
+- The live EMA baseline lives as attributes on `ElectricityCostCalculator`
+  (`idle_baseline_cpu_w`, `idle_baseline_gpu_w`).
+- Persisted to a settings row in the DB on each calibration update (or on session stop),
+  so a restart restores the last calibrated baseline instead of re-converging from the
+  22W/14W fallback.
 
-### 4.4 UI Checkboxes
+### 4.4 Centralize Hybrid Computation in `update_power_readings`
+
+Modify `update_power_readings()` to accept the raw primitives and compute the blame
+categories internally:
+
+```
+update_power_readings(
+    gpu_power_w, cpu_power_w, duration_seconds,
+    llama_cpu_share, llama_gpu_share,
+    idle_baseline_cpu_w, idle_baseline_gpu_w,
+    llama_running
+)
+```
+
+Inside:
+1. Compute per-component activityDelta and the four blame-category watts (per §2).
+2. Accumulate the **hybrid (direct + baseline)** watts into the existing running totals
+   (`gpu_energy_wh`, `cpu_energy_wh`, `total_energy_wh`, and today's equivalents), so
+   the persisted Session/Monthly cost reflects the hybrid.
+3. Also track raw totals separately: `raw_gpu_energy_wh`, `raw_cpu_energy_wh`,
+   `raw_total_energy_wh` (G6 — per-component, not just a total) for the "system" view.
+4. Persist the four blame-category watts per interval into `power_attribution`.
+5. **Fix the daemon delta-key bug (G7):** aggregator_daemon.py:309-311 reads
+   `delta.get("total_energy")`/`delta.get("gpu_energy")`/`delta.get("cpu_energy")` but
+   `update_power_readings` returns `delta_total_wh`/`delta_gpu_wh`/`delta_cpu_wh`
+   (electricity_cost.py:287-293), so daemon deltas are always 0. Since this change rewrites
+   the return contract, align the daemon to the correct keys (or return both key sets) so
+   per-interval energy is nonzero and the integration test passes.
+
+Because BOTH aggregators call `update_power_readings`, this single change fixes both
+paths. `daily_energy`, `cumulative_energy`, and `sessions` now reflect hybrid watts.
+
+### 4.5 Accumulator Migration (G5)
+
+`_load_cumulative_energy`/`_load_today_energy` (electricity_cost.py:56, 70) restore
+previously-**raw** totals. After the change, `update_power_readings` accumulates hybrid
+watts on top of those restored raw values — a mixed-unit accumulator. Migration strategy:
+
+- Add a version flag (e.g. `attribution_v2_enabled`) to the settings row.
+- On first run with the flag unset: leave legacy raw totals as-is (historical continuity),
+  but mark the flag set. New accumulation is hybrid from that point forward.
+- Provide a `reset` affordance (existing `clear_session_energy`) for users who want to
+  zero the mixed totals and start fresh with hybrid-only accounting.
+- Document in UI that switching to hybrid resets the cost baseline (Session/Today/Monthly
+  reflect hybrid from activation forward).
+
+### 4.6 Schema Choice: Separate `power_attribution` Table + Retention
+
+Prefer a dedicated table over nullable columns on `combined_metrics` because:
+
+- `combined_metrics` is JSON-blob based (db.py:531-538); nullable columns would need to be
+  added to every SELECT and would be NULL for daemon-written rows.
+- `total_cpu_power_w` already exists as `cpu_power_w` in the JSON system_data — no need to
+  duplicate.
+- A dedicated table keeps both aggregators' JSON writes untouched and is cleanly keyed by
+  timestamp.
+- `combined_metrics` is NOT in the compression path, so raw per-interval data is retained
+  for historical recompute.
+
+**Retention/compression for `power_attribution` (G4):** the table grows ~86k rows/day.
+Add `power_attribution` to the existing compression path (`_compress_to_minute` /
+`_compress_to_hour` in aggregator_daemon), aggregating the four `*_wh` columns by SUM per
+minute/hour and dropping the sub-minute rows. This bounds table growth and preserves
+monthly/session SUM queries on the compressed rows.
+
+### 4.7 Historical Monthly/Session Views
+
+- Monthly and Session attribution = `SUM(direct_wh)`, `SUM(baseline_wh)`,
+  `SUM(other_apps_wh)`, `SUM(unattributed_wh)` over the date range from
+  `power_attribution` (post-compression), filtered by the selected checkbox categories.
+- At ~1 row/min after compression, monthly SUM queries are cheap. Index the timestamp
+  column.
+- Raw-power ("system" view) historical totals are unchanged (computed from existing raw
+  power storage).
+
+### 4.8 UI Checkboxes
 
 Add checkboxes in the cost UI to select which blame categories contribute to the
-llama.cpp cost display:
+displayed llama.cpp cost breakdown:
 
 ```
 [x] llama direct
@@ -135,41 +288,73 @@ llama.cpp cost display:
 [ ] unattributed
 ```
 
-Default: llama direct + llama baseline (the hybrid). Keep the standalone direct metric
-always visible.
+- **Stored cost is always the hybrid** (direct + baseline) — the headline Monthly/Session
+  cost is never affected by checkboxes.
+- Checkboxes are a **display-only filter** that recomputes the breakdown at display time
+  from the category watts stored in `power_attribution`.
+- Default selection = direct + baseline. Keep the standalone direct (filtered) metric
+  always visible.
+- Checkbox selection is persisted as a user setting in the DB (so it survives reloads),
+  but toggling never rewrites stored cost — it only changes the displayed breakdown.
 
-## 5. Data Integrity & Schema
+## 5. Data Integrity & Error Handling
 
-### 5.1 New/Modified Columns
+### 5.1 Sanitization of Raw Primitives
 
-The raw primitives need a storage location. Options considered:
-- Add nullable columns to `combined_metrics` (extensible per DESIGN.md line 191).
-- Or a new `power_attribution` table with one row per interval.
-
-Preferred: nullable columns on `combined_metrics` to align with the existing
-"extensible metrics" pattern. All new columns nullable (default NULL) so existing rows
-remain valid.
+- Guard `-1` sentinels (used by aggregator_daemon's `safe_float` for broken sensor data)
+  in ALL raw primitive inputs: treat any value `< 0` or `None` as missing → contribution
+  of 0 for that interval, never propagate `-1` into attribution math or display.
+- Division-by-zero guards:
+  - `util_c == 0` → `llamaShare_c = 0`, `llamaDirect_c = 0`, `otherApps_c = 0`
+    (all of `totalPower_c` goes to `unattributed`/`baseline`).
+  - Missing `process_cpu`/`process_gpu` snapshot → `llamaShare_c = 0`, not an error.
+  - `duration_seconds <= 0` → skip accumulation (no energy added).
+- `-1` guard values must never appear in any computed display.
 
 ### 5.2 State Transitions
 
-- `llama_running` derived from whether llama-server.exe appeared in the process snapshot
-  this interval.
-- Idle baseline calibration is a slow-moving state: update only when idle detected, decay
-  toward the measured idle value.
-- On first run with no baseline yet, fall back to config default (40W) until calibrated.
+- `llama_running` derived from whether `llama-server.exe` appeared in the process
+  snapshot this interval. Apply a short **hysteresis** (S2): treat llama.cpp as running
+  until N consecutive misses (e.g. N=3) to avoid flicker from transiently missed
+  snapshots.
+- Idle baseline calibration is slow-moving (EMA as above). On first run with no baseline,
+  fall back to `22.0` / `14.0` defaults until calibrated.
+- If both `total_cpu_power_w` and `total_gpu_power_w` are missing, the interval is
+  skipped (no attribution rows written).
+- **tracked_processes alignment (S1):** aggregator_daemon.py:69 falls back to
+  `["llama.cpp"]` while system_metrics.py:41/config default to `["llama-server.exe"]`.
+  Align the daemon's fallback to `["llama-server.exe"]` so `llama_running` and shares work
+  even when the config key is absent.
 
 ## 6. Testing
 
-- **Unit tests** for `electricity_cost.py`:
-  - Attribution math: given totalPower, idleBaseline, llamaShare → verify direct,
-    baseline, otherApps, unattributed sums equal totalPower.
-  - Netflix case: llama idle (share 0) + high total power → llamaDirectDelta = 0,
+- **Unit tests** for `electricity_cost.py` attribution math:
+  - Given totalPower, idleBaseline, llamaShare → verify `direct + baseline + otherApps +
+    unattributed == totalPower` (within FP residual).
+  - Netflix case: llama idle (share 0) + high total power → `llamaDirect = 0`,
     llama.cpp cost = baseline only.
   - Both-active case: delta splits proportionally.
-  - Idle baseline auto-calibration: feed idle readings → baseline converges to measured.
-  - `-1` guard values never appear in any computed display.
-- **Integration tests**: aggregator stores raw primitives correctly per interval.
-- **Frontend**: checkboxes toggle blame categories; llama.cpp cost updates accordingly.
+  - Clamp: llamaShare > 1 → clamped to 1, `otherApps_c >= 0`.
+  - Division by zero: cpuUtil=0 or gpuUtil=0 → shares 0, no crash.
+  - `-1`/None inputs → sanitized to 0, no `-1` in output.
+  - Idle baseline EMA converges to measured idle value.
+  - **Normalization (G1):** CPU share computed from same-unit numerator/denominator; a
+    multi-core case where raw sum > 100% produces a correct clamped share, not a
+    mis-normalized one.
+  - **Caller wiring:** `compute_attribution_inputs` returns correct shares/running from a
+    sample process snapshot.
+- **Property test**: randomized inputs → `sum == totalPower` invariant holds when both
+  components present (note: §5.1 zeroes missing components, which by design breaks the
+  invariant — scope the property test to both-present inputs).
+- **Integration tests**:
+  - Both aggregators produce valid attribution rows (cover aggregator_daemon `-1`/`None`
+    inputs).
+  - Accumulator switch keeps `today_wh == SUM(hybrid_wh)` across intervals.
+  - Daemon delta keys (G7) now return nonzero per-interval energy.
+  - Monthly/Session `SUM` queries over `power_attribution` (pre- and post-compression)
+    return correct category totals.
+- **Frontend**: toggling checkboxes changes the displayed breakdown but leaves raw-power
+  ("system" view) untouched and never changes stored Monthly cost.
 
 ## 7. Non-Goals / Scope Limits
 
@@ -177,14 +362,28 @@ remain valid.
 - Does NOT remove or break raw power display (still available as "system" view).
 - Does NOT attempt to measure actual power of non-llama processes beyond share-based
   attribution.
-- Backward compatibility: existing raw-power behavior remains available.
+- Backward compatibility: existing raw-power behavior remains available as the "system"
+  view; stored hybrid cost is the new default llama.cpp cost.
 
-## 8. Open Questions for Review
+## 8. Decisions Locked in This Revision
 
-1. Storage schema: nullable columns on `combined_metrics` vs. separate table — confirm
-   preferred approach.
-2. Idle baseline calibration: moving average window size and decay rate not specified.
-3. Whether the UI checkboxes persist as a user setting (DB) or default to the hybrid
-   selection each load.
-4. Exact placement of attribution computation (aggregator vs. web_server) for display-time
-   views.
+1. **Accumulator change**: `update_power_readings` accumulates hybrid (direct + baseline)
+   watts into session/daily/cumulative counters; raw totals tracked per-component
+   (`raw_gpu_energy_wh`/`raw_cpu_energy_wh`/`raw_total_energy_wh`).
+2. **Both aggregators covered**: fix centralized in `electricity_cost.py`; shared
+   `compute_attribution_inputs` helper for caller-side share derivation (B1).
+3. **Per-component math**: activityDelta, llamaShare, and blame categories computed per
+   CPU/GPU component and summed.
+4. **llamaShare clamped** to [0,1]; consistent CPU normalization defined (§2.3, G1).
+5. **Separate `power_attribution` table** with retention via compression (§4.6, G4).
+6. **Per-component baseline fallback** (22W/14W); EMA calibration coexists with legacy
+   `IdleBaselineTracker` (G2); runtime+restart persistence (G3).
+7. **EMA calibration** with α=0.01 per poll (~100s time constant).
+8. **Checkbox persistence**: stored as user setting; stored Monthly cost always hybrid;
+   checkboxes display-only.
+9. **Historical views** via `SUM` over compressed `power_attribution`.
+10. **`-1` sanitization** defined for all raw primitive inputs.
+11. **Accumulator migration** via `attribution_v2_enabled` flag + reset affordance (G5).
+12. **Daemon delta-key bug** fixed as part of the return-contract rewrite (G7).
+13. **tracked_processes alignment** in aggregator_daemon to `["llama-server.exe"]` (S1).
+14. **llama_running hysteresis** N=3 (S2).
