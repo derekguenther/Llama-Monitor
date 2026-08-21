@@ -19,6 +19,24 @@ Follow the process documents in sequence. Read the current process document befo
 - **If stuck or uncertain** → set Needs_human_input immediately, don't guess
 - **NEVER delete files** that were not clearly created by an agent, unless you first get the user's permission. Files such as the user's `.bat` launcher/utility scripts, config files, and other user-authored content live outside git (untracked) and must be preserved. If you are unsure whether a file is agent-created, treat it as user-owned and do not delete it. When in doubt, ask first.
 
+### PROTECT UNTRACKED FILES (MANDATORY FOR ALL AGENTS)
+
+**Untracked files** (batch files, config files, launcher scripts, `.bat`, `.json`, `.yaml`, `.ini`, etc.) are **user-owned and precious**. They are NOT git-tracked and are therefore invisible to version control — **if you delete one, it is gone forever with no recovery**.
+
+**THE DEFAULT ACTION IS TO ADD, NOT DELETE.**
+
+- **NEVER delete** a `.bat` file, config file, or any untracked user-authored file. These are the user's infrastructure and must be preserved.
+- **NEVER "clean up"** untracked files, even if they seem redundant, orphaned, or broken.
+- If a file needs to change, **EDIT IT IN PLACE** or **ADD it to the project** (track it in git) — do NOT delete it.
+- **Deletion and other destructive actions are STRICTLY PERMITTED ONLY when**:
+  1. The file is **very clearly documented** in an old bead (issue) as obsolete/no-longer-useful, AND
+  2. You have **explicitly cleared it with the user** that the file is safe to delete.
+- **ALWAYS ASK WHEN IN DOUBT.** If you are unsure whether a file is user-owned or safe to delete, **ASK THE USER FIRST**. Never guess, never assume, never delete on your own judgment.
+- If you notice that a file has been deleted or is missing, **do NOT recreate-delete or guess** — flag it to the user immediately.
+- **If you accidentally delete or damage a user file, STOP and inform the user immediately** — do not try to silently fix or hide it.
+
+**Remember:** Your job is to build and improve the user's project. Deleting the user's untracked infrastructure is the opposite of that. When in doubt about ANY file operation, **STOP and ASK.**
+
 ## File Reading Rules
 
 - **Always** use an offset when using the "read" command on a file to avoid looping and ensure you're reading the correct section
