@@ -305,6 +305,8 @@ test_slot_charts.py:            def min(*args):
 test_slot_charts.py:    def test_context_remaining_calculation(self):  # Test context remaining calculation.
 test_slot_charts.py:class TestSlotChartsIntegration(unittest.TestCase):  # Integration tests for slot charts with full metrics flow.
 test_slot_charts.py:    def test_full_metrics_flow_with_slots(self, mock_db, mock_cost_calc, mock_system, mock_server):  # Test full metrics collection flow includes slot data.
+test_slot_chart_width.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
+test_slot_chart_width.py:def test_slot_chart_width():  # Verify slot graphs stretch full width and left padding is reduced.
 test_slot_delta_graph.py:TEMPLATE_PATH = os.path.join(
 test_slot_delta_graph.py:def test_previous_slot_tokens_state():  # Verify previousSlotTokens state variable exists.
 test_slot_delta_graph.py:def test_crosshair_registered_for_tokens():  # Verify crosshair plugin is registered for tokensChart.
