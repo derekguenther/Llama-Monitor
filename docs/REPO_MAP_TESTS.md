@@ -59,6 +59,8 @@ test_config.py:    def test_set_nested_key_creates_intermediate(self):  # Test t
 test_config.py:    def test_override_existing_value(self):  # Test overriding an existing value.
 test_config.py:class TestConfigIntegration(unittest.TestCase):  # Integration tests for config with aggregator_daemon.
 test_config.py:    def test_aggregator_config_attributes(self):  # Test that Aggregator can access all required config attributes.
+test_configuration_link.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
+test_configuration_link.py:def test_configuration_link():  # Verify a link to /settings exists in the dashboard controls.
 test_context_limit_path.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_context_limit_path.py:def test_context_limit_data_path():  # Verify the context limit is read from data.props, not data.server.props.
 test_cpu_normalization.py:def _build_aggregator():
