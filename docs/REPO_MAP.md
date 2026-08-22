@@ -7,6 +7,7 @@ aggregator.py:    def _safe_float(self, value, default=0.0):  # Convert None or 
 aggregator.py:    def collect_all_metrics(self) -> Dict[str, Any]:  # Collect all metrics from all sources.
 aggregator.py:    def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:  # Store raw metrics in the database.
 aggregator.py:    def compress_if_needed(self) -> None:  # Compress data if needed based on time intervals.
+aggregator.py:    def _vacuum_throttled(self) -> None:  # Run VACUUM to reclaim disk space, but no more than once per hour.
 aggregator.py:    def calculate_cost(self) -> Dict[str, Any]:  # Calculate current session cost.
 aggregator.py:    def calculate_today_cost(self) -> Dict[str, Any]:  # Calculate today's energy cost (from midnight).
 aggregator.py:    def close(self) -> None:  # Clean up resources.

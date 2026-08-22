@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from unittest import mock
 
 from db import Database
 
@@ -744,84 +745,76 @@ class TestApiMonthlyCost(unittest.TestCase):
         self.temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         self.temp_db.close()
         self.db = Database(self.temp_db.name)
+        # Keep the connection open for the whole test so the patched _get_db
+        # (which returns self.db) always has a live connection.
+        self.db.connect()
 
         # Set up Flask test client
-        from web_server import app
+        from web_server import app, _get_db, _db_instance, _db_path
         app.config["TESTING"] = True
         self.app = app.test_client()
 
+        # Isolate the API so it reads/writes ONLY the temp DB, never the
+        # production DB. The API resolves its DB path from config.database.path
+        # and caches the Database instance in web_server._db_instance. We patch
+        # _get_db to always return the temp-DB Database so the API never touches
+        # llama-monitor.db. This also avoids the "database is locked" failures
+        # and daily_energy UNIQUE-constraint pollution caused by writing to the
+        # production DB from tests.
+        self._original_get_db = _get_db
+        self._original_db_instance = _db_instance
+        self._original_db_path = _db_path
+
+        import web_server
+        self._web_server = web_server
+        self._web_server._db_instance = None
+        self._web_server._db_path = None
+        self._get_db_patcher = mock.patch("web_server._get_db", return_value=self.db)
+        self._get_db_patcher.start()
+
     def tearDown(self):
-        """Clean up temporary database."""
+        """Clean up temporary database and restore patches."""
+        self._get_db_patcher.stop()
+        self._web_server._db_instance = self._original_db_instance
+        self._web_server._db_path = self._original_db_path
         self.db.close()
         os.unlink(self.temp_db.name)
 
     def test_api_monthly_cost_with_data(self):
         """Test API returns correct cost data when database has energy data."""
         today = datetime.now().strftime("%Y-%m-%d")
-        with self.db:
-            # Insert energy data
-            for i in range(7):
-                date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
-                total_wh = 100.0 + i * 10
-                self.db.execute(
-                    """
-                    INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (date, total_wh, 75.0, 25.0, datetime.now().isoformat()),
-                )
+        # Insert energy data into the temp DB (which the patched _get_db
+        # serves to the API). self.db stays connected for the whole test.
+        for i in range(7):
+            date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            total_wh = 100.0 + i * 10
+            self.db.execute(
+                """
+                INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (date, total_wh, 75.0, 25.0, datetime.now().isoformat()),
+            )
 
-            # Set custom cost rate
-            self.db.set_cost_rate(0.20)
+        # Set custom cost rate
+        self.db.set_cost_rate(0.20)
 
-            # Call API - uses config database path, so insert to that too
-            from config import find_config, load_config
-            config_path = find_config()
-            config = load_config(config_path)
-            db_path = getattr(config, "database_path", "llama_monitor.db")
+        # Call API - the patched _get_db serves the temp DB
+        result = self.app.get("/api/metrics/monthly-cost")
+        self.assertEqual(result.status_code, 200)
 
-            # Insert data directly into config database
-            with Database(db_path) as config_db:
-                config_db.connect()
-                cursor = config_db.conn.cursor()
-                for i in range(7):
-                    date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
-                    total_wh = 100.0 + i * 10
-                    cursor.execute(
-                        """
-                        INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
-                        VALUES (?, ?, ?, ?, ?)
-                        """,
-                        (date, total_wh, 75.0, 25.0, datetime.now().isoformat()),
-                    )
-                config_db.set_cost_rate(0.20)
-                config_db.close()
+        data = result.get_json()
+        self.assertTrue(data["success"])
 
-            # Call API
-            result = self.app.get("/api/metrics/monthly-cost")
-            self.assertEqual(result.status_code, 200)
-
-            data = result.get_json()
-            self.assertTrue(data["success"])
-
-            # Verify cost calculations
-            self.assertGreater(len(data["data"]), 0)
-            for entry in data["data"]:
-                expected_cost = (entry["total_wh"] / 1000) * 0.20
-                self.assertAlmostEqual(entry["cost_usd"], expected_cost)
+        # Verify cost calculations
+        self.assertGreater(len(data["data"]), 0)
+        for entry in data["data"]:
+            expected_cost = (entry["total_wh"] / 1000) * 0.20
+            self.assertAlmostEqual(entry["cost_usd"], expected_cost)
 
     def test_api_monthly_cost_empty_database(self):
         """Test API returns empty data when database has no energy data."""
-        # Use the config database path
-        from config import find_config, load_config
-        config_path = find_config()
-        config = load_config(config_path)
-        db_path = getattr(config, "database_path", "llama_monitor.db")
-
-        # Clear any existing data
-        with Database(db_path) as db:
-            db.execute("DELETE FROM daily_energy")
-
+        # The temp DB is empty; the patched _get_db serves it to the API
         result = self.app.get("/api/metrics/monthly-cost")
         self.assertEqual(result.status_code, 200)
 
@@ -831,21 +824,15 @@ class TestApiMonthlyCost(unittest.TestCase):
 
     def test_api_monthly_cost_date_format(self):
         """Test that API returns dates in correct format."""
-        from config import find_config, load_config
-        config_path = find_config()
-        config = load_config(config_path)
-        db_path = getattr(config, "database_path", "llama_monitor.db")
-
-        # Insert test data
-        test_date = "2026-06-01"
-        with Database(db_path) as db:
-            db.execute(
-                """
-                INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (test_date, 100.0, 75.0, 25.0, datetime.now().isoformat()),
-            )
+        # Use a date within the 30-day window that get_monthly_energy returns
+        test_date = datetime.now().strftime("%Y-%m-%d")
+        self.db.execute(
+            """
+            INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (test_date, 100.0, 75.0, 25.0, datetime.now().isoformat()),
+        )
 
         result = self.app.get("/api/metrics/monthly-cost")
         data = result.get_json()

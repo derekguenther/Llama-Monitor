@@ -160,7 +160,7 @@ test_database.py:    def test_get_monthly_energy_partial_data(self):  # Test get
 test_database.py:    def test_get_monthly_energy_data_values(self):  # Test that get_monthly_energy returns correct data values.
 test_database.py:class TestApiMonthlyCost(unittest.TestCase):  # Tests for the /api/metrics/monthly-cost endpoint.
 test_database.py:    def setUp(self):  # Create a temporary database for testing.
-test_database.py:    def tearDown(self):  # Clean up temporary database.
+test_database.py:    def tearDown(self):  # Clean up temporary database and restore patches.
 test_database.py:    def test_api_monthly_cost_with_data(self):  # Test API returns correct cost data when database has energy data.
 test_database.py:    def test_api_monthly_cost_empty_database(self):  # Test API returns empty data when database has no energy data.
 test_database.py:    def test_api_monthly_cost_date_format(self):  # Test that API returns dates in correct format.
@@ -170,8 +170,27 @@ test_database.py:    def test_date_formatting_logic(self):  # Test the date form
 test_database.py:        def format_date_js(date_str):  # Format date as MM/dd/yyyy following JavaScript logic.
 test_database.py:    def test_date_padding_logic(self):  # Test that day/month padding works correctly.
 test_database.py:        def format_date_with_padding(date_str):  # Format date with proper padding like JavaScript.
+test_db_purge.py:def _system_metrics(ts, cpu_percent=50.0, cpu_power_w=65.0, gpu_power_w=220.0,
+test_db_purge.py:def _server_metrics(ts):
+test_db_purge.py:class TestCompressionPurge(unittest.TestCase):  # Verify compression purges source rows so the DB does not grow unbounded.
+test_db_purge.py:    def setUp(self):
+test_db_purge.py:    def tearDown(self):
+test_db_purge.py:    def _insert_system_raw(self, count=3, start_offset_s=120):  # Insert `count` raw system metrics across ~2 minutes ago.
+test_db_purge.py:    def _insert_server_raw(self, count=3, start_offset_s=120):
+test_db_purge.py:    def test_compress_to_1m_purges_raw_rows(self):  # After folding into 1m buckets, the source raw rows are deleted.
+test_db_purge.py:    def test_compress_to_1h_purges_1m_rows(self):  # After folding 1m into 1h buckets, the source 1m rows are deleted.
+test_db_purge.py:    def test_repeated_compression_does_not_reaccumulate(self):  # Running compress_to_1m twice should not purge un-aggregated data or fail.
+test_db_purge.py:    def test_compress_if_needed_vacuum_throttled(self):  # compress_if_needed runs a throttled VACUUM (max hourly) after purging.
+test_db_purge.py:    def test_vacuum_reclaims_space(self):  # After purging raw rows, VACUUM should reclaim disk space.
 test_dollar_sign.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_dollar_sign.py:def test_dollar_sign_placement():  # Verify dollar sign is on Monthly Cost chart, not Tokens/s chart.
+test_filtered_power.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
+test_filtered_power.py:def _read_template():
+test_filtered_power.py:def test_cpu_normalizes_per_core_scale():  # llama's per-process CPU must be normalized by core count.
+test_filtered_power.py:def test_cpu_fraction_clamped_to_1():  # The llama CPU fraction must be clamped to [0,1] to avoid over-attribution.
+test_filtered_power.py:def test_gpu_fraction_clamped_to_1():  # The GPU fraction must be clamped to [0,1].
+test_filtered_power.py:def test_gpu_requires_process_data():  # Filtered GPU power must gate on per-process GPU data (NVML).
+test_filtered_power.py:def test_charts_section_normalizes_cpu():  # updateCharts must apply the same per-core normalization.
 test_full_pipeline.py:class TestFullPipeline(unittest.TestCase):  # Test the full data pipeline end-to-end.
 test_full_pipeline.py:    def setUp(self):
 test_full_pipeline.py:    def tearDown(self):
@@ -260,6 +279,8 @@ test_server_metrics.py:    def test_parse_slots_dict_single(self):  # Test parsi
 test_server_metrics.py:    def test_parse_slots_empty_list(self):  # Test parsing empty slot list.
 test_server_metrics.py:    def test_parse_slots_none(self):  # Test parsing None slots.
 test_server_metrics.py:    def test_parse_slots_missing_fields(self):  # Test parsing slots with missing fields.
+test_server_metrics.py:    def test_parse_slots_is_processing_derives_state_and_progress(self):  # Slots with is_processing=true should get state=processing and progress.
+test_server_metrics.py:    def test_parse_slots_explicit_state_priority(self):  # An explicit state field should take priority over is_processing.
 test_server_metrics.py:class TestFormatMetricsDisplay(unittest.TestCase):  # Tests for format_metrics_display function.
 test_server_metrics.py:    def test_format_metrics_display_full(self):  # Test formatting metrics with all data.
 test_server_metrics.py:    def test_format_metrics_display_empty(self):  # Test formatting empty metrics.
@@ -324,6 +345,11 @@ test_system_metrics.py:    def test_collect_system_power_battery(self, mock_wmi)
 test_system_metrics.py:    def test_collect_system_power_no_battery(self, mock_wmi):  # Test system power collection without battery data.
 test_system_metrics.py:class TestCollect(unittest.TestCase):  # Tests for main collect method.
 test_system_metrics.py:    def test_collect_full(self, mock_system_power, mock_process_gpu, mock_memory, mock_gpu, mock_cpu):  # Test full metrics collection.
+test_tokens_gauge_source.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
+test_tokens_gauge_source.py:def _read_template():
+test_tokens_gauge_source.py:def test_uses_authoritative_gauges_not_instant():  # The graph should use predicted/prompt_tokens_seconds, not _instant delta rates.
+test_tokens_gauge_source.py:def test_gates_on_activity_for_idle_decay():  # Rates should be gated on requests_processing so idle decays to 0.
+test_tokens_gauge_source.py:def test_still_appends_data_for_smooth_decay():  # The graph must still always append data so idle decays smoothly to 0.
 test_tokens_idle_reset.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_tokens_idle_reset.py:def test_tokens_graph_no_reset_on_idle():  # Verify Tokens/Sec graph does NOT reset to [0] on idle — appends zeros instead.
 test_total_cost_label.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
