@@ -125,8 +125,9 @@ class TUI:
             curses.init_pair(4, curses.COLOR_YELLOW, -1)    # Warning
             curses.init_pair(5, curses.COLOR_WHITE, -1)     # Normal text
             curses.init_pair(6, curses.COLOR_BLUE, -1)      # Secondary info
-            curses.init_pair(7, curses.COLOR_MAGENTA, -1)   # Cost/Power
+            curses.init_pair(7, curses.COLOR_MAGENTA, -1)   # Cost/GPU
             curses.init_pair(8, curses.COLOR_BLACK, curses.COLOR_WHITE)  # Inverted
+            curses.init_pair(9, curses.COLOR_CYAN, -1)      # Power chart
 
             self.colors = {
                 "header": curses.color_pair(1) | curses.A_BOLD,
@@ -137,6 +138,7 @@ class TUI:
                 "secondary": curses.color_pair(6),
                 "cost": curses.color_pair(7) | curses.A_BOLD,
                 "inverted": curses.color_pair(8),
+                "power": curses.color_pair(9),
             }
         else:
             self.colors = {
@@ -148,6 +150,7 @@ class TUI:
                 "secondary": curses.A_NORMAL,
                 "cost": curses.A_BOLD,
                 "inverted": curses.A_REVERSE,
+                "power": curses.A_NORMAL,
             }
 
     def _draw_header(self, stdscr) -> None:
@@ -460,7 +463,7 @@ class TUI:
         max_cpu = max(cpu_values) if cpu_values else 100
         max_power = max(power_values) if power_values else 100
 
-        # Draw GPU chart
+        # Draw GPU chart (rows row+1 .. row+chart_height)
         stdscr.addstr(row, 2, "GPU:", self.colors.get("cost"))
         for i in range(chart_height):
             row_idx = chart_height - 1 - i
@@ -469,27 +472,29 @@ class TUI:
                 bar_width = int(chart_width * value / max(max_gpu, 1))
                 stdscr.addstr(row + 1 + i, 7, "=" * bar_width, self.colors.get("cost"))
 
-        # Draw CPU chart
-        stdscr.addstr(row + 5, 2, "CPU:", self.colors.get("good"))
+        # Draw CPU chart below GPU (3 bars), no overlap with GPU region
+        cpu_label_row = row + chart_height + 1
+        stdscr.addstr(cpu_label_row, 2, "CPU:", self.colors.get("good"))
         for i in range(3):
-            row_idx = chart_height - 1 - i
+            row_idx = 3 - 1 - i
             if row_idx < len(cpu_values):
                 value = cpu_values[row_idx]
                 bar_width = int(chart_width * value / max(max_cpu, 1))
-                stdscr.addstr(row + 6 + i, 7, "=" * bar_width, self.colors.get("good"))
+                stdscr.addstr(cpu_label_row + 1 + i, 7, "=" * bar_width, self.colors.get("good"))
 
-        # Draw Power chart
-        stdscr.addstr(row + 9, 2, "Power:", self.colors.get("cost"))
+        # Draw Power chart below CPU, distinct color
+        power_label_row = cpu_label_row + 4
+        stdscr.addstr(power_label_row, 2, "Power:", self.colors.get("power"))
         for i in range(3):
-            row_idx = chart_height - 1 - i
+            row_idx = 3 - 1 - i
             if row_idx < len(power_values):
                 value = power_values[row_idx]
                 bar_width = int(chart_width * value / max(max_power, 1))
-                stdscr.addstr(row + 10 + i, 7, "=" * bar_width, self.colors.get("cost"))
+                stdscr.addstr(power_label_row + 1 + i, 7, "=" * bar_width, self.colors.get("power"))
 
         # Legend
-        row += chart_height + 1
-        stdscr.addstr(row, 2, "Legend: GPU = magenta, CPU = green, Power = magenta", curses.A_DIM)
+        row = power_label_row + 5
+        stdscr.addstr(row, 2, "Legend: GPU = magenta, CPU = green, Power = cyan", curses.A_DIM)
 
         return row + 2
 
