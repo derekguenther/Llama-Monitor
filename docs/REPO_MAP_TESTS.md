@@ -372,6 +372,16 @@ test_tokens_idle_reset.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.a
 test_tokens_idle_reset.py:def test_tokens_graph_no_reset_on_idle():  # Verify Tokens/Sec graph does NOT reset to [0] on idle — appends zeros instead.
 test_total_cost_label.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_total_cost_label.py:def test_total_cost_label():  # Verify Total Cost label is present above the monthly total.
+test_tui_chart_colors.py:TUI_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tui.py")
+test_tui_chart_colors.py:def read_tui():
+test_tui_chart_colors.py:class HistoryChartColorTest(unittest.TestCase):
+test_tui_chart_colors.py:    def setUp(self):
+test_tui_chart_colors.py:    def test_power_color_is_distinct_from_gpu(self):
+test_tui_chart_colors.py:    def test_gpu_and_power_use_different_color_keys(self):
+test_tui_chart_colors.py:    def test_power_color_pair_defined(self):
+test_tui_chart_colors.py:    def test_legend_reflects_actual_colors(self):
+test_tui_chart_colors.py:    def test_cpu_and_power_no_overlap_with_gpu(self):
+test_tui_chart_colors.py:    def test_legend_does_not_claim_wrong_colors(self):
 test_verbose_gating.py:SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "llamamonitor.py")
 test_verbose_gating.py:def test_debug_gated_by_verbose():
 test_web_server_settings.py:class TestSettingsEndpoints(unittest.TestCase):  # Tests for settings API endpoints.
