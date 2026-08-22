@@ -252,6 +252,16 @@ test_redundant_subtitles.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path
 test_redundant_subtitles.py:def test_no_redundant_subtitles():  # Verify redundant graph subtitles are removed.
 test_repo_map_exclude.py:FINISH_BEAD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "finish-bead")
 test_repo_map_exclude.py:def test_debugtools_excluded():  # Verify 'DebugTools' appears in the finish-bead EXCLUDE_DIRS set.
+test_sanitizer_scrub.py:class MediaMarkerScrubberTest(unittest.TestCase):
+test_sanitizer_scrub.py:    def test_regex_matches_media_marker(self):
+test_sanitizer_scrub.py:    def test_regex_ignores_unrelated_text(self):
+test_sanitizer_scrub.py:    def test_scrub_payload_removes_markers(self):
+test_sanitizer_scrub.py:    def test_scrub_payload_multiple_markers(self):
+test_sanitizer_scrub.py:    def test_scrub_payload_no_marker_unchanged(self):
+test_sanitizer_scrub.py:    def test_scrub_payload_non_utf8(self):
+test_sanitizer_scrub.py:    def test_get_scrubs_props_response(self):  # do_GET for /props must scrub the response body.
+test_sanitizer_scrub.py:    def test_post_body_scrubbed(self):  # POST body scrubbing should be applied (media marker removed).
+test_sanitizer_scrub.py:    def test_logging_uses_decoded_body_str(self):  # Logging path must use body_str (already-decoded, scrubbed), not re-decode.
 test_server_metrics.py:class TestServerMetricsCollector(unittest.TestCase):  # Tests for ServerMetricsCollector.
 test_server_metrics.py:    def setUp(self):  # Create a collector for testing.
 test_server_metrics.py:    def test_init_strips_trailing_slash(self):  # Test that init strips trailing slash from URL.
@@ -375,61 +385,3 @@ test_web_server_settings.py:    def test_api_set_cost_rate_validates_negative(se
 test_web_server_settings.py:    def test_api_set_cost_rate_validates_missing(self):  # Test POST /api/settings/cost_rate rejects missing cost_rate.
 test_web_server_settings.py:    def test_api_set_cost_rate_validates_invalid(self):  # Test POST /api/settings/cost_rate rejects invalid values.
 test_web_server_settings.py:    def test_api_reset_settings_clears_all(self):  # Test POST /api/settings/reset clears all settings.
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:TOOL_DIR = Path(__file__).resolve().parent
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_wallclock_stamp_has_both_fields():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_iso_from_epoch_us_known_epoch():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:MULTILINE_BAT = """\
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:SINGLELINE_BAT = """\
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_detect_bat_style_multiline():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_detect_bat_style_singleline():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_detect_bat_style_unknown():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_inject_extra_args_multiline():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_inject_extra_args_singleline():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_inject_extra_args_unknown_unchanged():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_inject_preserves_direct_run_semantics():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_derived_capture_flags(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_quote_flags_quotes_every_token():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_relative_timestamp_us():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_relative_timestamp_us_none():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_session_dir_name_format():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_create_session_dir_and_counter(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_stamp_and_append(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_load_config_merges_defaults(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_port_in_use_false_for_unbound():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_preflight_when_port_free(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_preflight_port_in_use_aborts(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def _stamp_line(line):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_console_slot_gen_rate():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_console_server_listening():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_console_prompt_process():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_console_returns_none_for_unmatched():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_prometheus_text_keeps_labels():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_typeperf_csv_skips_headers(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_typeperf_csv_missing_file(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_prompts(tmp_path, anchor_factory):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_build_event_stream_and_report(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_write_outputs(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_resolve_llama_pid_non_windows_uses_spawned_pid(monkeypatch):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_ctrl_handler_handles_close_break_and_ctrl_c(monkeypatch):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:    class FakeWINFUNCTYPE:
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:        def __init__(self, *a, **k):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:        def __call__(self, fn):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:    def fake_set_console_ctrl_handler(callback, add):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_persist_anchor_writes_anchor_json(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_persist_anchor_noop_without_anchor(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_load_anchor_recovers_from_console_when_no_manifest(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_load_anchor_prefers_manifest_when_present(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_load_anchor_recovers_from_anchor_json(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_load_anchor_empty_when_nothing_available(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_anchor_self_checks_file_creation_skew_flags(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_anchor_self_checks_file_creation_ok(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_anchor_self_checks_prompt_clock_misalignment():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_anchor_self_checks_prompt_clock_aligned_no_flag():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_anchor_self_checks_prompt_clock_uses_session_dir_fallback(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_anchor_self_checks_activity_window_disjoint():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_write_anchor_uncertain_writes_manifest(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_slots_task_id_uses_id_task(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def test_parse_slots_maps_is_processing_to_state(tmp_path):
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def _write_minimal_session(session_dir: Path):  # Write a tiny but valid raw session for post-processing tests.
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:def anchor_factory():
-DebugTools/llama-raw-capture-tool/test_capture_tool.py:    def make(log_epoch_us: int) -> dict:
