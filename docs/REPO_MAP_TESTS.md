@@ -250,6 +250,8 @@ test_power_width.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath
 test_power_width.py:def test_power_item_width():  # Verify power-value is nowrap and power-item has a min-width.
 test_redundant_subtitles.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_redundant_subtitles.py:def test_no_redundant_subtitles():  # Verify redundant graph subtitles are removed.
+test_repo_map_exclude.py:FINISH_BEAD_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "finish-bead")
+test_repo_map_exclude.py:def test_debugtools_excluded():  # Verify 'DebugTools' appears in the finish-bead EXCLUDE_DIRS set.
 test_server_metrics.py:class TestServerMetricsCollector(unittest.TestCase):  # Tests for ServerMetricsCollector.
 test_server_metrics.py:    def setUp(self):  # Create a collector for testing.
 test_server_metrics.py:    def test_init_strips_trailing_slash(self):  # Test that init strips trailing slash from URL.
