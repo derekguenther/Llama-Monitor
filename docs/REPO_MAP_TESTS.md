@@ -245,7 +245,7 @@ test_power_graph_autoscale.py:    def test_auto_scale_with_empty_data(self):  # 
 test_power_graph_autoscale.py:    def test_auto_scale_with_single_value(self):  # Test auto-scale behavior with single power value.
 test_power_graph_autoscale.py:    def test_auto_scale_with_varied_values(self):  # Test auto-scale behavior with varied power values.
 test_power_width.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
-test_power_width.py:def test_power_item_width():  # Verify power-item has width constraints for consistent sizing.
+test_power_width.py:def test_power_item_width():  # Verify power-value is nowrap and power-item has a min-width.
 test_redundant_subtitles.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_redundant_subtitles.py:def test_no_redundant_subtitles():  # Verify redundant graph subtitles are removed.
 test_server_metrics.py:class TestServerMetricsCollector(unittest.TestCase):  # Tests for ServerMetricsCollector.
