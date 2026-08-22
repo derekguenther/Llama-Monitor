@@ -203,7 +203,7 @@ test_imports.py:def test_imports():  # Test all module imports.
 test_k_format.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_k_format.py:def test_k_format_on_context_chart():  # Verify k-unit formatting is applied to Context Used chart.
 test_llama-monitor.py:TEST_FILES = [
-test_llama-monitor.py:LLAMA_MONITOR_DIR = "C:/Users/ClaudeCode/Documents/llama-monitor"
+test_llama-monitor.py:LLAMA_MONITOR_DIR = os.path.dirname(os.path.abspath(__file__))
 test_llama-monitor.py:def run_tests():  # Run all test files and summarize results.
 test_overflow.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_overflow.py:def test_overflow_prevention():  # Verify grid items have min-width:0 and overflow prevention.
