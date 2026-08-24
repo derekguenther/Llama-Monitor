@@ -196,7 +196,7 @@ class TestWebServerSlotsUpdate(unittest.TestCase):
     """Tests for web server slots display update."""
 
     def test_html_has_active_slots_element(self):
-        """Test that the HTML contains the server-active-slots element."""
+        """Test that the HTML contains the active-slots element."""
         from web_server import app
 
         # Get the index route content
@@ -205,7 +205,7 @@ class TestWebServerSlotsUpdate(unittest.TestCase):
             html = response.get_data(as_text=True)
 
         # Check for the element
-        self.assertIn('id="server-active-slots"', html)
+        self.assertIn('id="active-slots"', html)
 
     def test_javascript_updates_active_slots(self):
         """Test that JavaScript code updates the active slots element."""
@@ -215,10 +215,9 @@ class TestWebServerSlotsUpdate(unittest.TestCase):
             response = client.get("/")
             html = response.get_data(as_text=True)
 
-        # Check that the JavaScript updates server-active-slots
-        # The fix should include code like:
-        # document.getElementById('server-active-slots').textContent = ...
-        self.assertIn("server-active-slots", html)
+        # Check that the JavaScript updates active-slots
+        # The template uses document.getElementById('active-slots').textContent
+        self.assertIn("active-slots", html)
 
     def test_javascript_has_slots_filter_logic(self):
         """Test that JavaScript has the slots filtering logic."""
@@ -252,7 +251,7 @@ class TestRequestsProcessingDisplay(unittest.TestCase):
     """Tests for Requests Processing display functionality."""
 
     def test_html_has_server_processing_element(self):
-        """Test that the HTML contains the server-processing element."""
+        """Test that the HTML contains the processing-requests element."""
         from web_server import app
 
         with app.test_client() as client:
@@ -260,18 +259,17 @@ class TestRequestsProcessingDisplay(unittest.TestCase):
             html = response.get_data(as_text=True)
 
         # Check for the element
-        self.assertIn('id="server-processing"', html)
+        self.assertIn('id="processing-requests"', html)
 
     def test_javascript_updates_server_processing(self):
-        """Test that JavaScript code updates the server-processing element."""
+        """Test that JavaScript code updates the processing-requests element."""
         from web_server import app
 
         with app.test_client() as client:
             response = client.get("/")
             html = response.get_data(as_text=True)
 
-        # Check that the JavaScript updates server-processing
-        # The fix should include code like:
-        # document.getElementById('server-processing').textContent = ...
-        self.assertIn("server-processing", html)
+        # Check that the JavaScript updates processing-requests
+        # The template uses document.getElementById('processing-requests').textContent
+        self.assertIn("processing-requests", html)
         self.assertIn("requests_processing", html)
