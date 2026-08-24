@@ -98,13 +98,10 @@ class TestConfigSetMethod(unittest.TestCase):
 
 
 class TestConfigIntegration(unittest.TestCase):
-    """Integration tests for config with aggregator_daemon."""
+    """Integration tests for config set/get."""
 
-    def test_aggregator_config_attributes(self):
-        """Test that Aggregator can access all required config attributes."""
-        from aggregator_daemon import Aggregator
-
-        # This should not raise AttributeError
+    def test_config_attribute_access(self):
+        """Test that Config can set and retrieve all required attributes."""
         config = Config()
         config.set("database.path", "test.db")
         config.set("server.url", "http://localhost:8080")

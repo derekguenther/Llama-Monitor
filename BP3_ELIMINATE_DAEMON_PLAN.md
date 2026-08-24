@@ -235,19 +235,21 @@ This is **NOT** a simple import change — each file needs distinct handling:
 
 - **`test_active_slots_fix.py`**:
   - **B4:** L169 calls `Aggregator._extract_server_metrics(...)`, a **daemon-only** method
-    absent from aggregator.py. aggregator.py does inline extraction. Options:
-    (a) backport a `_extract_server_metrics` static method to aggregator.py and call it, OR
-    (b) rewrite the test to call the inline extraction path (e.g. `collect_all_metrics` with a
-    mocked server collector) and assert `slots`/`state` in the result.
-  - Verify what the test actually asserts (slots extraction) and pick the option that keeps
-    coverage without the daemon.
+    absent from aggregator.py. aggregator.py does inline extraction. **DECISION: Option (b)** —
+    rewrite the test to mock `server_collector`, call `collect_all_metrics()`, and assert
+    `result["server"]["slots"]` has 2 items with state "processing" (consistent with
+    test_slot_charts.py). Rationale: aggregator.py's `{**server_data, ...}` spread is MORE
+    maintainable than the daemon's field-by-field extraction (auto-carries new fields incl.
+    `_instant`); no real functional difference for slots/props (`server.slots || []` frontend).
+    No refactor of `collect_all_metrics` needed — no new bead.
 
 - **`test_config.py`**:
   - **G5:** L103 docstring claims "Aggregator can access all required config attributes" but
     the body only tests `Config` and never instantiates `Aggregator`. aggregator.py is NOT
     config-driven, so "verify config-integration against the new signature" is meaningless.
-  - Change the import to `from aggregator import Aggregator` (if referenced) and fix the
-    docstring to reflect what the test actually does (tests `Config` only).
+  - **DECISION: delete the dead import** (L105 `from aggregator_daemon import Aggregator` —
+    unused in the body) and fix the docstring to reflect that the test only exercises `Config`
+    set/get. Do NOT repoint to aggregator.py (would leave an equally dead import).
 
 ### Step 8 — Delete aggregator_daemon.py
 - Remove the file (after all consumers are repointed).
