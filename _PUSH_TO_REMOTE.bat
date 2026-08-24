@@ -21,7 +21,7 @@ pause
 echo.
 echo Pushing to remote...
 git push origin main
-start /b bd dolt push
+start /b /wait bd dolt push
 
 echo.
 echo Operation complete! 
