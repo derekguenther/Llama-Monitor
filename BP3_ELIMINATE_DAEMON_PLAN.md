@@ -90,9 +90,16 @@ hybrid attribution model.
   evaluates `(0+0) < 5` → true, writing a FALSE 0W idle baseline. To wire idle tracking
   safely, gate on **meaningful values**:
   ```python
+  # Placement: just before `return` at aggregator.py L166.
+  # cpu_percent is a LOCAL (L99/113); gpu_usage & system_power_w are keys in system_data.
+  gpu_usage = system_data["gpu_usage"]           # L121
+  system_power_w = system_data["system_power_w"] # L131
   if system_power_w > 0 and cpu_percent > 0 and gpu_usage > 0:
       self.idle_tracker.check_idle(cpu_percent, gpu_usage, system_power_w)
   ```
+  - **Finding 4:** in `aggregator.py.collect_all_metrics`, only `cpu_percent` is a bare local;
+    `gpu_usage`/`system_power_w` live INSIDE the `system_data` dict (L121, L131). Read them
+    from `system_data` and insert BEFORE the `return` (L166), not after the metric collection.
   - This requires the `-1` sentinel question (Step 5) to be resolved FIRST. If we adopt the
     `-1` sentinel in the shared class, the guard becomes `>= 0`. If we keep `0.0`, the guard
     must be `> 0` (as above). **Decision documented in Step 5; Step 1 depends on it.**
@@ -151,8 +158,10 @@ hybrid attribution model.
   `session_start` column is TEXT. Confirm the exact parameter names match `db.py`'s signature.
 
 ### Step 4 — Backport session cost fields (D4) into calculate_cost
-- Ensure `calculate_cost()` returns `session_cost_usd` and `cost_rate` (check current output).
-- Add missing fields if the daemon's version has them and aggregator.py's doesn't.
+- **Verify only (likely a no-op):** aggregator.py's `calculate_cost` (L338–365) already returns
+  `session_cost_usd` transitively via `get_session_stats()` plus `cost_rate` (L356). Confirm
+  no daemon-only cost fields are missing; if all present, record as verified and move on.
+- Add missing fields only if the daemon's version has them and aggregator.py's doesn't.
 
 ### Step 5 — Reconcile `safe_float` default (C3) — **HARD PREREQUISITE for Step 1**
 - **Decision needed:** aggregator.py uses `0.0` (L55); daemon uses `-1.0` sentinel. The
@@ -181,6 +190,19 @@ design (L70–75) that fixes the DB-corruption bug.
   metrics_cache → DB fallback.
 - Remove/disable `get_aggregator()`, the `AGGREGATOR_AVAILABLE` try/except (L40–44), and the
   now-dead `fetch_metrics_from_aggregator()` (G3, L100–117).
+- **Finding 1 (NEW — CRITICAL): rework `api_status()` (L602–615)** — it is a THIRD consumer
+  of `AGGREGATOR_AVAILABLE` (L605) and `get_aggregator()` (L606). Removing those definitions
+  without touching `api_status` → `NameError` → 500 on `/api/status`, which the settings page
+  polls (`web_server.py:1076`). Rework it to report standalone unconditionally:
+  ```python
+  @app.route("/api/status")
+  def api_status():
+      """Return aggregator status (standalone; no separate daemon)."""
+      return jsonify({"status": "standalone", "aggregator_available": False})
+  ```
+- **Finding 5: commit to S1.** Do NOT keep S2 as an open alternative. Step 1a's `last_metrics`
+  is then dead in web_server.py (harmless — keep it for the aggregator's own consumers/tests),
+  and DoD must reflect the S1-only decision.
 
 **S2 (if a fallback is truly needed):** instead of `Aggregator()`, read from the shared DB
 connection using `fetch_metrics_from_database()` (already used as the final fallback), and
@@ -200,6 +222,16 @@ This is **NOT** a simple import change — each file needs distinct handling:
     `aggregator.SystemMetricsCollector`, `aggregator.ElectricityCostCalculator`,
     `aggregator.Database`). Otherwise the mocks won't intercept and `Aggregator()` constructs
     REAL collectors + `Database("llama-monitor.db")`, writing to production during tests.
+  - **Finding 2 (NEW — HIGH): the return shape differs.** `test_full_metrics_flow_with_slots`
+    asserts `assertIn("cost", result)` (L310). aggregator.py's `collect_all_metrics` returns
+    `{timestamp, server, system, process_gpu, system_raw}` — **NO `"cost"` key** (daemon-only).
+    This test will fail post-migration. Rewrite the assertion to aggregator.py's shape: drop
+    the `assertIn("cost", result)` line, OR assert cost via `store_raw_metrics`/`cost_data`.
+  - **Finding 3 (NEW — MEDIUM): patch `IdleBaselineTracker` too.** After Step 1 wires
+    `self.idle_tracker` into aggregator.py's `__init__`, the tests construct real `Aggregator()`
+    (L153, L194, L299), which instantiates a real `IdleBaselineTracker` → calls `get_config()`
+    → reads `config.yaml`. Safe but unexamined coupling. Add
+    `@patch("aggregator.IdleBaselineTracker")` to each test for isolation.
 
 - **`test_active_slots_fix.py`**:
   - **B4:** L169 calls `Aggregator._extract_server_metrics(...)`, a **daemon-only** method
@@ -249,7 +281,11 @@ This is **NOT** a simple import change — each file needs distinct handling:
 - Add a test asserting real-duration is used (D2) AND that the `cost_data["duration_seconds"]`
   matches the real elapsed time, not the hardcoded 1.0 (S4).
 - Add a test asserting `last_metrics` is set on aggregator.py's `collect_all_metrics` (B1).
-- After Step 7, run each migrated test file and confirm it passes with mocks intercepting.
+- After Step 7, run each migrated test file and confirm it passes with mocks intercepting
+  (including `test_full_metrics_flow_with_slots` after the `"cost"` assertion is fixed, and
+  `IdleBaselineTracker` patched).
+- Add a test asserting `/api/status` returns `{"status": "standalone", "aggregator_available":
+  False}` and does NOT 500 after Step 6 S1 (Finding 1).
 - After Step 8, confirm zero references to `aggregator_daemon` remain in code (except git
   history): `grep -rn "aggregator_daemon" --include="*.py"`.
 
@@ -266,8 +302,9 @@ This is **NOT** a simple import change — each file needs distinct handling:
 - `aggregator_daemon.py` deleted.
 - All backports in `aggregator.py` (idle wiring, real-duration + duration literals, cumulative
   energy with ISO session_start, `last_metrics`), all tests passing.
-- `web_server.py` aggregator coupling removed or safely repointed (NO per-request `Aggregator()`);
-  `fetch_metrics_from_aggregator()` dead code removed (G3).
+- `web_server.py` aggregator coupling removed per **S1**: `get_aggregator()`,
+  `AGGREGATOR_AVAILABLE`, `fetch_metrics_from_aggregator()`, the `/api/metrics/latest`
+  aggregator fallback block, AND `api_status()` reworked — NO per-request `Aggregator()`.
 - 3 test files migrated and passing (all `@patch` paths repointed, no daemon-only methods).
 - Zero references to `aggregator_daemon` in code (except git history).
 - Bead bp3 closed; follow-up beads filed for sentinel unification & idle-baseline design.
