@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the bp3 eliminate-daemon backports.
 
-Verifies the enhancements backported from aggregator_daemon.py into
+Verifies the enhancements backported from the retired daemon module into
 aggregator.py:
 - Step 1 (D1): idle-baseline tracking wired and gated on meaningful values.
 - Step 1a (B1): last_metrics populated by collect_all_metrics.
