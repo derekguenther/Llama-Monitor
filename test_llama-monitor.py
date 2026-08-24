@@ -12,6 +12,7 @@ TEST_FILES = [
     "test_system_metrics.py",
     "test_aggregator_integration.py",
     "test_imports.py",
+    "test_server_controls.py",
 ]
 
 # Directory containing this test runner. Using the file location (rather than

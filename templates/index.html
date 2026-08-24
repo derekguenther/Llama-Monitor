@@ -390,6 +390,82 @@
             color: #1a1a2e;
         }
 
+        .btn-restart {
+            background: #f59e0b;
+            color: #1a1a2e;
+        }
+
+        .btn-restart:hover {
+            background: #d97706;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+
+        .btn-danger:disabled {
+            background: #7a1a1a;
+            color: #aaa;
+            cursor: not-allowed;
+        }
+
+        /* Server Control Confirmation Modal */
+        .server-control-modal .modal-content {
+            max-width: 480px;
+            border: 2px solid #dc2626;
+        }
+
+        .server-control-modal .modal-header h2 {
+            color: #f87171;
+        }
+
+        .server-control-warning {
+            background: #3d1a1a;
+            border: 1px solid #dc2626;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            color: #fecaca;
+            font-weight: bold;
+        }
+
+        .server-control-warning .warning-icon {
+            font-size: 1.8rem;
+            color: #f87171;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .server-control-input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #2a3b5c;
+            border-radius: 5px;
+            background: #1a1a2e;
+            color: #eee;
+            font-size: 1rem;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        .server-control-input:focus {
+            border-color: #dc2626;
+            outline: none;
+        }
+
+        .server-control-hint {
+            color: #888;
+            font-size: 0.85rem;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
         /* Token Accumulator */
         .token-accumulator {
             cursor: pointer;
@@ -757,9 +833,36 @@
             <button class="btn btn-secondary" id="toggle-temps-btn" hidden><i class="fa-solid fa-temperature-arrow-up"></i> Toggle Temps</button>
             <a href="/cost-comparison" class="btn btn-secondary"><i class="fa-solid fa-dollar-sign"></i> Cost Comparison</a>
             <a href="/settings" class="btn btn-secondary"><i class="fa-solid fa-gear"></i> Configuration</a>
+            <button class="btn btn-restart" id="restart-server-btn"><i class="fa-solid fa-rotate"></i> Restart Server</button>
+            <button class="btn btn-danger" id="stop-server-btn"><i class="fa-solid fa-power-off"></i> Stop Server</button>
             <span style="align-self: center; color: #888; font-size: 0.9rem;">
                 Last updated: <span id="last-updated">Never</span>
             </span>
+        </div>
+    </div>
+
+    <!-- Server Control Confirmation Modal -->
+    <div class="modal-overlay server-control-modal" id="server-control-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="server-control-title">Confirm Action</h2>
+                <button class="close-modal" id="close-server-control-modal">&times;</button>
+            </div>
+            <div class="server-control-warning" id="server-control-warning">
+                <i class="fa-solid fa-triangle-exclamation warning-icon"></i>
+                <span id="server-control-warning-text"></span>
+            </div>
+            <p class="server-control-hint">Type <strong id="server-control-confirm-word">CONFIRM</strong> in the box below to enable the button:</p>
+            <input type="text" class="server-control-input" id="server-control-confirm-input"
+                   autocomplete="off" autocorrect="off" spellcheck="false"
+                   placeholder="Type confirmation word">
+            <div class="modal-footer" style="justify-content: space-between; margin-top: 15px;">
+                <button class="btn btn-secondary" id="cancel-server-control-btn">Cancel</button>
+                <button class="btn btn-danger" id="confirm-server-control-btn" disabled>
+                    <i class="fa-solid fa-power-off" id="confirm-server-control-icon"></i>
+                    <span id="confirm-server-control-label">Confirm</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -1692,6 +1795,145 @@
             } catch (error) {
                 console.error('Error adding vendor:', error);
                 alert('Failed to add vendor. Check console for details.');
+            }
+        });
+
+        // ============================================================
+        // Server Control (Restart / Stop) with confirmation modal
+        // ============================================================
+        const restartServerBtn = document.getElementById('restart-server-btn');
+        const stopServerBtn = document.getElementById('stop-server-btn');
+        const serverControlModal = document.getElementById('server-control-modal');
+        const closeServerControlModalBtn = document.getElementById('close-server-control-modal');
+        const cancelServerControlBtn = document.getElementById('cancel-server-control-btn');
+        const serverControlConfirmBtn = document.getElementById('confirm-server-control-btn');
+        const serverControlTitle = document.getElementById('server-control-title');
+        const serverControlWarningText = document.getElementById('server-control-warning-text');
+        const serverControlConfirmInput = document.getElementById('server-control-confirm-input');
+        const serverControlConfirmWord = document.getElementById('server-control-confirm-word');
+        const confirmServerControlLabel = document.getElementById('confirm-server-control-label');
+        const confirmServerControlIcon = document.getElementById('confirm-server-control-icon');
+
+        // Current pending action: 'restart' or 'stop'
+        let pendingServerAction = null;
+
+        // The confirmation word that must be typed to enable the confirm button
+        const SERVER_ACTION_CONFIRM_WORDS = {
+            restart: 'RESTART',
+            stop: 'STOP'
+        };
+
+        const SERVER_ACTION_DETAILS = {
+            restart: {
+                title: 'Restart Server?',
+                warning: 'This will restart the Llama Monitor web server. ' +
+                    'The dashboard will be temporarily unavailable for a few seconds, ' +
+                    'then come back automatically. Your session cost data is persisted and will be preserved.',
+                confirmLabel: 'Restart'
+            },
+            stop: {
+                title: 'STOP SERVER?',
+                warning: 'WARNING: This will STOP the Llama Monitor web server. ' +
+                    'You will NOT be able to reach this dashboard afterwards, and you may need to ' +
+                    'manually start the server again to restore access. ' +
+                    'Only proceed if you are ABSOLUTELY sure you want to shut it down.',
+                confirmLabel: 'Stop Server'
+            }
+        };
+
+        function openServerControlModal(action) {
+            pendingServerAction = action;
+            const details = SERVER_ACTION_DETAILS[action];
+            serverControlTitle.textContent = details.title;
+            serverControlWarningText.textContent = details.warning;
+            serverControlConfirmWord.textContent = SERVER_ACTION_CONFIRM_WORDS[action];
+            serverControlConfirmInput.value = '';
+            serverControlConfirmBtn.disabled = true;
+            if (confirmServerControlIcon) {
+                confirmServerControlIcon.className = action === 'stop'
+                    ? 'fa-solid fa-power-off' : 'fa-solid fa-rotate';
+            }
+            confirmServerControlLabel.textContent = details.confirmLabel;
+            serverControlModal.classList.add('active');
+            serverControlConfirmInput.focus();
+        }
+
+        function closeServerControlModal() {
+            serverControlModal.classList.remove('active');
+            pendingServerAction = null;
+            serverControlConfirmInput.value = '';
+            serverControlConfirmBtn.disabled = true;
+        }
+
+        // Enable the confirm button only when the typed word matches exactly
+        serverControlConfirmInput.addEventListener('input', function() {
+            if (!pendingServerAction) return;
+            const requiredWord = SERVER_ACTION_CONFIRM_WORDS[pendingServerAction];
+            const typed = serverControlConfirmInput.value.trim().toUpperCase();
+            serverControlConfirmBtn.disabled = (typed !== requiredWord);
+        });
+
+        // Open modal for restart
+        if (restartServerBtn) {
+            restartServerBtn.addEventListener('click', function() {
+                openServerControlModal('restart');
+            });
+        }
+
+        // Open modal for stop
+        if (stopServerBtn) {
+            stopServerBtn.addEventListener('click', function() {
+                openServerControlModal('stop');
+            });
+        }
+
+        // Close modal via X, Cancel, or clicking outside
+        closeServerControlModalBtn.addEventListener('click', closeServerControlModal);
+        cancelServerControlBtn.addEventListener('click', closeServerControlModal);
+        serverControlModal.addEventListener('click', function(e) {
+            if (e.target === serverControlModal) {
+                closeServerControlModal();
+            }
+        });
+
+        // Confirm button executes the pending action
+        confirmServerControlBtn.addEventListener('click', async function() {
+            if (!pendingServerAction) return;
+            if (serverControlConfirmBtn.disabled) return;
+
+            const action = pendingServerAction;
+            const endpoint = action === 'stop' ? '/api/server/stop' : '/api/server/restart';
+            const confirmWord = SERVER_ACTION_CONFIRM_WORDS[action];
+
+            // Double-check the typed confirmation one last time before firing
+            const typed = serverControlConfirmInput.value.trim().toUpperCase();
+            if (typed !== confirmWord) {
+                serverControlConfirmBtn.disabled = true;
+                return;
+            }
+
+            confirmServerControlBtn.disabled = true;
+            confirmServerControlLabel.textContent = action === 'stop'
+                ? 'Shutting down...' : 'Restarting...';
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json().catch(() => ({}));
+                if (data.success) {
+                    closeServerControlModal();
+                    alert('Server is ' + (action === 'stop' ? 'stopping...' : 'restarting...') +
+                        '\nThe dashboard may become temporarily unavailable.');
+                } else {
+                    closeServerControlModal();
+                    alert('Error: ' + (data.error || 'Failed to ' + action + ' server'));
+                }
+            } catch (error) {
+                console.error('Error ' + action + ' server:', error);
+                closeServerControlModal();
+                alert('Failed to ' + action + ' server. It may already be stopping/restarting.');
             }
         });
 
