@@ -23,3 +23,8 @@ llama-monitor.db-wal
 # Chrome browser profile created with a literal ~ name (see ~/ contents)
 ~/
 
+# Agent crash investigation artifacts (user-owned, ignored per request)
+Agent crash investigation/
+DeepSeekv4 freakout.txt
+DeepSeekv4 freakout2.txt
+
