@@ -1,7 +1,7 @@
 ---
 description: Code reviewer that verifies implementation against approved technical specs and git diffs.
 mode: subagent
-model: local-llama/deepseek-v4
+model: llamacpp/deepseek-v4
 permissions:
   - action: edit
     resource: "*"

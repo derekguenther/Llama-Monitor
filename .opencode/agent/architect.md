@@ -1,7 +1,7 @@
 ---
 description: High-level system architect for drafting technical specifications and design docs.
 mode: primary
-model: local-llama/deepseek-v4
+model: llamacpp/deepseek-v4
 permissions:
   - action: edit
     resource: "docs/specs/*"

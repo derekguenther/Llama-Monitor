@@ -1,7 +1,7 @@
 ---
 description: Read-only auditor that reviews draft specs for architectural gaps, ambiguity, and edge cases.
 mode: subagent
-model: local-llama/deepseek-v4
+model: llamacpp/deepseek-v4
 permissions:
   - action: edit
     resource: "*"
