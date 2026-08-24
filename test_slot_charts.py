@@ -6,7 +6,7 @@ import json
 from unittest.mock import Mock, patch, MagicMock
 
 from server_metrics import ServerMetricsCollector
-from aggregator_daemon import Aggregator
+from aggregator import Aggregator
 
 
 class TestSlotChartsData(unittest.TestCase):
@@ -116,8 +116,9 @@ class TestSlotChartsData(unittest.TestCase):
 class TestAggregatorSlotData(unittest.TestCase):
     """Tests for aggregator slot data extraction."""
 
-    @patch("aggregator_daemon.ServerMetricsCollector")
-    def test_aggregator_includes_slots_in_server_metrics(self, mock_collector):
+    @patch("aggregator.ServerMetricsCollector")
+    @patch("aggregator.IdleBaselineTracker")
+    def test_aggregator_includes_slots_in_server_metrics(self, mock_idle, mock_collector):
         """Test that aggregator includes slots data in server metrics."""
         # Setup mock collector
         mock_instance = Mock()
@@ -137,9 +138,9 @@ class TestAggregatorSlotData(unittest.TestCase):
         mock_collector.return_value = mock_instance
 
         # Mock other dependencies
-        with patch("aggregator_daemon.SystemMetricsCollector") as mock_system:
-            with patch("aggregator_daemon.ElectricityCostCalculator"):
-                with patch("aggregator_daemon.Database"):
+        with patch("aggregator.SystemMetricsCollector") as mock_system:
+            with patch("aggregator.ElectricityCostCalculator"):
+                with patch("aggregator.Database"):
                     # Setup system metrics mock
                     mock_system_instance = Mock()
                     mock_system_instance.collect.return_value = {
@@ -165,8 +166,9 @@ class TestAggregatorSlotData(unittest.TestCase):
                     self.assertIn("props", result["server"])
                     self.assertEqual(result["server"]["props"]["n_ctx"], 4096)
 
-    @patch("aggregator_daemon.ServerMetricsCollector")
-    def test_aggregator_empty_slots(self, mock_collector):
+    @patch("aggregator.ServerMetricsCollector")
+    @patch("aggregator.IdleBaselineTracker")
+    def test_aggregator_empty_slots(self, mock_idle, mock_collector):
         """Test aggregator handles empty slots gracefully."""
         mock_instance = Mock()
         mock_instance.collect.return_value = {
@@ -178,9 +180,9 @@ class TestAggregatorSlotData(unittest.TestCase):
         }
         mock_collector.return_value = mock_instance
 
-        with patch("aggregator_daemon.SystemMetricsCollector") as mock_system:
-            with patch("aggregator_daemon.ElectricityCostCalculator"):
-                with patch("aggregator_daemon.Database"):
+        with patch("aggregator.SystemMetricsCollector") as mock_system:
+            with patch("aggregator.ElectricityCostCalculator"):
+                with patch("aggregator.Database"):
                     # Setup system metrics mock
                     mock_system_instance = Mock()
                     mock_system_instance.collect.return_value = {
@@ -241,11 +243,12 @@ class TestSlotChartsJavaScript(unittest.TestCase):
 class TestSlotChartsIntegration(unittest.TestCase):
     """Integration tests for slot charts with full metrics flow."""
 
-    @patch("aggregator_daemon.ServerMetricsCollector")
-    @patch("aggregator_daemon.SystemMetricsCollector")
-    @patch("aggregator_daemon.ElectricityCostCalculator")
-    @patch("aggregator_daemon.Database")
-    def test_full_metrics_flow_with_slots(self, mock_db, mock_cost_calc, mock_system, mock_server):
+    @patch("aggregator.ServerMetricsCollector")
+    @patch("aggregator.SystemMetricsCollector")
+    @patch("aggregator.ElectricityCostCalculator")
+    @patch("aggregator.IdleBaselineTracker")
+    @patch("aggregator.Database")
+    def test_full_metrics_flow_with_slots(self, mock_db, mock_idle, mock_cost_calc, mock_system, mock_server):
         """Test full metrics collection flow includes slot data."""
         # Setup server metrics collector mock
         mock_server_instance = Mock()
@@ -303,11 +306,13 @@ class TestSlotChartsIntegration(unittest.TestCase):
 
         result = aggregator.collect_all_metrics()
 
-        # Verify complete metrics structure
+        # Verify complete metrics structure.
+        # Note: aggregator.py's collect_all_metrics returns {timestamp, server,
+        # system, process_gpu, system_raw} — there is NO top-level "cost" key
+        # (that was daemon-only). Cost is computed/stored in store_raw_metrics.
         self.assertIn("timestamp", result)
         self.assertIn("server", result)
         self.assertIn("system", result)
-        self.assertIn("cost", result)
 
         # Verify server metrics include slots
         self.assertIn("slots", result["server"])
