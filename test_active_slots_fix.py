@@ -148,7 +148,10 @@ class TestSlotsDataFlow(unittest.TestCase):
 
     @patch("aggregator.ServerMetricsCollector")
     @patch("aggregator.SystemMetricsCollector")
-    def test_aggregator_slots_extraction(self, mock_system, mock_server):
+    @patch("aggregator.ElectricityCostCalculator")
+    @patch("aggregator.IdleBaselineTracker")
+    @patch("aggregator.Database")
+    def test_aggregator_slots_extraction(self, mock_db, mock_idle, mock_cost_calc, mock_system, mock_server):
         """Test that aggregator correctly extracts slots via collect_all_metrics."""
         # Simulate server_data as returned by ServerMetricsCollector.collect()
         server_data = {
