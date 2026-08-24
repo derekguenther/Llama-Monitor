@@ -36,14 +36,6 @@ try:
 except ImportError:
     DB_AVAILABLE = False
 
-# Try to import aggregator daemon for direct data access
-try:
-    from aggregator_daemon import Aggregator
-    AGGREGATOR_AVAILABLE = True
-except ImportError:
-    AGGREGATOR_AVAILABLE = False
-
-
 app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 app.config["SECRET_KEY"] = "llama-monitor-secret-key"
 
@@ -52,13 +44,6 @@ socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 
 # Global metrics_cache reference (set by start_server())
 _metrics_cache: Optional[Any] = None
-
-
-def get_aggregator() -> Optional[Aggregator]:
-    """Get aggregator instance if available."""
-    if AGGREGATOR_AVAILABLE:
-        return Aggregator()
-    return None
 
 
 def get_config() -> Any:
@@ -95,26 +80,6 @@ def _get_db(db_path: str) -> "Database":
         _db_instance.connect()
         _db_path = db_path
     return _db_instance
-
-
-def fetch_metrics_from_aggregator() -> Optional[Dict[str, Any]]:
-    """Fetch latest metrics from aggregator daemon via HTTP API.
-
-    Returns:
-        Metrics data dictionary or None if aggregator unavailable
-    """
-    import urllib.request
-    import urllib.error
-
-    config = get_config()
-    port = config.get("web.aggregator_port", 8081)
-
-    try:
-        url = f"http://localhost:{port}/api/metrics/latest"
-        with urllib.request.urlopen(url, timeout=5) as response:
-            return json.loads(response.read().decode())
-    except (urllib.error.URLError, urllib.error.HTTPError, Exception):
-        return None
 
 
 def transform_system_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -243,17 +208,6 @@ def api_latest_metrics():
                 return jsonify(_transform_metrics(cached))
         except Exception:
             pass
-
-    # Try aggregator next
-    if AGGREGATOR_AVAILABLE:
-        aggregator = get_aggregator()
-        if aggregator and aggregator.last_metrics:
-            return jsonify(_transform_metrics(aggregator.last_metrics))
-
-        # Try fetching from aggregator daemon HTTP API
-        agg_data = fetch_metrics_from_aggregator()
-        if agg_data:
-            return jsonify(_transform_metrics(agg_data))
 
     # Fallback to database (already transformed by fetch_metrics_from_database)
     config = get_config()
@@ -601,18 +555,8 @@ def api_historical_range():
 
 @app.route("/api/status")
 def api_status():
-    """Return aggregator status."""
-    if AGGREGATOR_AVAILABLE:
-        aggregator = get_aggregator()
-        return jsonify({
-            "status": "running" if aggregator else "stopped",
-            "aggregator_available": True,
-        })
-
-    return jsonify({
-        "status": "standalone",
-        "aggregator_available": False,
-    })
+    """Return aggregator status (standalone; no separate daemon)."""
+    return jsonify({"status": "standalone", "aggregator_available": False})
 
 
 @app.route("/api/server/stop", methods=["POST"])

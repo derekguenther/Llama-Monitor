@@ -3,6 +3,7 @@
 
 import logging
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 from db import Database
 from electricity_cost import ElectricityCostCalculator
+from idle_baseline import IdleBaselineTracker
 from server_metrics import ServerMetricsCollector
 from system_metrics import SystemMetricsCollector
 
@@ -39,6 +41,9 @@ class Aggregator:
         self.db_path = db_path
         self.collect_metrics = collect_metrics
 
+        # Latest collected metrics (populated by collect_all_metrics)
+        self.last_metrics: Dict[str, Any] = {}
+
         # Initialize components
         self.db = Database(db_path)
         self.db.connect()
@@ -51,6 +56,15 @@ class Aggregator:
         )
         self.system_collector = SystemMetricsCollector()
         self.cost_calculator = ElectricityCostCalculator(self.db, idle_baseline_w)
+
+        # Idle baseline tracking. config=None so IdleBaselineTracker falls back
+        # to the global get_config(); minimum_time_seconds is a sane hardcoded
+        # default (this class is not config-driven).
+        self.idle_tracker = IdleBaselineTracker(
+            self.db,
+            config=None,
+            minimum_time_seconds=5,
+        )
 
     def _safe_float(self, value, default=0.0):
         """Convert None or non-numeric values to default."""
@@ -163,13 +177,28 @@ class Aggregator:
             "props": server_metrics.get("props", {}),
         }
 
-        return {
+        result = {
             "timestamp": int(time.time()),
             "server": server_data_with_slots,
             "system": system_data,
             "process_gpu": process_gpu,
             "system_raw": system,  # Keep raw nested system data for store_raw_metrics
         }
+
+        # Idle baseline tracking. Gate on meaningful values (> 0): aggregator.py's
+        # _safe_float defaults to 0.0 (not the daemon's -1.0 sentinel), so a guard
+        # of >= 0 would always be true and write a false 0W idle baseline whenever
+        # the system is momentarily at zero. cpu_percent is a local; gpu_usage and
+        # system_power_w are keys in system_data.
+        gpu_usage = system_data["gpu_usage"]
+        system_power_w = system_data["system_power_w"]
+        if system_power_w > 0 and cpu_percent > 0 and gpu_usage > 0:
+            self.idle_tracker.check_idle(cpu_percent, gpu_usage, system_power_w)
+
+        # Cache latest metrics for web_server / api consumers
+        self.last_metrics = result
+
+        return result
 
     def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:
         """Store raw metrics in the database.
@@ -265,11 +294,20 @@ class Aggregator:
         gpu_power_w = system.get("gpu_power_w", 0)
         cpu_power_w = system.get("cpu_power_w", 0)
 
+        # Track real elapsed time since the last power reading so energy deltas
+        # are accurate even if the polling interval drifts from 1s. First call
+        # initializes _last_cost_time to now (duration ~ 0).
+        now = time.time()
+        if not hasattr(self, "_last_cost_time"):
+            self._last_cost_time = now
+        duration = now - self._last_cost_time
+        self._last_cost_time = now
+
         # Update power readings to accumulate energy totals
         energy_stats = self.cost_calculator.update_power_readings(
             gpu_power_w=max(0, gpu_power_w),
             cpu_power_w=max(0, cpu_power_w),
-            duration_seconds=1.0
+            duration_seconds=duration
         )
 
         # Build cost data from energy stats
@@ -277,8 +315,8 @@ class Aggregator:
         cost = {
             "gpu_power_w": max(0, gpu_power_w),
             "cpu_power_w": cpu_power_w or 0,
-            "duration_seconds": 1.0,
-            "duration_hours": 1.0 / 3600.0,
+            "duration_seconds": duration,
+            "duration_hours": duration / 3600.0,
             "gpu_wh": energy_stats["gpu_wh"],
             "cpu_wh": energy_stats["cpu_wh"],
             "total_wh": energy_stats["total_wh"],
@@ -304,6 +342,24 @@ class Aggregator:
                 json.dumps(system),
                 json.dumps(cost),
             )
+        )
+
+        # Persist cumulative energy (session totals) for crash recovery. Use the
+        # cost_calculator's session_start which is an ISO string; fall back to an
+        # ISO timestamp (NOT int(time.time())) so we never write an integer into
+        # the TEXT session_start column (recreating the int-vs-ISO bug).
+        session_start = (
+            self.cost_calculator.session_start
+            or datetime.now().isoformat()
+        )
+        self.db.update_cumulative_energy(
+            session_start=session_start,
+            total_wh=self.cost_calculator.total_energy_wh,
+            gpu_wh=self.cost_calculator.gpu_energy_wh,
+            cpu_wh=self.cost_calculator.cpu_energy_wh,
+            session_cost_usd=self.cost_calculator.calculate_cost(
+                self.cost_calculator.total_energy_wh
+            ),
         )
 
     def compress_if_needed(self) -> None:

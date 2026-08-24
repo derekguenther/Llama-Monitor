@@ -146,8 +146,13 @@ class TestSlotsDataFlow(unittest.TestCase):
         # Should have empty list, not None
         self.assertEqual(result["slots"], [])
 
-    def test_aggregator_daemon_slots_extraction(self):
-        """Test that aggregator daemon correctly extracts slots."""
+    @patch("aggregator.ServerMetricsCollector")
+    @patch("aggregator.SystemMetricsCollector")
+    @patch("aggregator.ElectricityCostCalculator")
+    @patch("aggregator.IdleBaselineTracker")
+    @patch("aggregator.Database")
+    def test_aggregator_slots_extraction(self, mock_db, mock_idle, mock_cost_calc, mock_system, mock_server):
+        """Test that aggregator correctly extracts slots via collect_all_metrics."""
         # Simulate server_data as returned by ServerMetricsCollector.collect()
         server_data = {
             "server": {
@@ -160,18 +165,31 @@ class TestSlotsDataFlow(unittest.TestCase):
             ],
             "props": {"model": "llama-7b"},
         }
+        mock_server_instance = Mock()
+        mock_server_instance.collect.return_value = server_data
+        mock_server.return_value = mock_server_instance
 
-        # Import the aggregator daemon's extraction method
-        from aggregator_daemon import Aggregator
+        mock_system_instance = Mock()
+        mock_system_instance.collect.return_value = {
+            "cpu": {"percent": 45.0, "power_w": 100},
+            "gpu": {"usage": 80.0, "power_w": 250, "memory_used": 8000, "memory_total": 16384},
+            "memory": {"used": 16000, "total": 32000, "percent": 50.0},
+            "system": {"power_w": 350},
+        }
+        mock_system.return_value = mock_system_instance
 
-        # Create instance and call the extraction method
-        # Note: We need to test the logic directly since creating full instance requires config
-        result = Aggregator._extract_server_metrics(Aggregator.__new__(Aggregator), server_data)
+        from aggregator import Aggregator
 
-        # Check slots are included
-        self.assertIn("slots", result)
-        self.assertEqual(len(result["slots"]), 2)
-        self.assertEqual(result["slots"][0]["state"], "processing")
+        aggregator = Aggregator()
+        aggregator.server_collector = mock_server_instance
+        aggregator.system_collector = mock_system_instance
+
+        result = aggregator.collect_all_metrics()
+
+        # Check slots are included (aggregator nests them inside server)
+        self.assertIn("slots", result["server"])
+        self.assertEqual(len(result["server"]["slots"]), 2)
+        self.assertEqual(result["server"]["slots"][0]["state"], "processing")
 
 
 class TestWebServerSlotsUpdate(unittest.TestCase):
