@@ -195,6 +195,22 @@ class TestSettingsEndpoints(unittest.TestCase):
             self.assertEqual(data['show_cost'], True)
             self.assertEqual(data['cost_rate'], 0.12)
 
+    def test_index_route_reflects_db_settings(self):
+        """Test the dashboard reads settings from the DB, not just config.yaml."""
+        # Set values in the DB
+        with self.db:
+            self.db.set_setting('web_refresh_rate', '5')
+            self.db.set_setting('show_cost', 'false')
+
+        with self.app:
+            response = self.app.get('/')
+            self.assertEqual(response.status_code, 200)
+            html = response.get_data(as_text=True)
+
+            # Dashboard CONFIG should use the DB-backed values
+            self.assertIn('refreshRate: 5 * 1000', html)
+            self.assertIn('showCost: false', html)
+
 
 if __name__ == '__main__':
     unittest.main()

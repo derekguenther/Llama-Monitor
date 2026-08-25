@@ -170,9 +170,24 @@ def index() -> str:
     """Serve the main dashboard HTML."""
     config = get_config()
     port = config.get("web.http_port", 8080)
+
+    # Prefer user-edited settings from the DB (the source the /settings page
+    # writes to), falling back to config.yaml defaults. This keeps the
+    # dashboard consistent with what the user configures on the settings page.
     cost_rate = config.get("electricity.cost_rate", 0.12)
     refresh_rate = config.get("web.refresh_rate", 1)
     show_cost = config.get("web.show_cost", True)
+    db = get_db()
+    if db:
+        cost_rate = db.get_cost_rate()
+        refresh_rate = db.get_setting("web_refresh_rate", refresh_rate)
+        show_cost_setting = db.get_setting("show_cost", None)
+        if show_cost_setting is not None:
+            show_cost = show_cost_setting.lower() in ("true", "1", "yes")
+        try:
+            refresh_rate = int(refresh_rate)
+        except (ValueError, TypeError):
+            refresh_rate = 1
 
     return render_template(
         "index.html",
@@ -1542,6 +1557,9 @@ def api_reset_settings():
         return jsonify({"error": "Database not available"}), 500
 
     try:
+        # Ensure a live connection (execute() does not auto-reconnect).
+        db.connect()
+
         # Delete all settings to reset to defaults (uses the locked connection)
         db.execute("DELETE FROM settings")
 

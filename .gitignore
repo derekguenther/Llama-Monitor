@@ -28,3 +28,6 @@ Agent crash investigation/
 DeepSeekv4 freakout.txt
 DeepSeekv4 freakout2.txt
 
+# Beads backup taken during schema recovery (user-owned safety copy)
+.beads.backup-pre-recovery/
+
