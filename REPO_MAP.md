@@ -786,6 +786,21 @@
 ./test_sanitizer_scrub.py:    def test_get_scrubs_props_response(self):
 ./test_sanitizer_scrub.py:    def test_post_body_scrubbed(self):
 ./test_sanitizer_scrub.py:    def test_logging_uses_decoded_body_str(self):
+./test_server_controls.py:class TestServerControlButtons(unittest.TestCase):
+./test_server_controls.py:    def setUp(self):
+./test_server_controls.py:    def test_html_has_restart_button(self):
+./test_server_controls.py:    def test_html_has_stop_button(self):
+./test_server_controls.py:    def test_html_has_confirmation_modal(self):
+./test_server_controls.py:    def test_html_has_confirmation_input(self):
+./test_server_controls.py:    def test_confirm_button_starts_disabled(self):
+./test_server_controls.py:class TestServerControlSafety(unittest.TestCase):
+./test_server_controls.py:    def setUp(self):
+./test_server_controls.py:    def test_stop_warning_is_prominent(self):
+./test_server_controls.py:    def test_confirmation_requires_typed_word(self):
+./test_server_controls.py:    def test_confirm_word_is_explicit(self):
+./test_server_controls.py:    def test_js_wires_stop_to_endpoint(self):
+./test_server_controls.py:    def test_js_wires_restart_to_endpoint(self):
+./test_server_controls.py:    def test_confirm_button_rechecks_typed_word(self):
 ./test_server_metrics.py:class TestServerMetricsCollector(unittest.TestCase):
 ./test_server_metrics.py:    def setUp(self):
 ./test_server_metrics.py:    def test_init_strips_trailing_slash(self):
