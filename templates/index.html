@@ -1897,7 +1897,7 @@
         });
 
         // Confirm button executes the pending action
-        confirmServerControlBtn.addEventListener('click', async function() {
+        serverControlConfirmBtn.addEventListener('click', async function() {
             if (!pendingServerAction) return;
             if (serverControlConfirmBtn.disabled) return;
 
@@ -1912,7 +1912,7 @@
                 return;
             }
 
-            confirmServerControlBtn.disabled = true;
+            serverControlConfirmBtn.disabled = true;
             confirmServerControlLabel.textContent = action === 'stop'
                 ? 'Shutting down...' : 'Restarting...';
 
