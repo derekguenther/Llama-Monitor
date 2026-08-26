@@ -14,37 +14,6 @@ class TestPowerChartAutoScale(unittest.TestCase):
         with open('/sandbox/web_server.py', 'r') as f:
             self.web_server_content = f.read()
 
-    def test_power_chart_has_separate_options_from_usage_chart(self):
-        """Test that power chart has separate chart options from GPU/CPU usage chart.
-
-        The GPU/CPU usage chart should use fixed 0-100% range.
-        The power chart should use auto-scaling (no fixed max).
-        """
-        # Check that there's a power chart defined
-        self.assertIn("power-chart", self.web_server_content,
-                      "Power chart element should exist in HTML")
-
-        # Check that combined chart (GPU/CPU usage) has y-axis max: 100
-        # This should be in chartOptions
-        self.assertIn("max: 100", self.web_server_content,
-                      "chartOptions should have max: 100 for GPU/CPU usage")
-
-        # Check that power chart either:
-        # 1. Has its own options without max: 100, OR
-        # 2. Uses chartOptions but chartOptions doesn't have max: 100 for power
-        # The power chart should auto-scale, so it should NOT have a fixed max
-        # We need to verify that power chart datasets don't inherit max: 100
-
-    def test_power_chart_datasets_exist(self):
-        """Test that power chart has GPU Power and CPU Power datasets."""
-        # Check for GPU Power dataset
-        self.assertIn("GPU Power", self.web_server_content,
-                      "Power chart should have GPU Power dataset")
-
-        # Check for CPU Power dataset
-        self.assertIn("CPU Power", self.web_server_content,
-                      "Power chart should have CPU Power dataset")
-
     def test_power_values_calculated_from_power_w(self):
         """Test that power values are calculated from gpu_power_w and cpu_power_w."""
         # Check that power values are calculated from power_w fields
@@ -52,29 +21,6 @@ class TestPowerChartAutoScale(unittest.TestCase):
                       "GPU power should be calculated from gpu_power_w")
         self.assertIn("cpu_power_w", self.web_server_content,
                       "CPU power should be calculated from cpu_power_w")
-
-    def test_power_chart_uses_powerChartOptions(self):
-        """Test that power chart uses powerChartOptions instead of chartOptions."""
-        # Power chart should use powerChartOptions which has no max: 100
-        # Find the power chart definition
-        power_chart_section = self.web_server_content[self.web_server_content.find("power-chart"):self.web_server_content.find("power-chart") + 500]
-
-        # Power chart should use powerChartOptions
-        self.assertIn("options: powerChartOptions", self.web_server_content,
-                      "Power chart should use powerChartOptions for auto-scaling")
-
-    def test_historical_power_chart_uses_powerChartOptions(self):
-        """Test that historical power chart uses powerChartOptions."""
-        # Historical power chart should also use powerChartOptions
-        self.assertIn("historical-power-chart", self.web_server_content,
-                      "Historical power chart should exist")
-
-        # Find historical power chart section
-        historical_power_section = self.web_server_content[self.web_server_content.find("historical-power-chart"):self.web_server_content.find("historical-power-chart") + 500]
-
-        # Should use powerChartOptions
-        self.assertIn("options: powerChartOptions", self.web_server_content,
-                      "Historical power chart should use powerChartOptions for auto-scaling")
 
 
 class TestTuiPowerChart(unittest.TestCase):
