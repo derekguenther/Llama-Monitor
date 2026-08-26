@@ -235,6 +235,20 @@ class MigrationTest(unittest.TestCase):
         self.assertAlmostEqual(row[0] + row[1] + row[2], 0.0, places=6)
         self.assertAlmostEqual(row[3], 500.0, places=6)
 
+        # Re-running migration must NOT re-backfill (spec §5.2b guard).
+        # Simulate: insert a fresh legacy-style row with blame columns at 0.
+        cur = db.connect().cursor()
+        cur.execute(
+            "INSERT INTO daily_energy (date, total_wh) VALUES ('2026-08-02', 700.0)"
+        )
+        db.connect().commit()
+        db._migrate_schema(db.connect().cursor())
+        db.connect().commit()
+        cur.execute(
+            "SELECT unattributed_wh FROM daily_energy WHERE date = '2026-08-02'"
+        )
+        self.assertEqual(cur.fetchone()[0], 0.0)
+
         db.close()
         tmpdir.cleanup()
 

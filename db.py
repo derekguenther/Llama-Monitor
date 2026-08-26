@@ -277,32 +277,44 @@ class Database:
             """
         )
 
-        # Column migrations for hybrid cost model
+        # Column migrations for hybrid cost model. Track whether the blame
+        # columns were newly added so the one-time backfill only runs on the
+        # migration that introduces them (per spec §5.2b).
         self._add_column_if_missing(cursor, 'idle_baseline', 'cpu_idle_w', 'REAL DEFAULT 0')
         self._add_column_if_missing(cursor, 'idle_baseline', 'gpu_idle_w', 'REAL DEFAULT 0')
         self._add_column_if_missing(cursor, 'daily_energy', 'direct_wh', 'REAL DEFAULT 0')
         self._add_column_if_missing(cursor, 'daily_energy', 'baseline_wh', 'REAL DEFAULT 0')
         self._add_column_if_missing(cursor, 'daily_energy', 'other_wh', 'REAL DEFAULT 0')
-        self._add_column_if_missing(cursor, 'daily_energy', 'unattributed_wh', 'REAL DEFAULT 0')
-
-        # One-time backfill: attribute all pre-hybrid energy to unattributed
-        cursor.execute(
-            """
-            UPDATE daily_energy
-            SET unattributed_wh = total_wh
-            WHERE total_wh > 0
-              AND direct_wh + baseline_wh + other_wh + unattributed_wh = 0
-            """
+        unattributed_added = self._add_column_if_missing(
+            cursor, 'daily_energy', 'unattributed_wh', 'REAL DEFAULT 0'
         )
+
+        # One-time backfill: attribute all pre-hybrid energy to unattributed.
+        # Guarded by the column-presence check so it does not re-run.
+        if unattributed_added:
+            cursor.execute(
+                """
+                UPDATE daily_energy
+                SET unattributed_wh = total_wh
+                WHERE total_wh > 0
+                  AND direct_wh + baseline_wh + other_wh + unattributed_wh = 0
+                """
+            )
 
     def _add_column_if_missing(
         self, cursor: sqlite3.Cursor, table: str, column: str, definition: str
-    ) -> None:
-        """Add a column to a table if it does not already exist."""
+    ) -> bool:
+        """Add a column to a table if it does not already exist.
+
+        Returns:
+            True if the column was newly added, False if it already existed.
+        """
         cursor.execute(f"PRAGMA table_info({table})")
         columns = {row[1] for row in cursor.fetchall()}
         if column not in columns:
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+            return True
+        return False
 
     def _create_server_metrics_tables(self, cursor: sqlite3.Cursor) -> None:
         """Create server metrics tables."""
