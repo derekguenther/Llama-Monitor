@@ -185,15 +185,18 @@ class Aggregator:
             "system_raw": system,  # Keep raw nested system data for store_raw_metrics
         }
 
-        # Idle baseline tracking. Gate on meaningful values (> 0): aggregator.py's
-        # _safe_float defaults to 0.0 (not the daemon's -1.0 sentinel), so a guard
-        # of >= 0 would always be true and write a false 0W idle baseline whenever
-        # the system is momentarily at zero. cpu_percent is a local; gpu_usage and
-        # system_power_w are keys in system_data.
+        # Idle baseline tracking. Gate on meaningful power (>= 0 with at least
+        # one component drawing power): the previous gate required gpu_usage > 0,
+        # which rejects truly idle systems (GPU usage 0) and made auto-calibration
+        # dead. cpu_percent is a local; gpu_usage, cpu_power_w, gpu_power_w are
+        # keys in system_data.
         gpu_usage = system_data["gpu_usage"]
-        system_power_w = system_data["system_power_w"]
-        if system_power_w > 0 and cpu_percent > 0 and gpu_usage > 0:
-            self.idle_tracker.check_idle(cpu_percent, gpu_usage, system_power_w)
+        cpu_power_w_sys = system_data["cpu_power_w"]
+        gpu_power_w_sys = system_data["gpu_power_w"]
+        if cpu_power_w_sys > 0 or gpu_power_w_sys > 0:
+            self.idle_tracker.check_idle(
+                cpu_percent, gpu_usage, gpu_power_w_sys, cpu_power_w_sys
+            )
 
         # Cache latest metrics for web_server / api consumers
         self.last_metrics = result
@@ -303,11 +306,16 @@ class Aggregator:
         duration = now - self._last_cost_time
         self._last_cost_time = now
 
+        # Compute hybrid-blame primitives: llama shares from per-process data,
+        # per-component idle baselines from the tracker, llama_running flag.
+        primitives = self._compute_blame_primitives(system, raw_system)
+
         # Update power readings to accumulate energy totals
         energy_stats = self.cost_calculator.update_power_readings(
             gpu_power_w=max(0, gpu_power_w),
             cpu_power_w=max(0, cpu_power_w),
-            duration_seconds=duration
+            duration_seconds=duration,
+            primitives=primitives,
         )
 
         # Build cost data from energy stats
@@ -328,6 +336,23 @@ class Aggregator:
             "today_gpu_wh": energy_stats["today_gpu_wh"],
             "today_cpu_wh": energy_stats["today_cpu_wh"],
             "total_cost": energy_stats["total_wh"] / 1000.0 * self.cost_calculator.cost_rate,
+            # Blame primitives + per-interval blame watts
+            "gpu_idle_w": primitives["gpu_idle_w"],
+            "cpu_idle_w": primitives["cpu_idle_w"],
+            "llama_share": primitives["llama_share"],
+            "llama_gpu_share": primitives["llama_gpu_share"],
+            "llama_cpu_share": primitives["llama_cpu_share"],
+            "gpu_util": primitives["gpu_util"],
+            "cpu_util": primitives["cpu_util"],
+            "llama_running": primitives["llama_running"],
+            "direct_w": energy_stats["direct_w"],
+            "baseline_w": energy_stats["baseline_w"],
+            "other_w": energy_stats["other_w"],
+            "unattributed_w": energy_stats["unattributed_w"],
+            "today_direct_wh": energy_stats.get("today_direct_wh", 0),
+            "today_baseline_wh": energy_stats.get("today_baseline_wh", 0),
+            "today_other_wh": energy_stats.get("today_other_wh", 0),
+            "today_unattributed_wh": energy_stats.get("today_unattributed_wh", 0),
         }
 
         # Store system data as flattened structure for combined_metrics
@@ -361,6 +386,80 @@ class Aggregator:
                 self.cost_calculator.total_energy_wh
             ),
         )
+
+    def _compute_blame_primitives(
+        self, system: Dict[str, Any], raw_system: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Compute hybrid-blame primitives from per-process data and baselines.
+
+        Args:
+            system: Flattened system data (has cpu_count, gpu_usage, etc.)
+            raw_system: Raw nested system data (has cpu.process_cpu,
+                cpu.percent, gpu.usage, process_gpu).
+
+        Returns:
+            Dict with llama shares, per-component idle baselines, llama_running.
+        """
+        gpu_power_w = system.get("gpu_power_w", 0) or 0
+        cpu_power_w = system.get("cpu_power_w", 0) or 0
+
+        # llama GPU share: llama per-process GPU util / total GPU usage
+        # process_gpu lives in the raw system dict, not the flattened system.
+        proc_gpu = raw_system.get("process_gpu", {}) or {}
+        llama_gpu_util = sum(
+            p.get("gpu_utilization") or 0 for p in proc_gpu.values()
+        )
+        gpu_util = system.get("gpu_usage", 0) or 0
+        llama_gpu_share = (
+            min(llama_gpu_util / gpu_util, 1.0) if gpu_util > 0 else 0.0
+        )
+
+        # llama CPU share: normalized per-process CPU / raw OS CPU percent
+        process_cpu = (raw_system.get("cpu", {}) or {}).get("process_cpu", {}) or {}
+        llama_cpu_util = sum(
+            p.get("cpu_percent") or 0 for p in process_cpu.values()
+        )
+        cpu_count = system.get("cpu_count", 0) or 0
+        cpu_util_os = (raw_system.get("cpu", {}) or {}).get("percent", 0) or 0
+        llama_cpu_util_norm = llama_cpu_util / cpu_count if cpu_count > 0 else 0.0
+        llama_cpu_share = (
+            min(llama_cpu_util_norm / cpu_util_os, 1.0) if cpu_util_os > 0 else 0.0
+        )
+        llama_share = max(llama_gpu_share, llama_cpu_share)
+
+        # llama_running = union of process_cpu / process_gpu presence
+        llama_running = bool(proc_gpu) or bool(process_cpu)
+
+        # Per-component idle baselines from auto-calibrated tracker
+        cpu_idle_w = 0.0
+        gpu_idle_w = 0.0
+        recent = self.idle_tracker.get_recent_baseline()
+        if recent:
+            cpu_idle_w = recent.get("cpu_idle_w", 0.0)
+            gpu_idle_w = recent.get("gpu_idle_w", 0.0)
+
+        # Fallback: seed from scalar idle_baseline_w, split proportionally to
+        # measured CPU vs GPU power (50/50 if both zero).
+        if cpu_idle_w + gpu_idle_w == 0.0:
+            scalar = self.cost_calculator.idle_baseline_w
+            total = cpu_power_w + gpu_power_w
+            if total > 0:
+                cpu_idle_w = scalar * cpu_power_w / total
+                gpu_idle_w = scalar - cpu_idle_w
+            else:
+                cpu_idle_w = scalar / 2.0
+                gpu_idle_w = scalar / 2.0
+
+        return {
+            "llama_share": llama_share,
+            "llama_gpu_share": llama_gpu_share,
+            "llama_cpu_share": llama_cpu_share,
+            "gpu_util": gpu_util,
+            "cpu_util": cpu_util_os,
+            "gpu_idle_w": gpu_idle_w,
+            "cpu_idle_w": cpu_idle_w,
+            "llama_running": llama_running,
+        }
 
     def compress_if_needed(self) -> None:
         """Compress data if needed based on time intervals.

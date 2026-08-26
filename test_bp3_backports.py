@@ -28,7 +28,7 @@ def _make_system_metrics(cpu_percent=50.0, gpu_usage=80.0, power_w=300.0):
         "gpu": {"usage": gpu_usage, "power_w": power_w * 0.8,
                 "memory_used": 8192, "memory_total": 16384},
         "memory": {"used": 16384, "total": 32768, "percent": 50.0},
-        "system": {"system_power_w": power_w},
+        "system": {"system_power_w": power_w, "cpu_power_w": power_w * 0.2},
         "process_gpu": {},
     }
 
@@ -67,7 +67,7 @@ class TestIdleTrackingBackport(unittest.TestCase):
             )
             aggregator.collect_all_metrics()
 
-        mock_tracker.check_idle.assert_called_once_with(50.0, 80.0, 300.0)
+        mock_tracker.check_idle.assert_called_once_with(50.0, 80.0, 240.0, 60.0)
         aggregator.close()
 
     @patch("aggregator.IdleBaselineTracker")

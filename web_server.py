@@ -338,6 +338,10 @@ def api_monthly_cost():
                 "total_wh": total_wh,
                 "gpu_wh": entry.get("gpu_wh", 0),
                 "cpu_wh": entry.get("cpu_wh", 0),
+                "direct_wh": entry.get("direct_wh", 0),
+                "baseline_wh": entry.get("baseline_wh", 0),
+                "other_wh": entry.get("other_wh", 0),
+                "unattributed_wh": entry.get("unattributed_wh", 0),
                 "cost_usd": cost_usd,
             })
 
@@ -894,6 +898,27 @@ def settings_page():
                     <input type="number" id="idle_baseline_w" name="idle_baseline_w" step="1" min="0">
                     <div class="hint">System power draw when idle, used for idle baseline tracking</div>
                 </div>
+
+                <div class="form-group">
+                    <label>Cost Attribution Visibility</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="cost_show_llama_direct" name="cost_show_llama_direct">
+                        <label for="cost_show_llama_direct">Show llama.cpp Direct Cost</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="cost_show_llama_baseline" name="cost_show_llama_baseline">
+                        <label for="cost_show_llama_baseline">Show llama.cpp Baseline Cost</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="cost_show_other_apps" name="cost_show_other_apps">
+                        <label for="cost_show_other_apps">Show Other Apps Cost</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="cost_show_unattributed" name="cost_show_unattributed">
+                        <label for="cost_show_unattributed">Show Unattributed Cost</label>
+                    </div>
+                    <div class="hint">Choose which cost attribution categories to display in the monthly cost chart</div>
+                </div>
             </div>
 
             <div class="settings-section">
@@ -956,6 +981,10 @@ def settings_page():
                 document.getElementById('show_temps').checked = settings.show_temps !== false;
                 document.getElementById('cost_rate').value = settings.cost_rate || 0.12;
                 document.getElementById('idle_baseline_w').value = settings.idle_baseline_w || 40;
+                document.getElementById('cost_show_llama_direct').checked = settings.cost_show_llama_direct !== false;
+                document.getElementById('cost_show_llama_baseline').checked = settings.cost_show_llama_baseline !== false;
+                document.getElementById('cost_show_other_apps').checked = settings.cost_show_other_apps === true;
+                document.getElementById('cost_show_unattributed').checked = settings.cost_show_unattributed === true;
 
                 // Display current values
                 document.getElementById('current-values').innerHTML = `
@@ -964,6 +993,10 @@ def settings_page():
                     <div><strong>Temp Display:</strong> <span class="value-display">${settings.show_temps !== false ? 'Enabled' : 'Disabled'}</span></div>
                     <div><strong>Electricity Cost:</strong> <span class="value-display">$${parseFloat(settings.cost_rate || 0.12).toFixed(2)}/kWh</span></div>
                     <div><strong>Idle Baseline:</strong> <span class="value-display">${parseFloat(settings.idle_baseline_w || 40).toFixed(0)} W</span></div>
+                    <div><strong>llama Direct:</strong> <span class="value-display">${settings.cost_show_llama_direct !== false ? 'Show' : 'Hide'}</span></div>
+                    <div><strong>llama Baseline:</strong> <span class="value-display">${settings.cost_show_llama_baseline !== false ? 'Show' : 'Hide'}</span></div>
+                    <div><strong>Other Apps:</strong> <span class="value-display">${settings.cost_show_other_apps === true ? 'Show' : 'Hide'}</span></div>
+                    <div><strong>Unattributed:</strong> <span class="value-display">${settings.cost_show_unattributed === true ? 'Show' : 'Hide'}</span></div>
                 `;
             } catch (error) {
                 showFeedback('Error loading settings: ' + error.message, 'error');
@@ -976,7 +1009,11 @@ def settings_page():
                 show_cost: document.getElementById('show_cost').checked,
                 show_temps: document.getElementById('show_temps').checked,
                 cost_rate: parseFloat(document.getElementById('cost_rate').value) || 0.12,
-                idle_baseline_w: parseFloat(document.getElementById('idle_baseline_w').value) || 40
+                idle_baseline_w: parseFloat(document.getElementById('idle_baseline_w').value) || 40,
+                cost_show_llama_direct: document.getElementById('cost_show_llama_direct').checked,
+                cost_show_llama_baseline: document.getElementById('cost_show_llama_baseline').checked,
+                cost_show_other_apps: document.getElementById('cost_show_other_apps').checked,
+                cost_show_unattributed: document.getElementById('cost_show_unattributed').checked
             };
 
             try {
@@ -1461,7 +1498,11 @@ def api_get_settings():
             "web_refresh_rate": 1,
             "show_cost": True,
             "show_temps": True,
-            "cost_rate": 0.12
+            "cost_rate": 0.12,
+            "cost_show_llama_direct": True,
+            "cost_show_llama_baseline": True,
+            "cost_show_other_apps": False,
+            "cost_show_unattributed": False,
         })
 
     db = get_db()
@@ -1470,7 +1511,11 @@ def api_get_settings():
             "web_refresh_rate": 1,
             "show_cost": True,
             "show_temps": True,
-            "cost_rate": 0.12
+            "cost_rate": 0.12,
+            "cost_show_llama_direct": True,
+            "cost_show_llama_baseline": True,
+            "cost_show_other_apps": False,
+            "cost_show_unattributed": False,
         })
 
     settings = {
@@ -1478,7 +1523,11 @@ def api_get_settings():
         "show_cost": db.get_setting("show_cost", "true"),
         "show_temps": db.get_setting("show_temps", "true"),
         "cost_rate": db.get_setting("cost_rate_usd_per_kwh", "0.12"),
-        "idle_baseline_w": db.get_setting("idle_baseline_w", "40.0")
+        "idle_baseline_w": db.get_setting("idle_baseline_w", "40.0"),
+        "cost_show_llama_direct": db.get_setting("cost_show_llama_direct", "true"),
+        "cost_show_llama_baseline": db.get_setting("cost_show_llama_baseline", "true"),
+        "cost_show_other_apps": db.get_setting("cost_show_other_apps", "false"),
+        "cost_show_unattributed": db.get_setting("cost_show_unattributed", "false"),
     }
 
     # Convert to appropriate types
@@ -1506,6 +1555,17 @@ def api_get_settings():
         settings["idle_baseline_w"] = float(settings["idle_baseline_w"])
     except (ValueError, TypeError):
         settings["idle_baseline_w"] = 40.0
+
+    for key in [
+        "cost_show_llama_direct",
+        "cost_show_llama_baseline",
+        "cost_show_other_apps",
+        "cost_show_unattributed",
+    ]:
+        try:
+            settings[key] = settings[key].lower() in ("true", "1", "yes")
+        except (AttributeError, TypeError):
+            settings[key] = True
 
     return jsonify(settings)
 
@@ -1541,6 +1601,15 @@ def api_set_settings():
         if "idle_baseline_w" in data:
             db.set_setting("idle_baseline_w", float(data["idle_baseline_w"]))
 
+        for key in [
+            "cost_show_llama_direct",
+            "cost_show_llama_baseline",
+            "cost_show_other_apps",
+            "cost_show_unattributed",
+        ]:
+            if key in data:
+                db.set_setting(key, "true" if data[key] else "false")
+
         return jsonify({"success": True, "message": "Settings saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1572,6 +1641,23 @@ def api_reset_settings():
         db.execute(
             "INSERT INTO settings (key, value) VALUES (?, ?)",
             ("idle_baseline_w", "40.0")
+        )
+        # Re-insert default cost attribution visibility
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)",
+            ("cost_show_llama_direct", "true")
+        )
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)",
+            ("cost_show_llama_baseline", "true")
+        )
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)",
+            ("cost_show_other_apps", "false")
+        )
+        db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?)",
+            ("cost_show_unattributed", "false")
         )
 
         return jsonify({"success": True, "message": "Settings reset to defaults"})

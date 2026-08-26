@@ -277,6 +277,33 @@ class Database:
             """
         )
 
+        # Column migrations for hybrid cost model
+        self._add_column_if_missing(cursor, 'idle_baseline', 'cpu_idle_w', 'REAL DEFAULT 0')
+        self._add_column_if_missing(cursor, 'idle_baseline', 'gpu_idle_w', 'REAL DEFAULT 0')
+        self._add_column_if_missing(cursor, 'daily_energy', 'direct_wh', 'REAL DEFAULT 0')
+        self._add_column_if_missing(cursor, 'daily_energy', 'baseline_wh', 'REAL DEFAULT 0')
+        self._add_column_if_missing(cursor, 'daily_energy', 'other_wh', 'REAL DEFAULT 0')
+        self._add_column_if_missing(cursor, 'daily_energy', 'unattributed_wh', 'REAL DEFAULT 0')
+
+        # One-time backfill: attribute all pre-hybrid energy to unattributed
+        cursor.execute(
+            """
+            UPDATE daily_energy
+            SET unattributed_wh = total_wh
+            WHERE total_wh > 0
+              AND direct_wh + baseline_wh + other_wh + unattributed_wh = 0
+            """
+        )
+
+    def _add_column_if_missing(
+        self, cursor: sqlite3.Cursor, table: str, column: str, definition: str
+    ) -> None:
+        """Add a column to a table if it does not already exist."""
+        cursor.execute(f"PRAGMA table_info({table})")
+        columns = {row[1] for row in cursor.fetchall()}
+        if column not in columns:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
     def _create_server_metrics_tables(self, cursor: sqlite3.Cursor) -> None:
         """Create server metrics tables."""
         # Raw server metrics (1-second intervals)
@@ -505,7 +532,9 @@ class Database:
                 cpu_percent REAL,
                 gpu_percent REAL,
                 system_power_w REAL,
-                is_valid BOOLEAN DEFAULT 1
+                is_valid BOOLEAN DEFAULT 1,
+                cpu_idle_w REAL DEFAULT 0,
+                gpu_idle_w REAL DEFAULT 0
             )
             """
         )
@@ -559,7 +588,11 @@ class Database:
                 total_wh REAL DEFAULT 0,
                 gpu_wh REAL DEFAULT 0,
                 cpu_wh REAL DEFAULT 0,
-                last_update TEXT
+                last_update TEXT,
+                direct_wh REAL DEFAULT 0,
+                baseline_wh REAL DEFAULT 0,
+                other_wh REAL DEFAULT 0,
+                unattributed_wh REAL DEFAULT 0
             )
             """
         )
@@ -782,6 +815,8 @@ class Database:
         gpu_percent: float,
         system_power_w: float,
         is_valid: bool = True,
+        cpu_idle_w: float = 0.0,
+        gpu_idle_w: float = 0.0,
     ) -> None:
         """Insert idle baseline measurement.
 
@@ -791,6 +826,8 @@ class Database:
             gpu_percent: GPU utilization percentage
             system_power_w: System power in watts
             is_valid: Whether this is a valid baseline
+            cpu_idle_w: Measured idle CPU power in watts
+            gpu_idle_w: Measured idle GPU power in watts
         """
         with self._lock:
             cursor = self.conn.cursor()
@@ -798,11 +835,20 @@ class Database:
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO idle_baseline (
-                    timestamp, cpu_percent, gpu_percent, system_power_w, is_valid
+                    timestamp, cpu_percent, gpu_percent, system_power_w, is_valid,
+                    cpu_idle_w, gpu_idle_w
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (timestamp, cpu_percent, gpu_percent, system_power_w, 1 if is_valid else 0),
+                (
+                    timestamp,
+                    cpu_percent,
+                    gpu_percent,
+                    system_power_w,
+                    1 if is_valid else 0,
+                    cpu_idle_w,
+                    gpu_idle_w,
+                ),
             )
             self.conn.commit()
 
@@ -1043,7 +1089,8 @@ class Database:
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         cursor.execute(
             """
-            SELECT date, total_wh, gpu_wh, cpu_wh, last_update
+            SELECT date, total_wh, gpu_wh, cpu_wh, last_update,
+                   direct_wh, baseline_wh, other_wh, unattributed_wh
             FROM daily_energy
             WHERE date = ?
             """,
@@ -1066,7 +1113,8 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            SELECT date, total_wh, gpu_wh, cpu_wh, last_update
+            SELECT date, total_wh, gpu_wh, cpu_wh, last_update,
+                   direct_wh, baseline_wh, other_wh, unattributed_wh
             FROM daily_energy
             WHERE date >= date('now', ?)
             ORDER BY date ASC
@@ -1081,6 +1129,10 @@ class Database:
         total_wh: float,
         gpu_wh: float,
         cpu_wh: float,
+        direct_wh: float = 0.0,
+        baseline_wh: float = 0.0,
+        other_wh: float = 0.0,
+        unattributed_wh: float = 0.0,
     ) -> None:
         """Update today's energy consumption.
 
@@ -1088,6 +1140,10 @@ class Database:
             total_wh: Total energy in watt-hours
             gpu_wh: GPU energy in watt-hours
             cpu_wh: CPU energy in watt-hours
+            direct_wh: Llama direct energy in watt-hours
+            baseline_wh: Llama baseline energy in watt-hours
+            other_wh: Other apps energy in watt-hours
+            unattributed_wh: Unattributed energy in watt-hours
         """
         with self._lock:
             cursor = self.conn.cursor()
@@ -1096,15 +1152,27 @@ class Database:
 
             cursor.execute(
                 """
-                INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO daily_energy (
+                    date, total_wh, gpu_wh, cpu_wh, last_update,
+                    direct_wh, baseline_wh, other_wh, unattributed_wh
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(date) DO UPDATE SET
                     total_wh = ?,
                     gpu_wh = ?,
                     cpu_wh = ?,
-                    last_update = ?
+                    last_update = ?,
+                    direct_wh = ?,
+                    baseline_wh = ?,
+                    other_wh = ?,
+                    unattributed_wh = ?
                 """,
-                (today, total_wh, gpu_wh, cpu_wh, now, total_wh, gpu_wh, cpu_wh, now),
+                (
+                    today, total_wh, gpu_wh, cpu_wh, now,
+                    direct_wh, baseline_wh, other_wh, unattributed_wh,
+                    total_wh, gpu_wh, cpu_wh, now,
+                    direct_wh, baseline_wh, other_wh, unattributed_wh,
+                ),
             )
             self.conn.commit()
 
@@ -1115,6 +1183,10 @@ class Database:
         gpu_wh: float,
         cpu_wh: float,
         timestamp: str,
+        direct_wh: float = 0.0,
+        baseline_wh: float = 0.0,
+        other_wh: float = 0.0,
+        unattributed_wh: float = 0.0,
     ) -> None:
         """Update a specific day's energy with an archived timestamp.
 
@@ -1124,20 +1196,36 @@ class Database:
             gpu_wh: GPU energy in watt-hours
             cpu_wh: CPU energy in watt-hours
             timestamp: The timestamp to store (e.g., "2026-06-01 23:59:59")
+            direct_wh: Llama direct energy in watt-hours
+            baseline_wh: Llama baseline energy in watt-hours
+            other_wh: Other apps energy in watt-hours
+            unattributed_wh: Unattributed energy in watt-hours
         """
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO daily_energy (
+                    date, total_wh, gpu_wh, cpu_wh, last_update,
+                    direct_wh, baseline_wh, other_wh, unattributed_wh
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(date) DO UPDATE SET
                     total_wh = ?,
                     gpu_wh = ?,
                     cpu_wh = ?,
-                    last_update = ?
+                    last_update = ?,
+                    direct_wh = ?,
+                    baseline_wh = ?,
+                    other_wh = ?,
+                    unattributed_wh = ?
                 """,
-                (date, total_wh, gpu_wh, cpu_wh, timestamp, total_wh, gpu_wh, cpu_wh, timestamp),
+                (
+                    date, total_wh, gpu_wh, cpu_wh, timestamp,
+                    direct_wh, baseline_wh, other_wh, unattributed_wh,
+                    total_wh, gpu_wh, cpu_wh, timestamp,
+                    direct_wh, baseline_wh, other_wh, unattributed_wh,
+                ),
             )
             self.conn.commit()
 

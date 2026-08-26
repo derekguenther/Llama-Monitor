@@ -44,6 +44,11 @@ class ElectricityCostCalculator:
         self.today_energy_wh = 0.0
         self.today_gpu_wh = 0.0
         self.today_cpu_wh = 0.0
+        # Today's blame-category counters (in lockstep with today_energy_wh)
+        self.today_direct_wh = 0.0
+        self.today_baseline_wh = 0.0
+        self.today_other_wh = 0.0
+        self.today_unattributed_wh = 0.0
         self.last_today_update = None
         self.last_today_date = None  # Track which day we're currently tracking
 
@@ -78,6 +83,10 @@ class ElectricityCostCalculator:
             self.today_energy_wh = today_energy.get("total_wh", 0.0)
             self.today_gpu_wh = today_energy.get("gpu_wh", 0.0)
             self.today_cpu_wh = today_energy.get("cpu_wh", 0.0)
+            self.today_direct_wh = today_energy.get("direct_wh", 0.0)
+            self.today_baseline_wh = today_energy.get("baseline_wh", 0.0)
+            self.today_other_wh = today_energy.get("other_wh", 0.0)
+            self.today_unattributed_wh = today_energy.get("unattributed_wh", 0.0)
             self.last_today_update = today_energy.get("last_update")
             self.last_today_date = today_energy.get("date")
 
@@ -124,6 +133,10 @@ class ElectricityCostCalculator:
             total_wh=self.today_energy_wh,
             gpu_wh=self.today_gpu_wh,
             cpu_wh=self.today_cpu_wh,
+            direct_wh=self.today_direct_wh,
+            baseline_wh=self.today_baseline_wh,
+            other_wh=self.today_other_wh,
+            unattributed_wh=self.today_unattributed_wh,
         )
 
         # Close session in sessions table
@@ -218,6 +231,8 @@ class ElectricityCostCalculator:
         gpu_power_w: float,
         cpu_power_w: float,
         duration_seconds: float,
+        *,
+        primitives: Optional[dict] = None,
     ) -> Dict[str, Any]:
         """Update power readings and recalculate totals.
 
@@ -225,6 +240,11 @@ class ElectricityCostCalculator:
             gpu_power_w: Current GPU power in watts
             cpu_power_w: Current CPU power in watts
             duration_seconds: Time since last update in seconds
+            primitives: Optional per-interval raw primitives for the hybrid
+                blame model (llama shares, per-component idle baselines,
+                llama_running). When provided, per-interval blame categories are
+                computed and accumulated; when absent, all energy is attributed
+                to unattributed (backward-compatible raw behavior).
 
         Returns:
             Dictionary with updated energy totals
@@ -237,6 +257,13 @@ class ElectricityCostCalculator:
         gpu_energy = gpu_power_w * duration_hours
         cpu_energy = cpu_power_w * duration_hours
         total_energy = gpu_energy + cpu_energy
+
+        # Compute per-interval blame (watts) if primitives provided
+        blame = self.compute_blame(gpu_power_w, cpu_power_w, primitives)
+        direct_energy = blame["direct_w"] * duration_hours
+        baseline_energy = blame["baseline_w"] * duration_hours
+        other_energy = blame["other_w"] * duration_hours
+        unattributed_energy = blame["unattributed_w"] * duration_hours
 
         # Update running totals
         self.gpu_energy_wh += gpu_energy
@@ -251,6 +278,10 @@ class ElectricityCostCalculator:
             prev_energy = self.today_energy_wh
             prev_gpu = self.today_gpu_wh
             prev_cpu = self.today_cpu_wh
+            prev_direct = self.today_direct_wh
+            prev_baseline = self.today_baseline_wh
+            prev_other = self.today_other_wh
+            prev_unattributed = self.today_unattributed_wh
             prev_timestamp = f"{prev_date} 23:59:59"
 
             # Update the previous day's entry with final value and 23:59:59 timestamp
@@ -260,17 +291,29 @@ class ElectricityCostCalculator:
                 gpu_wh=prev_gpu,
                 cpu_wh=prev_cpu,
                 timestamp=prev_timestamp,
+                direct_wh=prev_direct,
+                baseline_wh=prev_baseline,
+                other_wh=prev_other,
+                unattributed_wh=prev_unattributed,
             )
 
             # Reset today's energy for the new day
             self.today_energy_wh = 0.0
             self.today_gpu_wh = 0.0
             self.today_cpu_wh = 0.0
+            self.today_direct_wh = 0.0
+            self.today_baseline_wh = 0.0
+            self.today_other_wh = 0.0
+            self.today_unattributed_wh = 0.0
 
         # Update today's energy
         self.today_gpu_wh += gpu_energy
         self.today_cpu_wh += cpu_energy
         self.today_energy_wh += total_energy
+        self.today_direct_wh += direct_energy
+        self.today_baseline_wh += baseline_energy
+        self.today_other_wh += other_energy
+        self.today_unattributed_wh += unattributed_energy
 
         # Update timestamp
         self.last_update = datetime.now().isoformat()
@@ -282,6 +325,10 @@ class ElectricityCostCalculator:
             total_wh=self.today_energy_wh,
             gpu_wh=self.today_gpu_wh,
             cpu_wh=self.today_cpu_wh,
+            direct_wh=self.today_direct_wh,
+            baseline_wh=self.today_baseline_wh,
+            other_wh=self.today_other_wh,
+            unattributed_wh=self.today_unattributed_wh,
         )
 
         return {
@@ -294,6 +341,14 @@ class ElectricityCostCalculator:
             "today_wh": self.today_energy_wh,
             "today_gpu_wh": self.today_gpu_wh,
             "today_cpu_wh": self.today_cpu_wh,
+            "today_direct_wh": self.today_direct_wh,
+            "today_baseline_wh": self.today_baseline_wh,
+            "today_other_wh": self.today_other_wh,
+            "today_unattributed_wh": self.today_unattributed_wh,
+            "direct_w": blame["direct_w"],
+            "baseline_w": blame["baseline_w"],
+            "other_w": blame["other_w"],
+            "unattributed_w": blame["unattributed_w"],
         }
 
     def persist_today_energy(self) -> None:
@@ -306,27 +361,98 @@ class ElectricityCostCalculator:
             total_wh=self.today_energy_wh,
             gpu_wh=self.today_gpu_wh,
             cpu_wh=self.today_cpu_wh,
+            direct_wh=self.today_direct_wh,
+            baseline_wh=self.today_baseline_wh,
+            other_wh=self.today_other_wh,
+            unattributed_wh=self.today_unattributed_wh,
         )
+
+    def compute_blame(
+        self,
+        gpu_power_w: float,
+        cpu_power_w: float,
+        primitives: Optional[dict],
+    ) -> Dict[str, float]:
+        """Compute per-interval blame categories (watts).
+
+        The four categories always sum to totalPower = gpu_power_w + cpu_power_w.
+
+        Args:
+            gpu_power_w: GPU power in watts
+            cpu_power_w: CPU power in watts
+            primitives: Raw per-interval primitives (llama shares, per-component
+                idle baselines, llama_running). None -> backward-compat mode.
+
+        Returns:
+            Dict with 'direct_w', 'baseline_w', 'other_w', 'unattributed_w'.
+        """
+        total_power = max(0.0, gpu_power_w) + max(0.0, cpu_power_w)
+
+        # Backward-compat mode: no primitives -> all energy unattributed.
+        if not primitives:
+            return {
+                "direct_w": 0.0,
+                "baseline_w": 0.0,
+                "other_w": 0.0,
+                "unattributed_w": total_power,
+            }
+
+        llama_share = min(max(primitives.get("llama_share", 0.0), 0.0), 1.0)
+        other_share = 1.0 - llama_share
+        cpu_idle_w = max(0.0, primitives.get("cpu_idle_w", 0.0))
+        gpu_idle_w = max(0.0, primitives.get("gpu_idle_w", 0.0))
+        idle_baseline = cpu_idle_w + gpu_idle_w
+        llama_running = bool(primitives.get("llama_running", False))
+
+        if not llama_running:
+            # Nothing blamed to llama.cpp; all power is unattributed.
+            return {
+                "direct_w": 0.0,
+                "baseline_w": 0.0,
+                "other_w": 0.0,
+                "unattributed_w": total_power,
+            }
+
+        activity_delta = max(0.0, total_power - idle_baseline)
+        direct_w = llama_share * activity_delta
+        other_w = other_share * activity_delta
+        baseline_w = min(idle_baseline, total_power)
+        unattributed_w = max(0.0, total_power - (direct_w + other_w + baseline_w))
+
+        # Clamp each term to [0, total_power]
+        direct_w = min(max(direct_w, 0.0), total_power)
+        other_w = min(max(other_w, 0.0), total_power)
+        baseline_w = min(max(baseline_w, 0.0), total_power)
+        unattributed_w = min(max(unattributed_w, 0.0), total_power)
+
+        return {
+            "direct_w": direct_w,
+            "baseline_w": baseline_w,
+            "other_w": other_w,
+            "unattributed_w": unattributed_w,
+        }
 
     def calculate_idle_baseline(
         self,
         cpu_percent: float,
         gpu_percent: float,
-        system_power_w: float,
-    ) -> Optional[float]:
-        """Calculate idle baseline power when system is idle.
+        gpu_power_w: float,
+        cpu_power_w: float,
+    ) -> Optional[dict]:
+        """Calculate per-component idle baseline when system is idle.
 
         Args:
             cpu_percent: CPU utilization percentage
             gpu_percent: GPU utilization percentage
-            system_power_w: Measured system power in watts
+            gpu_power_w: Measured GPU power in watts
+            cpu_power_w: Measured CPU power in watts
 
         Returns:
-            Idle baseline power if conditions met, None otherwise
+            Dict with 'cpu_idle_w' and 'gpu_idle_w' if conditions met, else None
         """
         # System is idle when CPU + GPU < 5%
         if cpu_percent + gpu_percent < 5.0:
-            return system_power_w
+            return {"cpu_idle_w": cpu_power_w, "gpu_idle_w": gpu_power_w}
         return None
 
     def format_cost_display(
@@ -558,6 +684,10 @@ class ElectricityCostCalculator:
         self.today_energy_wh = 0.0
         self.today_gpu_wh = 0.0
         self.today_cpu_wh = 0.0
+        self.today_direct_wh = 0.0
+        self.today_baseline_wh = 0.0
+        self.today_other_wh = 0.0
+        self.today_unattributed_wh = 0.0
 
         # Update database with zeroed values (use empty string for session_start since NOT NULL)
         self.database.update_cumulative_energy(
@@ -571,6 +701,10 @@ class ElectricityCostCalculator:
             total_wh=0.0,
             gpu_wh=0.0,
             cpu_wh=0.0,
+            direct_wh=0.0,
+            baseline_wh=0.0,
+            other_wh=0.0,
+            unattributed_wh=0.0,
         )
 
         return {
