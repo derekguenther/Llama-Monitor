@@ -151,6 +151,34 @@ class ElectricityCostWritePathTest(unittest.TestCase):
         self.calc.start_session()
         self.assertEqual(self.calc.today_direct_wh, before_direct)
 
+    def test_midnight_rollover_archives_blame(self):
+        # Test 13: prior day's blame archived with final values; counters reset;
+        # next-day blame lands in the correct row.
+        prims = {"llama_share": 0.7, "cpu_idle_w": 10.0, "gpu_idle_w": 30.0,
+                 "llama_running": True}
+        self.calc.update_power_readings(240.0, 60.0, 3600.0, primitives=prims)
+        # Simulate a day boundary
+        self.calc.last_today_date = "1999-01-01"
+        self.calc.update_power_readings(240.0, 60.0, 3600.0, primitives=prims)
+
+        # Prior day archived with blame values, today reset then accumulated
+        cur = self.db.connect().cursor()
+        cur.execute(
+            "SELECT direct_wh, baseline_wh, other_wh, unattributed_wh, total_wh "
+            "FROM daily_energy WHERE date = '1999-01-01'"
+        )
+        prev = cur.fetchone()
+        self.assertGreater(prev[0] + prev[1] + prev[2] + prev[3], 0.0)
+        self.assertAlmostEqual(prev[0] + prev[1] + prev[2] + prev[3],
+                               prev[4], places=3)
+
+        # Today's row should only contain the second interval's blame
+        today = self.db.get_today_energy()
+        self.assertAlmostEqual(today["direct_wh"] + today["baseline_wh"]
+                               + today["other_wh"] + today["unattributed_wh"],
+                               today["total_wh"], places=3)
+        self.assertAlmostEqual(today["total_wh"], 300.0, places=3)
+
 
 class MigrationTest(unittest.TestCase):
     """Tests 7, 18: column migration + backfill."""
