@@ -872,12 +872,6 @@ def settings_page():
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="show_temps" name="show_temps">
-                        <label for="show_temps">Show Temperature Display</label>
-                    </div>
-                </div>
             </div>
 
             <div class="settings-section">
@@ -953,7 +947,6 @@ def settings_page():
                 // Populate form fields
                 document.getElementById('web_refresh_rate').value = settings.web_refresh_rate || 1;
                 document.getElementById('show_cost').checked = settings.show_cost !== false;
-                document.getElementById('show_temps').checked = settings.show_temps !== false;
                 document.getElementById('cost_rate').value = settings.cost_rate || 0.12;
                 document.getElementById('idle_baseline_w').value = settings.idle_baseline_w || 40;
 
@@ -961,7 +954,6 @@ def settings_page():
                 document.getElementById('current-values').innerHTML = `
                     <div><strong>Refresh Rate:</strong> <span class="value-display">${settings.web_refresh_rate || 1}s</span></div>
                     <div><strong>Cost Display:</strong> <span class="value-display">${settings.show_cost !== false ? 'Enabled' : 'Disabled'}</span></div>
-                    <div><strong>Temp Display:</strong> <span class="value-display">${settings.show_temps !== false ? 'Enabled' : 'Disabled'}</span></div>
                     <div><strong>Electricity Cost:</strong> <span class="value-display">$${parseFloat(settings.cost_rate || 0.12).toFixed(2)}/kWh</span></div>
                     <div><strong>Idle Baseline:</strong> <span class="value-display">${parseFloat(settings.idle_baseline_w || 40).toFixed(0)} W</span></div>
                 `;
@@ -974,7 +966,6 @@ def settings_page():
             const settings = {
                 web_refresh_rate: parseInt(document.getElementById('web_refresh_rate').value) || 1,
                 show_cost: document.getElementById('show_cost').checked,
-                show_temps: document.getElementById('show_temps').checked,
                 cost_rate: parseFloat(document.getElementById('cost_rate').value) || 0.12,
                 idle_baseline_w: parseFloat(document.getElementById('idle_baseline_w').value) || 40
             };
@@ -1460,7 +1451,6 @@ def api_get_settings():
         return jsonify({
             "web_refresh_rate": 1,
             "show_cost": True,
-            "show_temps": True,
             "cost_rate": 0.12
         })
 
@@ -1469,14 +1459,12 @@ def api_get_settings():
         return jsonify({
             "web_refresh_rate": 1,
             "show_cost": True,
-            "show_temps": True,
             "cost_rate": 0.12
         })
 
     settings = {
         "web_refresh_rate": db.get_setting("web_refresh_rate", "1"),
         "show_cost": db.get_setting("show_cost", "true"),
-        "show_temps": db.get_setting("show_temps", "true"),
         "cost_rate": db.get_setting("cost_rate_usd_per_kwh", "0.12"),
         "idle_baseline_w": db.get_setting("idle_baseline_w", "40.0")
     }
@@ -1491,11 +1479,6 @@ def api_get_settings():
         settings["show_cost"] = settings["show_cost"].lower() in ("true", "1", "yes")
     except (AttributeError, TypeError):
         settings["show_cost"] = True
-
-    try:
-        settings["show_temps"] = settings["show_temps"].lower() in ("true", "1", "yes")
-    except (AttributeError, TypeError):
-        settings["show_temps"] = True
 
     try:
         settings["cost_rate"] = float(settings["cost_rate"])
@@ -1531,9 +1514,6 @@ def api_set_settings():
 
         if "show_cost" in data:
             db.set_setting("show_cost", "true" if data["show_cost"] else "false")
-
-        if "show_temps" in data:
-            db.set_setting("show_temps", "true" if data["show_temps"] else "false")
 
         if "cost_rate" in data:
             db.set_setting("cost_rate_usd_per_kwh", float(data["cost_rate"]))
