@@ -70,7 +70,6 @@ def run_tests():
         passed = result.returncode == 0
 
         # Extract test count from output
-        import re
         collected = re.search(r"collected (\d+) item", output)
         tests_run = re.search(r"(\d+) passed", output)
 
