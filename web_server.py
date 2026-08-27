@@ -756,6 +756,7 @@ def settings_page():
             display: flex;
             align-items: center;
             gap: 10px;
+            position: relative;
         }
 
         .checkbox-group input[type="checkbox"] {
@@ -763,6 +764,38 @@ def settings_page():
             height: 20px;
             cursor: pointer;
             accent-color: #00d4ff;
+        }
+
+        /* Cost attribution tooltips */
+        .tooltip {
+            position: relative;
+            cursor: help;
+        }
+        .tooltip::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            left: 0;
+            bottom: 130%;
+            z-index: 999;
+            min-width: 220px;
+            max-width: 300px;
+            padding: 8px 10px;
+            background: rgba(20, 24, 30, 0.97);
+            color: #d5dbe3;
+            border: 1px solid #333a44;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            line-height: 1.4;
+            white-space: normal;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.15s ease, visibility 0.15s ease;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .tooltip:hover::after {
+            opacity: 1;
+            visibility: visible;
         }
 
         .btn {
@@ -897,21 +930,21 @@ def settings_page():
                     <label>Cost Attribution Visibility</label>
                     <div class="checkbox-group">
                         <input type="checkbox" id="cost_show_llama_direct" name="cost_show_llama_direct">
-                        <label for="cost_show_llama_direct">Show llama.cpp Direct Cost</label>
+                        <label for="cost_show_llama_direct" class="tooltip" data-tooltip="Power used by llama.cpp for active inference, above the idle baseline. Represents the true incremental cost of running inference.">Show llama.cpp Direct Cost</label>
                     </div>
                     <div class="checkbox-group">
                         <input type="checkbox" id="cost_show_llama_baseline" name="cost_show_llama_baseline">
-                        <label for="cost_show_llama_baseline">Show llama.cpp Baseline Cost</label>
+                        <label for="cost_show_llama_baseline" class="tooltip" data-tooltip="llama.cpp's share of the idle baseline power draw (system power when CPU+GPU are both under 5% utilization).">Show llama.cpp Baseline Cost</label>
                     </div>
                     <div class="checkbox-group">
                         <input type="checkbox" id="cost_show_other_apps" name="cost_show_other_apps">
-                        <label for="cost_show_other_apps">Show Other Apps Cost</label>
+                        <label for="cost_show_other_apps" class="tooltip" data-tooltip="Power attributed to non-llama.cpp applications running on the machine.">Show Other Apps Cost</label>
                     </div>
                     <div class="checkbox-group">
                         <input type="checkbox" id="cost_show_unattributed" name="cost_show_unattributed">
-                        <label for="cost_show_unattributed">Show Unattributed Cost</label>
+                        <label for="cost_show_unattributed" class="tooltip" data-tooltip="Power not attributed to any specific application (e.g. system overhead, GPU/CPU draw not tied to a tracked process).">Show Unattributed Cost</label>
                     </div>
-                    <div class="hint">Choose which cost attribution categories to display in the monthly cost chart</div>
+                    <div class="hint">Choose which cost attribution categories to display in the monthly cost chart. Hover over a label for details.</div>
                 </div>
             </div>
 
