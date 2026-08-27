@@ -278,8 +278,8 @@ test_hybrid_cost_model.py:    def test_llama_running_via_process_cpu_union(self,
 test_imports.py:def test_imports():  # Test all module imports.
 test_k_format.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_k_format.py:def test_k_format_on_context_chart():  # Verify k-unit formatting is applied to Context Used chart.
-test_llama-monitor.py:TEST_FILES = [
 test_llama-monitor.py:LLAMA_MONITOR_DIR = os.path.dirname(os.path.abspath(__file__))
+test_llama-monitor.py:def discover_test_files():  # Auto-discover pytest-collectable test_*.py files alongside the runner.
 test_llama-monitor.py:def run_tests():  # Run all test files and summarize results.
 test_overflow.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_overflow.py:def test_overflow_prevention():  # Verify grid items have min-width:0 and overflow prevention.
@@ -418,6 +418,13 @@ test_system_metrics.py:    def test_collect_system_power_battery(self, mock_wmi)
 test_system_metrics.py:    def test_collect_system_power_no_battery(self, mock_wmi):  # Test system power collection without battery data.
 test_system_metrics.py:class TestCollect(unittest.TestCase):  # Tests for main collect method.
 test_system_metrics.py:    def test_collect_full(self, mock_system_power, mock_process_gpu, mock_memory, mock_gpu, mock_cpu):  # Test full metrics collection.
+test_test_runner_discovery.py:_RUNNER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+test_test_runner_discovery.py:def discovered():  # Discover test files once per module (lazily, not at import).
+test_test_runner_discovery.py:def test_discovers_known_unit_test_files(discovered):  # The runner must discover genuine pytest unit test files.
+test_test_runner_discovery.py:def test_excludes_itself(discovered):  # The runner must not include itself in the discovered list.
+test_test_runner_discovery.py:def test_excludes_script_style_integration_tests(discovered):  # Script-style live-integration tests (need a running server) are skipped.
+test_test_runner_discovery.py:def test_all_discovered_files_exist(discovered):  # Every discovered file must actually exist on disk.
+test_test_runner_discovery.py:def test_discovery_is_sorted_and_nonempty(discovered):  # Discovery returns a sorted, non-empty list.
 test_toggle_buttons.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_toggle_buttons.py:def test_toggle_buttons():  # Verify toggle-cost-btn and toggle-temps-btn are both removed.
 test_tokens_gauge_source.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
