@@ -1492,7 +1492,11 @@ def settings_page():
                     const cb = document.getElementById(key + '_cat_' + cat);
                     if (cb && cb.checked) cats.push(cat);
                 }
-                settings[key + '_categories'] = cats;
+                // All categories unchecked -> save all categories so the slot
+                // never silently falls back to defaults while the form shows
+                // everything unchecked (keeps form and slot display in sync).
+                settings[key + '_categories'] =
+                    cats.length > 0 ? cats : ['direct', 'baseline', 'other', 'unattributed'];
             }
 
             try {

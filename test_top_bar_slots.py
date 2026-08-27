@@ -118,6 +118,57 @@ class LifetimeAccumulatorTest(unittest.TestCase):
         self.assertEqual(self.calc.total_unattributed_wh, 0.0)
 
 
+class ResolveRangeTest(unittest.TestCase):
+    """_resolve_range week/month boundaries (Sunday week start, 1st-of-month)."""
+
+    def _resolve(self, timeframe, y, m, d):
+        from datetime import datetime
+        return _resolve_range(timeframe, datetime(y, m, d))
+
+    def test_this_week_sunday_start(self):
+        # 2026-08-27 is a Thursday; this week starts Sunday 8/23, ends 8/27.
+        self.assertEqual(self._resolve("this_week", 2026, 8, 27),
+                         ("2026-08-23", "2026-08-27"))
+
+    def test_this_week_on_sunday(self):
+        # On a Sunday (8/23), this week is just that day.
+        self.assertEqual(self._resolve("this_week", 2026, 8, 23),
+                         ("2026-08-23", "2026-08-23"))
+
+    def test_this_week_when_monday(self):
+        # 8/24 is Monday; week starts Sunday 8/23.
+        self.assertEqual(self._resolve("this_week", 2026, 8, 24),
+                         ("2026-08-23", "2026-08-24"))
+
+    def test_last_week_sunday_to_saturday(self):
+        # 2026-08-27 Thursday -> last week Sun 8/16 .. Sat 8/22.
+        self.assertEqual(self._resolve("last_week", 2026, 8, 27),
+                         ("2026-08-16", "2026-08-22"))
+
+    def test_this_month_starts_first(self):
+        self.assertEqual(self._resolve("this_month", 2026, 8, 27),
+                         ("2026-08-01", "2026-08-27"))
+
+    def test_last_month(self):
+        self.assertEqual(self._resolve("last_month", 2026, 8, 27),
+                         ("2026-07-01", "2026-07-31"))
+
+    def test_yesterday(self):
+        self.assertEqual(self._resolve("yesterday", 2026, 8, 27),
+                         ("2026-08-26", "2026-08-26"))
+
+    def test_rolling_7(self):
+        self.assertEqual(self._resolve("rolling_7", 2026, 8, 27),
+                         ("2026-08-21", "2026-08-27"))
+
+    def test_rolling_30(self):
+        self.assertEqual(self._resolve("rolling_30", 2026, 8, 27),
+                         ("2026-07-29", "2026-08-27"))
+
+    def test_all_time_none(self):
+        self.assertIsNone(self._resolve("all_time", 2026, 8, 27))
+
+
 class RangeEnergyTest(unittest.TestCase):
     """get_range_energy is strict/inclusive on both boundaries."""
 
