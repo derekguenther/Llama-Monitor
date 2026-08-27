@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
 """Test runner for llama-monitor - summarizes results from all test files."""
 
+import glob
+import re
 import subprocess
 import sys
 import os
-
-TEST_FILES = [
-    "test_config.py",
-    "test_database.py",
-    "test_server_metrics.py",
-    "test_system_metrics.py",
-    "test_aggregator_integration.py",
-    "test_imports.py",
-    "test_server_controls.py",
-]
 
 # Directory containing this test runner. Using the file location (rather than
 # a hardcoded path) makes the runner cross-platform — it works both in the
@@ -21,8 +13,39 @@ TEST_FILES = [
 LLAMA_MONITOR_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def discover_test_files():
+    """Auto-discover pytest-collectable test_*.py files alongside the runner.
+
+    Every test_*.py file is a candidate, excluding this runner itself. Files
+    that pytest cannot collect (script-style live-integration tests that need a
+    running server, e.g. test_aggregator.py) are skipped, so the pre-merge
+    verification gate only runs genuine unit tests. New unit test files are
+    picked up automatically — no hardcoded list to keep in sync.
+    """
+    candidates = sorted(
+        os.path.basename(f)
+        for f in glob.glob(os.path.join(LLAMA_MONITOR_DIR, "test_*.py"))
+        if os.path.basename(f) != "test_llama-monitor.py"
+    )
+    collected = []
+    for name in candidates:
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", name, "--collect-only", "-q"],
+            cwd=LLAMA_MONITOR_DIR,
+            capture_output=True,
+            text=True,
+        )
+        output = result.stdout + result.stderr
+        match = re.search(r"(\d+) tests? collected", output)
+        count = int(match.group(1)) if match else 0
+        if count > 0:
+            collected.append(name)
+    return sorted(collected)
+
+
 def run_tests():
     """Run all test files and summarize results."""
+    test_files = discover_test_files()
     results = []
     all_passed = True
 
@@ -31,7 +54,7 @@ def run_tests():
     print("=" * 60)
     print()
 
-    for test_file in TEST_FILES:
+    for test_file in test_files:
         print(f"Running {test_file}...", end=" ")
         sys.stdout.flush()
 
