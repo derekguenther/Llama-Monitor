@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test that the Toggle Cost button is removed and Toggle Temps is hidden."""
+"""Test that the Toggle Cost and Toggle Temps buttons are removed."""
 
 import os
 import sys
@@ -8,7 +8,7 @@ TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templa
 
 
 def test_toggle_buttons():
-    """Verify toggle-cost-btn is removed and toggle-temps-btn is hidden."""
+    """Verify toggle-cost-btn and toggle-temps-btn are both removed."""
     with open(TEMPLATE_PATH, "r") as f:
         content = f.read()
 
@@ -21,11 +21,11 @@ def test_toggle_buttons():
     if "costDisplayEnabled" in content:
         errors.append("costDisplayEnabled variable still present")
 
-    # Toggle Temps should be hidden (kept in markup)
-    if 'id="toggle-temps-btn"' not in content:
-        errors.append("toggle-temps-btn element missing (should be kept, hidden)")
-    if 'id="toggle-temps-btn" hidden' not in content and 'id="toggle-temps-btn" style="display:none"' not in content:
-        errors.append("toggle-temps-btn not hidden")
+    # Toggle Temps button should be removed (dead UI removed)
+    if 'id="toggle-temps-btn"' in content:
+        errors.append("toggle-temps-btn element still present")
+    if "toggle-temps-btn" in content:
+        errors.append("toggle-temps-btn reference still present")
 
     if errors:
         for e in errors:
@@ -33,7 +33,7 @@ def test_toggle_buttons():
         return False
 
     print("[PASS] toggle-cost-btn removed")
-    print("[PASS] toggle-temps-btn kept but hidden")
+    print("[PASS] toggle-temps-btn removed")
     return True
 
 
