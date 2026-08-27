@@ -47,13 +47,11 @@ class TestSettingsEndpoints(unittest.TestCase):
             data = response.get_json()
             self.assertIn('web_refresh_rate', data)
             self.assertIn('show_cost', data)
-            self.assertIn('show_temps', data)
             self.assertIn('cost_rate', data)
 
             # Check default values
             self.assertEqual(data['web_refresh_rate'], 1)
             self.assertEqual(data['show_cost'], True)
-            self.assertEqual(data['show_temps'], True)
             self.assertEqual(data['cost_rate'], 0.12)
 
     def test_api_get_settings_returns_stored_values(self):
@@ -61,7 +59,6 @@ class TestSettingsEndpoints(unittest.TestCase):
         with self.db:
             self.db.set_setting('web_refresh_rate', '5')
             self.db.set_setting('show_cost', 'false')
-            self.db.set_setting('show_temps', 'true')
             self.db.set_setting('cost_rate_usd_per_kwh', '0.25')
 
         with self.app:
@@ -71,7 +68,6 @@ class TestSettingsEndpoints(unittest.TestCase):
             data = response.get_json()
             self.assertEqual(data['web_refresh_rate'], 5)
             self.assertEqual(data['show_cost'], False)
-            self.assertEqual(data['show_temps'], True)
             self.assertEqual(data['cost_rate'], 0.25)
 
     def test_api_set_settings_updates_values(self):
@@ -79,7 +75,6 @@ class TestSettingsEndpoints(unittest.TestCase):
         payload = {
             'web_refresh_rate': 10,
             'show_cost': False,
-            'show_temps': True,
             'cost_rate': 0.30
         }
 
@@ -98,7 +93,6 @@ class TestSettingsEndpoints(unittest.TestCase):
         with self.db:
             self.assertEqual(self.db.get_setting('web_refresh_rate'), '10')
             self.assertEqual(self.db.get_setting('show_cost'), 'false')
-            self.assertEqual(self.db.get_setting('show_temps'), 'true')
             # Note: 0.30 becomes '0.3' due to string conversion
             self.assertEqual(self.db.get_setting('cost_rate_usd_per_kwh'), '0.3')
 

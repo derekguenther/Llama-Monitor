@@ -419,7 +419,7 @@ test_system_metrics.py:    def test_collect_system_power_no_battery(self, mock_w
 test_system_metrics.py:class TestCollect(unittest.TestCase):  # Tests for main collect method.
 test_system_metrics.py:    def test_collect_full(self, mock_system_power, mock_process_gpu, mock_memory, mock_gpu, mock_cpu):  # Test full metrics collection.
 test_toggle_buttons.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
-test_toggle_buttons.py:def test_toggle_buttons():  # Verify toggle-cost-btn is removed and toggle-temps-btn is hidden.
+test_toggle_buttons.py:def test_toggle_buttons():  # Verify toggle-cost-btn and toggle-temps-btn are both removed.
 test_tokens_gauge_source.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_tokens_gauge_source.py:def _read_template():
 test_tokens_gauge_source.py:def test_uses_authoritative_gauges_not_instant():  # The graph should use predicted/prompt_tokens_seconds, not _instant delta rates.
