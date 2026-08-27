@@ -594,23 +594,23 @@
         </div>
 
 
-        <!-- Key Metrics -->
-        <div class="key-metrics">
-            <div class="key-metric-item">
-                <div class="key-metric-label">Today's Cost</div>
-                <div class="key-metric-value" id="today-cost">-</div>
+        <!-- Key Metrics: 4 configurable slots -->
+        <div class="key-metrics" id="key-metrics">
+            <div class="key-metric-item" data-slot="1">
+                <div class="key-metric-label" id="slot-1-title">Today's Cost</div>
+                <div class="key-metric-value" id="slot-1-value">-</div>
             </div>
-            <div class="key-metric-item">
-                <div class="key-metric-label">Today's Energy</div>
-                <div class="key-metric-value energy" id="today-energy">-</div>
+            <div class="key-metric-item" data-slot="2">
+                <div class="key-metric-label" id="slot-2-title">Today's Energy</div>
+                <div class="key-metric-value energy" id="slot-2-value">-</div>
             </div>
-            <div class="key-metric-item">
-                <div class="key-metric-label">Total Cost</div>
-                <div class="key-metric-value" id="total-cost">-</div>
+            <div class="key-metric-item" data-slot="3">
+                <div class="key-metric-label" id="slot-3-title">Total Cost</div>
+                <div class="key-metric-value" id="slot-3-value">-</div>
             </div>
-            <div class="key-metric-item">
-                <div class="key-metric-label">Total Energy</div>
-                <div class="key-metric-value energy" id="total-energy-km">-</div>
+            <div class="key-metric-item" data-slot="4">
+                <div class="key-metric-label" id="slot-4-title">Total Energy</div>
+                <div class="key-metric-value energy" id="slot-4-value">-</div>
             </div>
         </div>
         <!-- Vendor Comparison Modal -->
@@ -874,7 +874,8 @@
             serverUrl: "{{ server_url }}",
             refreshRate: {{ refresh_rate }} * 1000,
             showCost: {{ 'true' if show_cost else 'false' }},
-            costRate: {{ cost_rate }}
+            costRate: {{ cost_rate }},
+            slotConfigs: {{ slot_configs | tojson | safe }}
         };
 
         // State
@@ -1279,6 +1280,7 @@
                 updateCharts(data);
                 updateSlotCharts(data);
                 updateSummary(data);
+                updateSlots();
                 updateLastUpdated();
                 fetchMonthlyCost();
             } catch (error) {
@@ -1421,20 +1423,6 @@
                     document.getElementById('session-cost').textContent = '$' + sessionCost.toFixed(2);
                 } else {
                     document.getElementById('session-cost').textContent = '-';
-                }
-                // Update today's cost
-                const todayCost = cost.today_cost ?? null;
-                if (todayCost != null && todayCost >= 0) {
-                    document.getElementById('today-cost').textContent = '$' + todayCost.toFixed(2);
-                } else {
-                    document.getElementById('today-cost').textContent = '-';
-                }
-                // Update total energy (Wh)
-                const todayWh = cost.today_wh ?? null;
-                if (todayWh != null && todayWh >= 0) {
-                    document.getElementById('total-energy').textContent = todayWh.toFixed(2) + ' Wh';
-                } else {
-                    document.getElementById('total-energy').textContent = '-';
                 }
             }
         }
@@ -1700,7 +1688,6 @@
              const energy = data.cost || {};
             const serverMetrics = data.server || {};
             const cost = data.cost || {};
-            const costRate = CONFIG.costRate || 0.12;
 
             // Update if value is valid (not null/undefined)
             if (serverMetrics.prompt_tokens_total != null) {
@@ -1726,49 +1713,45 @@
             } else {
                 document.getElementById('session-cost').textContent = '-';
             }
+        }
 
-            // Update Key Metrics: today's energy
-            const todayEnergyEl = document.getElementById('today-energy');
-            if (todayEnergyEl) {
-                const todayEnergy = energy.today_wh ?? null;
-                if (todayEnergy != null && todayEnergy >= 0) {
-                    todayEnergyEl.textContent = todayEnergy.toFixed(1) + ' Wh';
-                } else {
-                    todayEnergyEl.textContent = '-';
-                }
-            }
+        // Update the 4 configurable top-bar slots.
+        async function updateSlots() {
+            const configs = CONFIG.slotConfigs || {};
+            for (let slot = 1; slot <= 4; slot++) {
+                const cfg = configs['slot_' + slot] || {
+                    timeframe: 'today',
+                    unit: 'cost',
+                    categories: ['direct', 'baseline', 'other', 'unattributed']
+                };
+                const titleEl = document.getElementById('slot-' + slot + '-title');
+                const valueEl = document.getElementById('slot-' + slot + '-value');
+                if (!titleEl || !valueEl) continue;
 
-            // Update Key Metrics: total cost (lifetime)
-            const totalCostEl = document.getElementById('total-cost');
-            if (totalCostEl) {
-                const totalCost = cost.session_cost_usd ?? null;
-                if (totalCost != null && totalCost >= 0) {
-                    totalCostEl.textContent = '$' + totalCost.toFixed(2);
-                } else {
-                    totalCostEl.textContent = '-';
-                }
-            }
+                try {
+                    const params = new URLSearchParams({
+                        timeframe: cfg.timeframe,
+                        unit: cfg.unit,
+                        categories: (cfg.categories || []).join(',')
+                    });
+                    const res = await fetch('/api/metrics/slot?' + params.toString());
+                    if (!res.ok) throw new Error('slot fetch failed');
+                    const data = await res.json();
 
-            // Update Key Metrics: total energy (lifetime)
-            const totalEnergyKmEl = document.getElementById('total-energy-km');
-            if (totalEnergyKmEl) {
-                const totalEnergy = energy.total_wh ?? null;
-                if (totalEnergy != null && totalEnergy >= 0) {
-                    totalEnergyKmEl.textContent = totalEnergy.toFixed(1) + ' Wh';
-                } else {
-                    totalEnergyKmEl.textContent = '-';
-                }
-            }
-
-            // Update Key Metrics: today's cost from energy * rate / 1000
-            const todayCostEl = document.getElementById('today-cost');
-            if (todayCostEl) {
-                const todayEnergy = energy.today_wh ?? null;
-                if (todayEnergy != null && todayEnergy >= 0) {
-                    const todayCost = (todayEnergy * costRate / 1000).toFixed(2);
-                    todayCostEl.textContent = '$' + todayCost;
-                } else {
-                    todayCostEl.textContent = '-';
+                    titleEl.textContent = data.title || (cfg.timeframe + ' ' + cfg.unit);
+                    const wh = data.wh ?? null;
+                    if (wh != null && wh >= 0) {
+                        if (cfg.unit === 'energy') {
+                            valueEl.textContent = wh.toFixed(1) + ' Wh';
+                        } else {
+                            valueEl.textContent = '$' + data.usd.toFixed(2);
+                        }
+                    } else {
+                        valueEl.textContent = '-';
+                    }
+                } catch (e) {
+                    titleEl.textContent = 'Error';
+                    valueEl.textContent = '-';
                 }
             }
         }

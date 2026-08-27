@@ -427,6 +427,50 @@ test_tokens_gauge_source.py:def test_gates_on_activity_for_idle_decay():  # Rate
 test_tokens_gauge_source.py:def test_still_appends_data_for_smooth_decay():  # The graph must still always append data so idle decays smoothly to 0.
 test_tokens_idle_reset.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_tokens_idle_reset.py:def test_tokens_graph_no_reset_on_idle():  # Verify Tokens/Sec graph does NOT reset to [0] on idle — appends zeros instead.
+test_top_bar_slots.py:class CumulativeEnergyAttributionTest(unittest.TestCase):  # cumulative_energy attribution columns persist and reload.
+test_top_bar_slots.py:    def setUp(self):
+test_top_bar_slots.py:    def tearDown(self):
+test_top_bar_slots.py:    def test_update_cumulative_energy_persists_attribution(self):
+test_top_bar_slots.py:    def test_attribution_defaults_to_zero(self):
+test_top_bar_slots.py:class LifetimeAccumulatorTest(unittest.TestCase):  # Lifetime per-category accumulators persist across restart.
+test_top_bar_slots.py:    def setUp(self):
+test_top_bar_slots.py:    def tearDown(self):
+test_top_bar_slots.py:    def _blame_prims(self):
+test_top_bar_slots.py:    def test_lifetime_counters_accumulate(self):
+test_top_bar_slots.py:    def test_restart_restores_lifetime_attribution(self):
+test_top_bar_slots.py:    def test_clear_session_resets_lifetime(self):
+test_top_bar_slots.py:class ResolveRangeTest(unittest.TestCase):  # _resolve_range week/month boundaries (Sunday week start, 1st-of-month).
+test_top_bar_slots.py:    def _resolve(self, timeframe, y, m, d):
+test_top_bar_slots.py:    def test_this_week_sunday_start(self):
+test_top_bar_slots.py:    def test_this_week_on_sunday(self):
+test_top_bar_slots.py:    def test_this_week_when_monday(self):
+test_top_bar_slots.py:    def test_last_week_sunday_to_saturday(self):
+test_top_bar_slots.py:    def test_this_month_starts_first(self):
+test_top_bar_slots.py:    def test_last_month(self):
+test_top_bar_slots.py:    def test_yesterday(self):
+test_top_bar_slots.py:    def test_rolling_7(self):
+test_top_bar_slots.py:    def test_rolling_30(self):
+test_top_bar_slots.py:    def test_all_time_none(self):
+test_top_bar_slots.py:class RangeEnergyTest(unittest.TestCase):  # get_range_energy is strict/inclusive on both boundaries.
+test_top_bar_slots.py:    def setUp(self):
+test_top_bar_slots.py:    def tearDown(self):
+test_top_bar_slots.py:    def test_range_inclusive_boundaries(self):
+test_top_bar_slots.py:    def test_range_single_day(self):
+test_top_bar_slots.py:    def test_range_empty_when_no_overlap(self):
+test_top_bar_slots.py:    def test_slot_wh_sum_selects_categories(self):
+test_top_bar_slots.py:class SlotEndpointTest(unittest.TestCase):  # /api/metrics/slot returns wh/usd/title.
+test_top_bar_slots.py:    def setUp(self):
+test_top_bar_slots.py:    def tearDown(self):
+test_top_bar_slots.py:    def test_slot_today_energy(self):
+test_top_bar_slots.py:    def test_slot_today_cost(self):
+test_top_bar_slots.py:    def test_slot_all_time(self):
+test_top_bar_slots.py:    def test_slot_subset_categories(self):
+test_top_bar_slots.py:class SlotSettingsTest(unittest.TestCase):  # Slot settings save/reset via /api/settings.
+test_top_bar_slots.py:    def setUp(self):
+test_top_bar_slots.py:    def tearDown(self):
+test_top_bar_slots.py:    def test_get_settings_returns_slot_defaults(self):
+test_top_bar_slots.py:    def test_set_settings_updates_slots(self):
+test_top_bar_slots.py:    def test_reset_settings_restores_slot_defaults(self):
 test_total_cost_label.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_total_cost_label.py:def test_total_cost_label():  # Verify Total Cost label is present above the monthly total.
 test_tui_chart_colors.py:TUI_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tui.py")

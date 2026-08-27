@@ -66,6 +66,7 @@ db.py:    def update_cumulative_energy(
 db.py:    def get_cumulative_energy(self) -> Optional[Dict[str, Any]]:  # Get current cumulative energy values.
 db.py:    def get_today_energy(self) -> Optional[Dict[str, Any]]:  # Get today's energy consumption from midnight.
 db.py:    def get_monthly_energy(self, days: int = 30) -> List[Dict[str, Any]]:  # Get energy consumption for the last N days.
+db.py:    def get_range_energy(self, start: str, end: str) -> List[Dict[str, Any]]:  # Get daily energy records between two dates (inclusive).
 db.py:    def update_today_energy(
 db.py:    def update_today_energy_archived(
 db.py:    def get_server_metrics(
@@ -215,6 +216,18 @@ web_server.py:def api_stop_server():  # Stop the web server gracefully.
 web_server.py:def api_restart_server():  # Restart the web server by spawning a new process and shutting down the current one.
 web_server.py:        def restart_server():
 web_server.py:def get_db():  # Get the shared database instance for settings access.
+web_server.py:SLOT_TIMEFRAMES = [
+web_server.py:SLOT_UNITS = ["cost", "energy"]
+web_server.py:SLOT_CATEGORIES = ["direct", "baseline", "other", "unattributed"]
+web_server.py:SLOT_DEFAULTS = {
+web_server.py:TIMEFRAME_LABELS = {
+web_server.py:CATEGORY_LABELS = {
+web_server.py:def _slot_config(db, slot: int) -> Dict[str, Any]:  # Load a slot's config from the DB, falling back to defaults.
+web_server.py:def _slot_title(config: Dict[str, Any]) -> str:  # Build a dynamic title for a slot from its config.
+web_server.py:def _resolve_range(timeframe: str, now: datetime = None) -> Optional[tuple]:  # Resolve a timeframe to an inclusive (start_date, end_date) tuple.
+web_server.py:def _sum_categories(row: Dict[str, Any], categories: List[str]) -> float:  # Sum the selected attribution categories from a daily/cumulative row.
+web_server.py:def _slot_wh(db, config: Dict[str, Any]) -> float:  # Compute the energy (Wh) a slot should display for its config.
+web_server.py:def api_metrics_slot():  # Return metrics for a configurable top-bar slot.
 web_server.py:def settings_page():  # Serve the settings page HTML.
 web_server.py:def cost_comparison_page():  # Serve the cost comparison page HTML.
 web_server.py:def api_get_settings():  # Get all settings from the database.

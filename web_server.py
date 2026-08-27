@@ -189,12 +189,22 @@ def index() -> str:
         except (ValueError, TypeError):
             refresh_rate = 1
 
+    # Load configurable top-bar slot configs (from DB settings, with defaults).
+    slot_configs = {}
+    if db:
+        for slot in range(1, 5):
+            slot_configs[f"slot_{slot}"] = _slot_config(db, slot)
+    else:
+        for slot in range(1, 5):
+            slot_configs[f"slot_{slot}"] = dict(SLOT_DEFAULTS[f"slot_{slot}"])
+
     return render_template(
         "index.html",
         server_url=config.get("server.url", f"http://localhost:{port}"),
         cost_rate=cost_rate,
         refresh_rate=refresh_rate,
-        show_cost=show_cost
+        show_cost=show_cost,
+        slot_configs=slot_configs
     )
 
 
@@ -651,6 +661,313 @@ def get_db():
     return _get_db(db_path)
 
 
+# ---------------------------------------------------------------------------
+# Configurable top-bar metric slots (bead llama-monitor-fcgq, per m6p design)
+# ---------------------------------------------------------------------------
+
+# Timeframe identifiers supported by a slot.
+SLOT_TIMEFRAMES = [
+    "today", "yesterday", "this_week", "last_week", "this_month",
+    "last_month", "all_time", "rolling_7", "rolling_30",
+]
+
+# Unit identifiers: cost (USD) vs energy (Wh).
+SLOT_UNITS = ["cost", "energy"]
+
+# Attribution category identifiers (the 4 checkboxes). There is NO "total"
+# category — lifetime is expressed via the "all_time" timeframe.
+SLOT_CATEGORIES = ["direct", "baseline", "other", "unattributed"]
+
+# Default per-slot config (preserve current dashboard behavior):
+#   Slot 1: Today / Cost / all 4 categories -> "Today's Cost"
+#   Slot 2: Today / Energy / all 4 categories -> "Today's Energy"
+#   Slot 3: All-time / Cost / all 4 categories -> "Total Cost"
+#   Slot 4: All-time / Energy / all 4 categories -> "Total Energy"
+SLOT_DEFAULTS = {
+    "slot_1": {"timeframe": "today", "unit": "cost", "categories": ["direct", "baseline", "other", "unattributed"]},
+    "slot_2": {"timeframe": "today", "unit": "energy", "categories": ["direct", "baseline", "other", "unattributed"]},
+    "slot_3": {"timeframe": "all_time", "unit": "cost", "categories": ["direct", "baseline", "other", "unattributed"]},
+    "slot_4": {"timeframe": "all_time", "unit": "energy", "categories": ["direct", "baseline", "other", "unattributed"]},
+}
+
+# Human-readable label for each timeframe (used for dynamic slot titles).
+TIMEFRAME_LABELS = {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "this_week": "This Week",
+    "last_week": "Last Week",
+    "this_month": "This Month",
+    "last_month": "Last Month",
+    "all_time": "Total",
+    "rolling_7": "Last 7 Days",
+    "rolling_30": "Last 30 Days",
+}
+
+# Human-readable label for each category (used for dynamic slot titles).
+CATEGORY_LABELS = {
+    "direct": "Direct",
+    "baseline": "Baseline",
+    "other": "Other Apps",
+    "unattributed": "Unattributed",
+}
+
+
+def _slot_config(db, slot: int) -> Dict[str, Any]:
+    """Load a slot's config from the DB, falling back to defaults.
+
+    Args:
+        db: Database instance (or None).
+        slot: Slot index 1-4.
+
+    Returns:
+        Dict with 'timeframe', 'unit', 'categories' (list).
+    """
+    key = f"slot_{slot}"
+    default = SLOT_DEFAULTS[key]
+    if db is None:
+        return dict(default)
+
+    timeframe = db.get_setting(f"{key}_timeframe", default["timeframe"])
+    unit = db.get_setting(f"{key}_unit", default["unit"])
+    categories_raw = db.get_setting(f"{key}_categories", ",".join(default["categories"]))
+
+    # Validate timeframe/unit against known values; fall back to defaults.
+    if timeframe not in SLOT_TIMEFRAMES:
+        timeframe = default["timeframe"]
+    if unit not in SLOT_UNITS:
+        unit = default["unit"]
+
+    # Parse categories (comma-separated), filtering to known categories.
+    categories = [c for c in categories_raw.split(",") if c in SLOT_CATEGORIES]
+    if not categories:
+        categories = list(default["categories"])
+
+    return {"timeframe": timeframe, "unit": unit, "categories": categories}
+
+
+def _slot_title(config: Dict[str, Any]) -> str:
+    """Build a dynamic title for a slot from its config.
+
+    Title = timeframe + unit (+ category when subset). Matches the current
+    dashboard labels for defaults (Today's Cost, Total Cost) and the m6p
+    examples (Last Month's Cost, Today's Direct Cost, Last 7 Days Cost).
+    """
+    timeframe = config["timeframe"]
+    unit = config["unit"]
+    categories = config["categories"]
+
+    # Possessive form for day/week/month timeframes ("Today's", "Last Month's").
+    possessive = {
+        "today": "Today's",
+        "yesterday": "Yesterday's",
+        "this_week": "This Week's",
+        "last_week": "Last Week's",
+        "this_month": "This Month's",
+        "last_month": "Last Month's",
+    }
+    plain = {
+        "all_time": "Total",
+        "rolling_7": "Last 7 Days",
+        "rolling_30": "Last 30 Days",
+    }
+    all_selected = len(categories) == len(SLOT_CATEGORIES)
+    unit_label = "Cost" if unit == "cost" else "Energy"
+
+    if timeframe in possessive:
+        base = f"{possessive[timeframe]} {unit_label}"
+        if not all_selected:
+            cat_labels = [CATEGORY_LABELS.get(c, c) for c in categories]
+            cat_str = " + ".join(cat_labels) if cat_labels else "Nothing"
+            base = f"{possessive[timeframe]} {cat_str} {unit_label}"
+        return base
+
+    if timeframe in plain:
+        base = f"{plain[timeframe]} {unit_label}"
+        if not all_selected:
+            cat_labels = [CATEGORY_LABELS.get(c, c) for c in categories]
+            cat_str = " + ".join(cat_labels) if cat_labels else "Nothing"
+            base = f"{plain[timeframe]} {cat_str} {unit_label}"
+        return base
+
+    # Fallback for unknown timeframe.
+    timeframe_label = TIMEFRAME_LABELS.get(timeframe, timeframe)
+    return f"{timeframe_label} {unit_label}"
+
+
+def _resolve_range(timeframe: str, now: datetime = None) -> Optional[tuple]:
+    """Resolve a timeframe to an inclusive (start_date, end_date) tuple.
+
+    Dates are 'YYYY-MM-DD' strings. Returns None for all_time (handled via
+    cumulative energy). Week starts Sunday; month starts on the 1st; rolling
+    windows are strict last-N-days ending today.
+
+    Args:
+        timeframe: One of SLOT_TIMEFRAMES.
+        now: Reference datetime (defaults to now).
+
+    Returns:
+        (start_date, end_date) as 'YYYY-MM-DD', or None if all_time.
+    """
+    now = now or datetime.now()
+    today = now.date()
+
+    if timeframe == "all_time":
+        return None
+
+    if timeframe == "today":
+        return (today.isoformat(), today.isoformat())
+
+    if timeframe == "yesterday":
+        y = today - timedelta(days=1)
+        return (y.isoformat(), y.isoformat())
+
+    if timeframe == "this_week":
+        # Week starts Sunday. Python: Monday=0 ... Sunday=6.
+        days_since_sunday = (today.weekday() + 1) % 7
+        start = today - timedelta(days=days_since_sunday)
+        return (start.isoformat(), today.isoformat())
+
+    if timeframe == "last_week":
+        days_since_sunday = (today.weekday() + 1) % 7
+        this_week_start = today - timedelta(days=days_since_sunday)
+        start = this_week_start - timedelta(days=7)
+        end = this_week_start - timedelta(days=1)
+        return (start.isoformat(), end.isoformat())
+
+    if timeframe == "this_month":
+        start = today.replace(day=1)
+        return (start.isoformat(), today.isoformat())
+
+    if timeframe == "last_month":
+        first_this = today.replace(day=1)
+        last_day_prev = first_this - timedelta(days=1)
+        start = last_day_prev.replace(day=1)
+        return (start.isoformat(), last_day_prev.isoformat())
+
+    if timeframe == "rolling_7":
+        start = today - timedelta(days=6)
+        return (start.isoformat(), today.isoformat())
+
+    if timeframe == "rolling_30":
+        start = today - timedelta(days=29)
+        return (start.isoformat(), today.isoformat())
+
+    return None
+
+
+def _sum_categories(row: Dict[str, Any], categories: List[str]) -> float:
+    """Sum the selected attribution categories from a daily/cumulative row."""
+    total = 0.0
+    for cat in categories:
+        col = {
+            "direct": "direct_wh",
+            "baseline": "baseline_wh",
+            "other": "other_wh",
+            "unattributed": "unattributed_wh",
+        }.get(cat)
+        if col:
+            total += row.get(col, 0.0) or 0.0
+    return total
+
+
+def _slot_wh(db, config: Dict[str, Any]) -> float:
+    """Compute the energy (Wh) a slot should display for its config.
+
+    Args:
+        db: Database instance.
+        config: Slot config dict.
+
+    Returns:
+        Energy in watt-hours (0 if no data).
+    """
+    timeframe = config["timeframe"]
+    categories = config["categories"]
+    if db is None:
+        return 0.0
+
+    if timeframe == "today":
+        # Prefer the live metrics cache (matches dashboard live data), then
+        # fall back to get_today_energy().
+        if _metrics_cache is not None:
+            try:
+                cached = _metrics_cache.get()
+                if cached and cached.get("cost"):
+                    cost = cached["cost"]
+                    row = {
+                        "direct_wh": cost.get("today_direct_wh", 0) or 0,
+                        "baseline_wh": cost.get("today_baseline_wh", 0) or 0,
+                        "other_wh": cost.get("today_other_wh", 0) or 0,
+                        "unattributed_wh": cost.get("today_unattributed_wh", 0) or 0,
+                    }
+                    return _sum_categories(row, categories)
+            except Exception:
+                pass
+        today = db.get_today_energy()
+        if today:
+            return _sum_categories(today, categories)
+        return 0.0
+
+    if timeframe == "all_time":
+        cumulative = db.get_cumulative_energy()
+        if cumulative:
+            return _sum_categories(cumulative, categories)
+        return 0.0
+
+    # Range-based timeframes.
+    rng = _resolve_range(timeframe)
+    if not rng:
+        return 0.0
+    start, end = rng
+    rows = db.get_range_energy(start, end)
+    total = 0.0
+    for row in rows:
+        total += _sum_categories(row, categories)
+    return total
+
+
+@app.route("/api/metrics/slot")
+def api_metrics_slot():
+    """Return metrics for a configurable top-bar slot.
+
+    Query params:
+        timeframe: one of SLOT_TIMEFRAMES
+        categories: comma-separated category ids (subset of SLOT_CATEGORIES)
+        unit: 'cost' or 'energy'
+
+    Returns:
+        JSON {wh, usd, title}.
+    """
+    config = get_config()
+    db_path = config.get("database.path", "llama-monitor.db")
+    db = _get_db(db_path)
+
+    timeframe = request.args.get("timeframe", "today")
+    categories_raw = request.args.get("categories", ",".join(SLOT_CATEGORIES))
+    unit = request.args.get("unit", "cost")
+
+    categories = [c for c in categories_raw.split(",") if c in SLOT_CATEGORIES]
+    slot_config = {
+        "timeframe": timeframe,
+        "unit": unit,
+        "categories": categories,
+    }
+
+    wh = _slot_wh(db, slot_config)
+    cost_rate = db.get_cost_rate()
+    usd = (wh / 1000.0) * cost_rate
+
+    title = _slot_title(slot_config)
+
+    return jsonify({
+        "timeframe": timeframe,
+        "unit": unit,
+        "categories": categories,
+        "wh": wh,
+        "usd": usd,
+        "title": title,
+    })
+
+
 @app.route("/settings")
 def settings_page():
     """Serve the settings page HTML."""
@@ -949,6 +1266,145 @@ def settings_page():
             </div>
 
             <div class="settings-section">
+                <h2 class="section-title">Top Bar Slots</h2>
+                <p style="margin-bottom: 15px; color: #888; font-size: 0.85rem;">
+                    Configure the four metric slots in the top bar. Each slot shows a timeframe, a unit (cost or energy), and a selection of attribution categories.
+                </p>
+
+                <!-- Slot 1 -->
+                <div class="form-group">
+                    <label>Slot 1</label>
+                    <select id="slot_1_timeframe" name="slot_1_timeframe">
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="this_week">This Week</option>
+                        <option value="last_week">Last Week</option>
+                        <option value="this_month">This Month</option>
+                        <option value="last_month">Last Month</option>
+                        <option value="all_time">All-time</option>
+                        <option value="rolling_7">Last 7 Days</option>
+                        <option value="rolling_30">Last 30 Days</option>
+                    </select>
+                    <select id="slot_1_unit" name="slot_1_unit">
+                        <option value="cost">Cost</option>
+                        <option value="energy">Energy</option>
+                    </select>
+                    <div class="checkbox-group" id="slot_1_categories">
+                        <label style="width: 100%; margin-top: 8px;">Categories:</label>
+                        <div class="checkbox-group" style="margin-top: 4px;">
+                            <input type="checkbox" data-slot="1" data-cat="direct" value="direct" id="slot_1_cat_direct">
+                            <label for="slot_1_cat_direct">Direct</label>
+                            <input type="checkbox" data-slot="1" data-cat="baseline" value="baseline" id="slot_1_cat_baseline">
+                            <label for="slot_1_cat_baseline">Baseline</label>
+                            <input type="checkbox" data-slot="1" data-cat="other" value="other" id="slot_1_cat_other">
+                            <label for="slot_1_cat_other">Other Apps</label>
+                            <input type="checkbox" data-slot="1" data-cat="unattributed" value="unattributed" id="slot_1_cat_unattributed">
+                            <label for="slot_1_cat_unattributed">Unattributed</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slot 2 -->
+                <div class="form-group">
+                    <label>Slot 2</label>
+                    <select id="slot_2_timeframe" name="slot_2_timeframe">
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="this_week">This Week</option>
+                        <option value="last_week">Last Week</option>
+                        <option value="this_month">This Month</option>
+                        <option value="last_month">Last Month</option>
+                        <option value="all_time">All-time</option>
+                        <option value="rolling_7">Last 7 Days</option>
+                        <option value="rolling_30">Last 30 Days</option>
+                    </select>
+                    <select id="slot_2_unit" name="slot_2_unit">
+                        <option value="cost">Cost</option>
+                        <option value="energy">Energy</option>
+                    </select>
+                    <div class="checkbox-group" id="slot_2_categories">
+                        <label style="width: 100%; margin-top: 8px;">Categories:</label>
+                        <div class="checkbox-group" style="margin-top: 4px;">
+                            <input type="checkbox" data-slot="2" data-cat="direct" value="direct" id="slot_2_cat_direct">
+                            <label for="slot_2_cat_direct">Direct</label>
+                            <input type="checkbox" data-slot="2" data-cat="baseline" value="baseline" id="slot_2_cat_baseline">
+                            <label for="slot_2_cat_baseline">Baseline</label>
+                            <input type="checkbox" data-slot="2" data-cat="other" value="other" id="slot_2_cat_other">
+                            <label for="slot_2_cat_other">Other Apps</label>
+                            <input type="checkbox" data-slot="2" data-cat="unattributed" value="unattributed" id="slot_2_cat_unattributed">
+                            <label for="slot_2_cat_unattributed">Unattributed</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slot 3 -->
+                <div class="form-group">
+                    <label>Slot 3</label>
+                    <select id="slot_3_timeframe" name="slot_3_timeframe">
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="this_week">This Week</option>
+                        <option value="last_week">Last Week</option>
+                        <option value="this_month">This Month</option>
+                        <option value="last_month">Last Month</option>
+                        <option value="all_time">All-time</option>
+                        <option value="rolling_7">Last 7 Days</option>
+                        <option value="rolling_30">Last 30 Days</option>
+                    </select>
+                    <select id="slot_3_unit" name="slot_3_unit">
+                        <option value="cost">Cost</option>
+                        <option value="energy">Energy</option>
+                    </select>
+                    <div class="checkbox-group" id="slot_3_categories">
+                        <label style="width: 100%; margin-top: 8px;">Categories:</label>
+                        <div class="checkbox-group" style="margin-top: 4px;">
+                            <input type="checkbox" data-slot="3" data-cat="direct" value="direct" id="slot_3_cat_direct">
+                            <label for="slot_3_cat_direct">Direct</label>
+                            <input type="checkbox" data-slot="3" data-cat="baseline" value="baseline" id="slot_3_cat_baseline">
+                            <label for="slot_3_cat_baseline">Baseline</label>
+                            <input type="checkbox" data-slot="3" data-cat="other" value="other" id="slot_3_cat_other">
+                            <label for="slot_3_cat_other">Other Apps</label>
+                            <input type="checkbox" data-slot="3" data-cat="unattributed" value="unattributed" id="slot_3_cat_unattributed">
+                            <label for="slot_3_cat_unattributed">Unattributed</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slot 4 -->
+                <div class="form-group">
+                    <label>Slot 4</label>
+                    <select id="slot_4_timeframe" name="slot_4_timeframe">
+                        <option value="today">Today</option>
+                        <option value="yesterday">Yesterday</option>
+                        <option value="this_week">This Week</option>
+                        <option value="last_week">Last Week</option>
+                        <option value="this_month">This Month</option>
+                        <option value="last_month">Last Month</option>
+                        <option value="all_time">All-time</option>
+                        <option value="rolling_7">Last 7 Days</option>
+                        <option value="rolling_30">Last 30 Days</option>
+                    </select>
+                    <select id="slot_4_unit" name="slot_4_unit">
+                        <option value="cost">Cost</option>
+                        <option value="energy">Energy</option>
+                    </select>
+                    <div class="checkbox-group" id="slot_4_categories">
+                        <label style="width: 100%; margin-top: 8px;">Categories:</label>
+                        <div class="checkbox-group" style="margin-top: 4px;">
+                            <input type="checkbox" data-slot="4" data-cat="direct" value="direct" id="slot_4_cat_direct">
+                            <label for="slot_4_cat_direct">Direct</label>
+                            <input type="checkbox" data-slot="4" data-cat="baseline" value="baseline" id="slot_4_cat_baseline">
+                            <label for="slot_4_cat_baseline">Baseline</label>
+                            <input type="checkbox" data-slot="4" data-cat="other" value="other" id="slot_4_cat_other">
+                            <label for="slot_4_cat_other">Other Apps</label>
+                            <input type="checkbox" data-slot="4" data-cat="unattributed" value="unattributed" id="slot_4_cat_unattributed">
+                            <label for="slot_4_cat_unattributed">Unattributed</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-section">
                 <h2 class="section-title">Current Values</h2>
                 <div id="current-values" style="font-size: 0.85rem; color: #888;">
                     <!-- Values will be populated by JavaScript -->
@@ -1012,6 +1468,25 @@ def settings_page():
                 document.getElementById('cost_show_other_apps').checked = settings.cost_show_other_apps === true;
                 document.getElementById('cost_show_unattributed').checked = settings.cost_show_unattributed === true;
 
+                // Populate top-bar slot configs
+                for (let slot = 1; slot <= 4; slot++) {
+                    const key = 'slot_' + slot;
+                    const timeframe = settings[key + '_timeframe'] || 'today';
+                    const unit = settings[key + '_unit'] || 'cost';
+                    const categoriesRaw = settings[key + '_categories'] || 'direct,baseline,other,unattributed';
+                    const categories = categoriesRaw.split(',');
+
+                    const timeframeEl = document.getElementById(key + '_timeframe');
+                    const unitEl = document.getElementById(key + '_unit');
+                    if (timeframeEl) timeframeEl.value = timeframe;
+                    if (unitEl) unitEl.value = unit;
+
+                    for (const cat of ['direct', 'baseline', 'other', 'unattributed']) {
+                        const cb = document.getElementById(key + '_cat_' + cat);
+                        if (cb) cb.checked = categories.includes(cat);
+                    }
+                }
+
                 // Display current values
                 document.getElementById('current-values').innerHTML = `
                     <div><strong>Refresh Rate:</strong> <span class="value-display">${settings.web_refresh_rate || 1}s</span></div>
@@ -1039,6 +1514,23 @@ def settings_page():
                 cost_show_other_apps: document.getElementById('cost_show_other_apps').checked,
                 cost_show_unattributed: document.getElementById('cost_show_unattributed').checked
             };
+
+            // Collect top-bar slot configs
+            for (let slot = 1; slot <= 4; slot++) {
+                const key = 'slot_' + slot;
+                settings[key + '_timeframe'] = document.getElementById(key + '_timeframe').value;
+                settings[key + '_unit'] = document.getElementById(key + '_unit').value;
+                const cats = [];
+                for (const cat of ['direct', 'baseline', 'other', 'unattributed']) {
+                    const cb = document.getElementById(key + '_cat_' + cat);
+                    if (cb && cb.checked) cats.push(cat);
+                }
+                // All categories unchecked -> save all categories so the slot
+                // never silently falls back to defaults while the form shows
+                // everything unchecked (keeps form and slot display in sync).
+                settings[key + '_categories'] =
+                    cats.length > 0 ? cats : ['direct', 'baseline', 'other', 'unattributed'];
+            }
 
             try {
                 const response = await fetch('/api/settings', {
@@ -1551,6 +2043,18 @@ def api_get_settings():
         "cost_show_unattributed": db.get_setting("cost_show_unattributed", "false"),
     }
 
+    # Add configurable top-bar slot settings (slot_1..slot_4).
+    for slot in range(1, 5):
+        key = f"slot_{slot}"
+        default = SLOT_DEFAULTS[key]
+        settings[f"{key}_timeframe"] = db.get_setting(
+            f"{key}_timeframe", default["timeframe"]
+        )
+        settings[f"{key}_unit"] = db.get_setting(f"{key}_unit", default["unit"])
+        settings[f"{key}_categories"] = db.get_setting(
+            f"{key}_categories", ",".join(default["categories"])
+        )
+
     # Convert to appropriate types
     try:
         settings["web_refresh_rate"] = int(settings["web_refresh_rate"])
@@ -1623,6 +2127,24 @@ def api_set_settings():
             if key in data:
                 db.set_setting(key, "true" if data[key] else "false")
 
+        # Configurable top-bar slot settings.
+        for slot in range(1, 5):
+            key = f"slot_{slot}"
+            timeframe_key = f"{key}_timeframe"
+            unit_key = f"{key}_unit"
+            categories_key = f"{key}_categories"
+
+            if timeframe_key in data:
+                db.set_setting(timeframe_key, str(data[timeframe_key]))
+            if unit_key in data:
+                db.set_setting(unit_key, str(data[unit_key]))
+            if categories_key in data:
+                cats = data[categories_key]
+                if isinstance(cats, list):
+                    db.set_setting(categories_key, ",".join(cats))
+                else:
+                    db.set_setting(categories_key, str(cats))
+
         return jsonify({"success": True, "message": "Settings saved"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1672,6 +2194,22 @@ def api_reset_settings():
             "INSERT INTO settings (key, value) VALUES (?, ?)",
             ("cost_show_unattributed", "false")
         )
+        # Configurable top-bar slot defaults.
+        for slot in range(1, 5):
+            key = f"slot_{slot}"
+            default = SLOT_DEFAULTS[key]
+            db.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?)",
+                (f"{key}_timeframe", default["timeframe"]),
+            )
+            db.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?)",
+                (f"{key}_unit", default["unit"]),
+            )
+            db.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?)",
+                (f"{key}_categories", ",".join(default["categories"])),
+            )
 
         return jsonify({"success": True, "message": "Settings reset to defaults"})
     except Exception as e:
