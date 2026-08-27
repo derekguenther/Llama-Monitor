@@ -6,6 +6,7 @@ aggregator.py:    def __init__(
 aggregator.py:    def _safe_float(self, value, default=0.0):  # Convert None or non-numeric values to default.
 aggregator.py:    def collect_all_metrics(self) -> Dict[str, Any]:  # Collect all metrics from all sources.
 aggregator.py:    def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:  # Store raw metrics in the database.
+aggregator.py:    def _compute_blame_primitives(
 aggregator.py:    def compress_if_needed(self) -> None:  # Compress data if needed based on time intervals.
 aggregator.py:    def _vacuum_throttled(self) -> None:  # Run VACUUM to reclaim disk space, but no more than once per hour.
 aggregator.py:    def calculate_cost(self) -> Dict[str, Any]:  # Calculate current session cost.
@@ -13,44 +14,6 @@ aggregator.py:    def calculate_today_cost(self) -> Dict[str, Any]:  # Calculate
 aggregator.py:    def close(self) -> None:  # Clean up resources.
 aggregator.py:    def __enter__(self):  # Context manager enter.
 aggregator.py:    def __exit__(self, exc_type, exc_val, exc_tb):  # Context manager exit.
-aggregator_daemon.py:class Aggregator:  # Main aggregator class that orchestrates metrics collection and storage.
-aggregator_daemon.py:    def __init__(self, config_path: Optional[str] = None):  # Initialize the aggregator.
-aggregator_daemon.py:    def connect(self) -> None:  # Open database connection.
-aggregator_daemon.py:    def close(self) -> None:  # Close database connection and cleanup.
-aggregator_daemon.py:    def collect_all_metrics(self) -> Dict[str, Any]:  # Collect all metrics from all sources.
-aggregator_daemon.py:    def _extract_server_metrics(self, server_data: Dict[str, Any]) -> Dict[str, Any]:  # Extract server metrics from collector data.
-aggregator_daemon.py:        def safe_float(value, default=-1.0):  # Convert None or non-numeric values to default.
-aggregator_daemon.py:    def _extract_system_metrics(self, system_data: Dict[str, Any]) -> Dict[str, Any]:  # Extract system metrics from collector data.
-aggregator_daemon.py:        def safe_float(value, default=-1.0):  # Convert None or non-numeric values to default.
-aggregator_daemon.py:    def _extract_process_gpu_metrics(self, system_data: Dict[str, Any]) -> Dict[str, Any]:  # Extract per-process GPU metrics.
-aggregator_daemon.py:    def _calculate_cost(self, system_metrics: Dict[str, Any]) -> Dict[str, Any]:  # Calculate electricity cost from system metrics.
-aggregator_daemon.py:        def _clamp(value, minimum=0):  # Clamp a numeric value to minimum, handling non-numeric types gracefully.
-aggregator_daemon.py:    def store_raw_metrics(self, metrics: Dict[str, Any]) -> None:  # Store raw metrics in database.
-aggregator_daemon.py:    def check_compression(self) -> None:  # Check if data compression is needed based on retention rules.
-aggregator_daemon.py:    def _compress_to_minute(self) -> None:  # Compress raw data to 1-minute buckets.
-aggregator_daemon.py:    def _compress_to_hour(self) -> None:  # Compress 1-minute data to 1-hour buckets.
-aggregator_daemon.py:    def start(self) -> None:  # Start the aggregation loop.
-aggregator_daemon.py:        def collection_loop():
-aggregator_daemon.py:    def stop(self) -> None:  # Stop the aggregation loop and cleanup.
-aggregator_daemon.py:class MetricsHandler(BaseHTTPRequestHandler):  # HTTP request handler for the aggregator API.
-aggregator_daemon.py:    def log_message(self, format, *args):  # Suppress default logging.
-aggregator_daemon.py:    def send_json_response(self, data: Any, status: int = 200) -> None:  # Send JSON response.
-aggregator_daemon.py:    def do_GET(self) -> None:  # Handle GET requests.
-aggregator_daemon.py:    def _handle_latest_metrics(self) -> None:  # Handle /api/metrics/latest endpoint.
-aggregator_daemon.py:    def _handle_range_metrics(self, query: Dict[str, List[str]]) -> None:  # Handle /api/metrics/range endpoint.
-aggregator_daemon.py:    def _handle_status(self) -> None:  # Handle /api/status endpoint.
-aggregator_daemon.py:    def _handle_shutdown(self) -> None:  # Handle /api/shutdown endpoint.
-aggregator_daemon.py:        def do_shutdown():
-aggregator_daemon.py:    def _handle_restart(self) -> None:  # Handle /api/restart endpoint.
-aggregator_daemon.py:        def do_restart():
-aggregator_daemon.py:class WebSocketHandler:  # WebSocket handler for real-time client updates.
-aggregator_daemon.py:    def __init__(self, aggregator: Aggregator):  # Initialize WebSocket handler.
-aggregator_daemon.py:    def start(self) -> None:  # Start WebSocket server.
-aggregator_daemon.py:        def handle_connect(sid):
-aggregator_daemon.py:        def handle_disconnect(sid):
-aggregator_daemon.py:    def broadcast_metrics(self, metrics: Dict[str, Any]) -> None:  # Broadcast metrics to all connected clients.
-aggregator_daemon.py:def create_app(aggregator: Aggregator) -> HTTPServer:  # Create the HTTP server application.
-aggregator_daemon.py:def main() -> int:  # Main entry point for the aggregator daemon.
 check_db.py:db = Database('llama_monitor.db')
 cli_stats.py:def parse_args():  # Parse command line arguments.
 cli_stats.py:def fetch_metrics(host: str, port: int) -> Optional[Dict[str, Any]]:  # Fetch latest metrics from aggregator daemon.
@@ -85,6 +48,7 @@ db.py:    def execute_query(self, sql: str, params: Optional[tuple] = None) -> O
 db.py:    def execute_all(self, sql: str, params: Optional[tuple] = None) -> list:  # Execute a SELECT query and return all results with the lock.
 db.py:    def _initialize_schema(self) -> None:  # Initialize database schema if not already initialized.
 db.py:    def _migrate_schema(self, cursor: sqlite3.Cursor) -> None:  # Check for and add missing tables (schema migrations).
+db.py:    def _add_column_if_missing(
 db.py:    def _create_server_metrics_tables(self, cursor: sqlite3.Cursor) -> None:  # Create server metrics tables.
 db.py:    def _create_system_metrics_tables(self, cursor: sqlite3.Cursor) -> None:  # Create system metrics tables.
 db.py:    def _create_process_gpu_metrics_tables(self, cursor: sqlite3.Cursor) -> None:  # Create per-process GPU metrics tables.
@@ -136,6 +100,7 @@ electricity_cost.py:    def calculate_power_cost(
 electricity_cost.py:    def calculate_cost(self, energy_wh: float) -> float:  # Calculate cost for energy consumption.
 electricity_cost.py:    def update_power_readings(
 electricity_cost.py:    def persist_today_energy(self) -> None:  # Persist today's energy to database.
+electricity_cost.py:    def compute_blame(
 electricity_cost.py:    def calculate_idle_baseline(
 electricity_cost.py:    def format_cost_display(
 electricity_cost.py:    def get_today_token_stats(self) -> Optional[Dict[str, Any]]:  # Get today's token tracking statistics.
@@ -149,9 +114,9 @@ electricity_cost.py:    def clear_session_energy(self) -> Dict[str, Any]:  # Cle
 idle_baseline.py:class IdleBaselineTracker:  # Track idle baseline power consumption.
 idle_baseline.py:    def __init__(
 idle_baseline.py:    def check_idle(
-idle_baseline.py:    def _store_baseline(self, baseline_w: float) -> None:  # Store baseline reading in database.
-idle_baseline.py:    def get_baseline_average(self) -> Optional[float]:  # Get the average of all stored baseline readings.
-idle_baseline.py:    def get_recent_baseline(self, count: int = 10) -> Optional[float]:  # Get average of most recent baseline readings.
+idle_baseline.py:    def _store_baseline(self, cpu_idle_w: float, gpu_idle_w: float) -> None:  # Store baseline reading in database.
+idle_baseline.py:    def get_baseline_average(self) -> Optional[dict]:  # Get the average of all stored baseline readings.
+idle_baseline.py:    def get_recent_baseline(self, count: int = 10) -> Optional[dict]:  # Get average of most recent baseline readings.
 idle_baseline.py:    def clear_baseline_data(self) -> None:  # Clear all baseline data from the database.
 idle_baseline.py:    def reset(self) -> None:  # Reset tracker state without clearing database.
 lancedb_mcp_server.py:EMBEDDING_MODEL = os.environ.get("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
@@ -231,10 +196,8 @@ tui.py:    def stop(self) -> None:  # Stop the TUI.
 tui.py:def main() -> int:  # Main entry point for the TUI.
 web_server.py:app = Flask(__name__, static_folder='static', static_url_path='/static', template_folder='templates')
 web_server.py:socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
-web_server.py:def get_aggregator() -> Optional[Aggregator]:  # Get aggregator instance if available.
 web_server.py:def get_config() -> Any:  # Get configuration.
 web_server.py:def _get_db(db_path: str) -> "Database":  # Return a shared, thread-safe Database instance for reads.
-web_server.py:def fetch_metrics_from_aggregator() -> Optional[Dict[str, Any]]:  # Fetch latest metrics from aggregator daemon via HTTP API.
 web_server.py:def transform_system_metrics(data: Dict[str, Any]) -> Dict[str, Any]:  # Transform flat system metrics keys to nested structure for frontend.
 web_server.py:    def safe_float(value, default=0):  # Convert None or non-numeric values to default.
 web_server.py:def fetch_metrics_from_database(db_path: str) -> Optional[Dict[str, Any]]:  # Fetch latest metrics from SQLite database.
@@ -247,7 +210,7 @@ web_server.py:def api_range_metrics():  # Return metrics within a time range.
 web_server.py:def api_monthly_cost():  # Return monthly cost data for the last 30 days.
 web_server.py:def api_historical_metrics():  # Return historical metrics for a specified timeframe.
 web_server.py:def api_historical_range():  # Return historical metrics for a custom time range.
-web_server.py:def api_status():  # Return aggregator status.
+web_server.py:def api_status():  # Return aggregator status (standalone; no separate daemon).
 web_server.py:def api_stop_server():  # Stop the web server gracefully.
 web_server.py:def api_restart_server():  # Restart the web server by spawning a new process and shutting down the current one.
 web_server.py:        def restart_server():

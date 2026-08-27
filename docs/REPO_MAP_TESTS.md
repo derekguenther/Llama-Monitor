@@ -10,15 +10,15 @@ test_active_slots_fix.py:    def test_collector_collects_slots(self, mock_get): 
 test_active_slots_fix.py:    def test_parse_slots_list(self, mock_make_request):  # Test parsing slots from list format.
 test_active_slots_fix.py:    def test_parse_slots_none_returns_empty(self, mock_make_request):  # Test that None slots returns empty list.
 test_active_slots_fix.py:        def side_effect(endpoint):
-test_active_slots_fix.py:    def test_aggregator_daemon_slots_extraction(self):  # Test that aggregator daemon correctly extracts slots.
+test_active_slots_fix.py:    def test_aggregator_slots_extraction(self, mock_db, mock_idle, mock_cost_calc, mock_system, mock_server):  # Test that aggregator correctly extracts slots via collect_all_metrics.
 test_active_slots_fix.py:class TestWebServerSlotsUpdate(unittest.TestCase):  # Tests for web server slots display update.
-test_active_slots_fix.py:    def test_html_has_active_slots_element(self):  # Test that the HTML contains the server-active-slots element.
+test_active_slots_fix.py:    def test_html_has_active_slots_element(self):  # Test that the HTML contains the active-slots element.
 test_active_slots_fix.py:    def test_javascript_updates_active_slots(self):  # Test that JavaScript code updates the active slots element.
 test_active_slots_fix.py:    def test_javascript_has_slots_filter_logic(self):  # Test that JavaScript has the slots filtering logic.
 test_active_slots_fix.py:    def test_javascript_has_slots_reduce_logic(self):  # Test that JavaScript has the slots progress reduction logic.
 test_active_slots_fix.py:class TestRequestsProcessingDisplay(unittest.TestCase):  # Tests for Requests Processing display functionality.
-test_active_slots_fix.py:    def test_html_has_server_processing_element(self):  # Test that the HTML contains the server-processing element.
-test_active_slots_fix.py:    def test_javascript_updates_server_processing(self):  # Test that JavaScript code updates the server-processing element.
+test_active_slots_fix.py:    def test_html_has_server_processing_element(self):  # Test that the HTML contains the processing-requests element.
+test_active_slots_fix.py:    def test_javascript_updates_server_processing(self):  # Test that JavaScript code updates the processing-requests element.
 test_aggregator.py:agg = Aggregator(
 test_aggregator_integration.py:class TestAggregatorIntegration(unittest.TestCase):  # Integration tests for Aggregator.
 test_aggregator_integration.py:    def setUp(self):  # Create a temporary database for testing.
@@ -42,6 +42,26 @@ test_api_data_integrity.py:def is_expected_sentinel(path):  # Check if -1 value 
 test_api_data_integrity.py:def main():
 test_bar_labels.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_bar_labels.py:def test_bar_labels_and_k_unit():  # Verify bar labels plugin and k-unit formatting are present.
+test_bp3_backports.py:def _make_system_metrics(cpu_percent=50.0, gpu_usage=80.0, power_w=300.0):  # Build a realistic system_metrics dict for mocks.
+test_bp3_backports.py:class TestIdleTrackingBackport(unittest.TestCase):  # Step 1 (D1): idle-baseline wiring gated on meaningful values.
+test_bp3_backports.py:    def setUp(self):
+test_bp3_backports.py:    def tearDown(self):
+test_bp3_backports.py:    def test_check_idle_called_when_values_meaningful(self, mock_req, mock_idle):  # check_idle is called only when power/cpu/gpu are all > 0.
+test_bp3_backports.py:    def test_check_idle_not_called_when_all_zero(self, mock_req, mock_idle):  # check_idle is NOT called when system values are all 0 (no false baseline).
+test_bp3_backports.py:class TestLastMetricsBackport(unittest.TestCase):  # Step 1a (B1): last_metrics populated by collect_all_metrics.
+test_bp3_backports.py:    def setUp(self):
+test_bp3_backports.py:    def tearDown(self):
+test_bp3_backports.py:    def test_last_metrics_set_on_collect(self, mock_req):  # collect_all_metrics stores its result in last_metrics.
+test_bp3_backports.py:class TestRealDurationBackport(unittest.TestCase):  # Step 2 (D2/G1): real elapsed-duration energy deltas + duration literals.
+test_bp3_backports.py:    def setUp(self):
+test_bp3_backports.py:    def tearDown(self):
+test_bp3_backports.py:    def test_store_uses_real_duration_not_hardcoded(self):  # store_raw_metrics passes elapsed time (not 1.0) to update_power_readings.
+test_bp3_backports.py:class TestCumulativeEnergyBackport(unittest.TestCase):  # Step 3 (D3/G2): cumulative-energy persistence with ISO session_start.
+test_bp3_backports.py:    def setUp(self):
+test_bp3_backports.py:    def tearDown(self):
+test_bp3_backports.py:    def test_store_persists_cumulative_energy(self):  # store_raw_metrics calls update_cumulative_energy with ISO session_start.
+test_bp3_backports.py:class TestApiStatusRework(unittest.TestCase):  # Step 6 (S1 / Finding 1): /api/status returns standalone, never 500.
+test_bp3_backports.py:    def test_api_status_returns_standalone(self):  # api_status returns {'status': 'standalone', 'aggregator_available': False}.
 test_config.py:class TestConfigDefaults(unittest.TestCase):  # Tests for default configuration values.
 test_config.py:    def setUp(self):  # Create a fresh config instance.
 test_config.py:    def test_database_path_default(self):  # Test default database path.
@@ -57,8 +77,8 @@ test_config.py:    def test_set_simple_key(self):  # Test setting a simple key.
 test_config.py:    def test_set_nested_key(self):  # Test setting a nested key with dot notation.
 test_config.py:    def test_set_nested_key_creates_intermediate(self):  # Test that setting a nested key creates intermediate dicts.
 test_config.py:    def test_override_existing_value(self):  # Test overriding an existing value.
-test_config.py:class TestConfigIntegration(unittest.TestCase):  # Integration tests for config with aggregator_daemon.
-test_config.py:    def test_aggregator_config_attributes(self):  # Test that Aggregator can access all required config attributes.
+test_config.py:class TestConfigIntegration(unittest.TestCase):  # Integration tests for config set/get.
+test_config.py:    def test_config_attribute_access(self):  # Test that Config can set and retrieve all required attributes.
 test_configuration_link.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_configuration_link.py:def test_configuration_link():  # Verify a link to /settings exists in the dashboard controls.
 test_context_limit_path.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
@@ -186,6 +206,12 @@ test_db_purge.py:    def test_compress_if_needed_vacuum_throttled(self):  # comp
 test_db_purge.py:    def test_vacuum_reclaims_space(self):  # After purging raw rows, VACUUM should reclaim disk space.
 test_dollar_sign.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_dollar_sign.py:def test_dollar_sign_placement():  # Verify dollar sign is on Monthly Cost chart, not Tokens/s chart.
+test_energy_deltas.py:class PerIntervalDeltaTest(unittest.TestCase):
+test_energy_deltas.py:    def setUp(self):
+test_energy_deltas.py:    def tearDown(self):
+test_energy_deltas.py:    def test_update_power_readings_returns_deltas(self):  # update_power_readings must return per-interval deltas.
+test_energy_deltas.py:    def test_combined_metrics_store_delta_fields(self):  # Each combined_metrics row must store per-interval delta values.
+test_energy_deltas.py:    def test_delta_and_cumulative_both_present(self):  # cost data must include both per-interval deltas and cumulative totals.
 test_filtered_power.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_filtered_power.py:def _read_template():
 test_filtered_power.py:def test_cpu_normalizes_per_core_scale():  # llama's per-process CPU must be normalized by core count.
@@ -220,6 +246,35 @@ test_historical_viewer.py:    def test_get_server_metrics_with_time_range(self):
 test_historical_viewer.py:class TestHistoricalDataJavaScript(unittest.TestCase):  # Tests for historical data JavaScript functionality.
 test_historical_viewer.py:    def test_timeframe_options(self):  # Test that all timeframe options are available.
 test_historical_viewer.py:    def test_historical_chart_datasets(self):  # Test that historical charts have correct datasets.
+test_hybrid_cost_model.py:def _blame(gpu_power_w, cpu_power_w, primitives):
+test_hybrid_cost_model.py:class BlameInvariantTest(unittest.TestCase):  # Tests 1, 2, 3, 11: blame categories sum to totalPower.
+test_hybrid_cost_model.py:    def sum_matches(self, gpu_w, cpu_w, primitives):
+test_hybrid_cost_model.py:    def test_invariant_representative(self):
+test_hybrid_cost_model.py:    def test_netflix_llama_idle_gets_baseline_only(self):
+test_hybrid_cost_model.py:    def test_both_active_splits_delta(self):
+test_hybrid_cost_model.py:    def test_power_below_baseline_clamped(self):
+test_hybrid_cost_model.py:    def test_llama_not_running_all_unattributed(self):
+test_hybrid_cost_model.py:    def test_no_primitives_backward_compat(self):
+test_hybrid_cost_model.py:class ElectricityCostWritePathTest(unittest.TestCase):  # Tests 12, 14, 15, 16, 17: write-path blame + row invariant.
+test_hybrid_cost_model.py:    def setUp(self):
+test_hybrid_cost_model.py:    def tearDown(self):
+test_hybrid_cost_model.py:    def row_blame(self):
+test_hybrid_cost_model.py:    def test_blame_columns_accumulate(self):
+test_hybrid_cost_model.py:    def test_row_invariant_holds(self):
+test_hybrid_cost_model.py:    def test_clear_session_preserves_invariant(self):
+test_hybrid_cost_model.py:    def test_restart_recovery_restores_blame(self):
+test_hybrid_cost_model.py:    def test_start_session_preserves_blame(self):
+test_hybrid_cost_model.py:    def test_midnight_rollover_archives_blame(self):
+test_hybrid_cost_model.py:class MigrationTest(unittest.TestCase):  # Tests 7, 18: column migration + backfill.
+test_hybrid_cost_model.py:    def _build_legacy_db(self, tmpdir):  # Create a legacy DB (schema_version present, no blame columns).
+test_hybrid_cost_model.py:    def test_columns_added_and_backfill(self):
+test_hybrid_cost_model.py:    def test_idle_baseline_columns_added(self):
+test_hybrid_cost_model.py:class AggregatorPrimitivesTest(unittest.TestCase):  # Tests 9, 10: gate fires on true idle; llama_running via process union.
+test_hybrid_cost_model.py:    def setUp(self):
+test_hybrid_cost_model.py:    def tearDown(self):
+test_hybrid_cost_model.py:    def _make_system_metrics(self, cpu_percent=0.0, gpu_usage=0.0,
+test_hybrid_cost_model.py:    def test_gate_fires_on_true_idle(self, mock_req, mock_idle):  # Test 9: true idle (0% util, >0W power) triggers baseline capture.
+test_hybrid_cost_model.py:    def test_llama_running_via_process_cpu_union(self, mock_req, mock_idle):  # Test 10: llama_running true via process_cpu on non-NVML system.
 test_imports.py:def test_imports():  # Test all module imports.
 test_k_format.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_k_format.py:def test_k_format_on_context_chart():  # Verify k-unit formatting is applied to Context Used chart.
@@ -230,11 +285,7 @@ test_overflow.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__
 test_overflow.py:def test_overflow_prevention():  # Verify grid items have min-width:0 and overflow prevention.
 test_power_graph_autoscale.py:class TestPowerChartAutoScale(unittest.TestCase):  # Tests for power chart auto-scaling in web_server.py.
 test_power_graph_autoscale.py:    def setUp(self):  # Set up test fixtures.
-test_power_graph_autoscale.py:    def test_power_chart_has_separate_options_from_usage_chart(self):  # Test that power chart has separate chart options from GPU/CPU usage chart.
-test_power_graph_autoscale.py:    def test_power_chart_datasets_exist(self):  # Test that power chart has GPU Power and CPU Power datasets.
 test_power_graph_autoscale.py:    def test_power_values_calculated_from_power_w(self):  # Test that power values are calculated from gpu_power_w and cpu_power_w.
-test_power_graph_autoscale.py:    def test_power_chart_uses_powerChartOptions(self):  # Test that power chart uses powerChartOptions instead of chartOptions.
-test_power_graph_autoscale.py:    def test_historical_power_chart_uses_powerChartOptions(self):  # Test that historical power chart uses powerChartOptions.
 test_power_graph_autoscale.py:class TestTuiPowerChart(unittest.TestCase):  # Tests for TUI power chart rendering.
 test_power_graph_autoscale.py:    def setUp(self):  # Set up test fixtures.
 test_power_graph_autoscale.py:    def test_tui_calculates_power_values(self):  # Test that TUI calculates power values from gpu_power_w and cpu_power_w.
@@ -262,6 +313,21 @@ test_sanitizer_scrub.py:    def test_scrub_payload_non_utf8(self):
 test_sanitizer_scrub.py:    def test_get_scrubs_props_response(self):  # do_GET for /props must scrub the response body.
 test_sanitizer_scrub.py:    def test_post_body_scrubbed(self):  # POST body scrubbing should be applied (media marker removed).
 test_sanitizer_scrub.py:    def test_logging_uses_decoded_body_str(self):  # Logging path must use body_str (already-decoded, scrubbed), not re-decode.
+test_server_controls.py:class TestServerControlButtons(unittest.TestCase):  # Tests that the template renders the server control buttons.
+test_server_controls.py:    def setUp(self):
+test_server_controls.py:    def test_html_has_restart_button(self):
+test_server_controls.py:    def test_html_has_stop_button(self):
+test_server_controls.py:    def test_html_has_confirmation_modal(self):
+test_server_controls.py:    def test_html_has_confirmation_input(self):
+test_server_controls.py:    def test_confirm_button_starts_disabled(self):
+test_server_controls.py:class TestServerControlSafety(unittest.TestCase):  # Tests the safety-critical confirmation logic in the JS.
+test_server_controls.py:    def setUp(self):
+test_server_controls.py:    def test_stop_warning_is_prominent(self):
+test_server_controls.py:    def test_confirmation_requires_typed_word(self):
+test_server_controls.py:    def test_confirm_word_is_explicit(self):
+test_server_controls.py:    def test_js_wires_stop_to_endpoint(self):
+test_server_controls.py:    def test_js_wires_restart_to_endpoint(self):
+test_server_controls.py:    def test_confirm_button_rechecks_typed_word(self):
 test_server_metrics.py:class TestServerMetricsCollector(unittest.TestCase):  # Tests for ServerMetricsCollector.
 test_server_metrics.py:    def setUp(self):  # Create a collector for testing.
 test_server_metrics.py:    def test_init_strips_trailing_slash(self):  # Test that init strips trailing slash from URL.
@@ -308,8 +374,8 @@ test_slot_charts.py:    def test_slot_data_structure(self, mock_make_request):  
 test_slot_charts.py:    def test_empty_slots(self, mock_make_request):  # Test handling of empty slots list.
 test_slot_charts.py:    def test_missing_fields_with_defaults(self, mock_make_request):  # Test that missing slot fields get default values.
 test_slot_charts.py:class TestAggregatorSlotData(unittest.TestCase):  # Tests for aggregator slot data extraction.
-test_slot_charts.py:    def test_aggregator_includes_slots_in_server_metrics(self, mock_collector):  # Test that aggregator includes slots data in server metrics.
-test_slot_charts.py:    def test_aggregator_empty_slots(self, mock_collector):  # Test aggregator handles empty slots gracefully.
+test_slot_charts.py:    def test_aggregator_includes_slots_in_server_metrics(self, mock_idle, mock_collector):  # Test that aggregator includes slots data in server metrics.
+test_slot_charts.py:    def test_aggregator_empty_slots(self, mock_idle, mock_collector):  # Test aggregator handles empty slots gracefully.
 test_slot_charts.py:class TestSlotChartsJavaScript(unittest.TestCase):  # Tests for JavaScript slot chart rendering logic.
 test_slot_charts.py:    def test_slot_progress_percentage_conversion(self):  # Test that progress 0-1 is converted to percentage 0-100.
 test_slot_charts.py:        def calculate_progress_percentage(progress):
@@ -318,18 +384,9 @@ test_slot_charts.py:            def round(value):
 test_slot_charts.py:            def min(*args):
 test_slot_charts.py:    def test_context_remaining_calculation(self):  # Test context remaining calculation.
 test_slot_charts.py:class TestSlotChartsIntegration(unittest.TestCase):  # Integration tests for slot charts with full metrics flow.
-test_slot_charts.py:    def test_full_metrics_flow_with_slots(self, mock_db, mock_cost_calc, mock_system, mock_server):  # Test full metrics collection flow includes slot data.
+test_slot_charts.py:    def test_full_metrics_flow_with_slots(self, mock_db, mock_idle, mock_cost_calc, mock_system, mock_server):  # Test full metrics collection flow includes slot data.
 test_slot_chart_width.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_slot_chart_width.py:def test_slot_chart_width():  # Verify slot graphs stretch full width and left padding is reduced.
-test_slot_delta_graph.py:TEMPLATE_PATH = os.path.join(
-test_slot_delta_graph.py:def test_previous_slot_tokens_state():  # Verify previousSlotTokens state variable exists.
-test_slot_delta_graph.py:def test_crosshair_registered_for_tokens():  # Verify crosshair plugin is registered for tokensChart.
-test_slot_delta_graph.py:def test_interaction_mode_index():  # Verify tokensChart has interaction mode: index for crosshair.
-test_slot_delta_graph.py:def test_legend_displayed():  # Verify tokensChart shows legend for per-slot labels.
-test_slot_delta_graph.py:def test_delta_calculation():  # Verify delta calculation logic exists.
-test_slot_delta_graph.py:def test_per_slot_datasets():  # Verify per-slot dataset generation.
-test_slot_delta_graph.py:def test_no_tokens_per_sec_usage():  # Verify predicted_tokens_seconds is no longer used for the graph.
-test_slot_delta_graph.py:def test_slot_colors():  # Verify per-slot color scheme.
 test_slot_height.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_slot_height.py:def test_slot_height_adequate():  # Verify the slot height calculation provides adequate space for labels.
 test_system_metrics.py:class TestSystemMetricsCollectorInit(unittest.TestCase):  # Tests for SystemMetricsCollector initialization.
@@ -395,3 +452,4 @@ test_web_server_settings.py:    def test_api_set_cost_rate_validates_negative(se
 test_web_server_settings.py:    def test_api_set_cost_rate_validates_missing(self):  # Test POST /api/settings/cost_rate rejects missing cost_rate.
 test_web_server_settings.py:    def test_api_set_cost_rate_validates_invalid(self):  # Test POST /api/settings/cost_rate rejects invalid values.
 test_web_server_settings.py:    def test_api_reset_settings_clears_all(self):  # Test POST /api/settings/reset clears all settings.
+test_web_server_settings.py:    def test_index_route_reflects_db_settings(self):  # Test the dashboard reads settings from the DB, not just config.yaml.
