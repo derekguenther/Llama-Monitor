@@ -385,6 +385,10 @@ class Aggregator:
             session_cost_usd=self.cost_calculator.calculate_cost(
                 self.cost_calculator.total_energy_wh
             ),
+            direct_wh=self.cost_calculator.total_direct_wh,
+            baseline_wh=self.cost_calculator.total_baseline_wh,
+            other_wh=self.cost_calculator.total_other_wh,
+            unattributed_wh=self.cost_calculator.total_unattributed_wh,
         )
 
     def _compute_blame_primitives(

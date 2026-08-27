@@ -35,6 +35,15 @@ class ElectricityCostCalculator:
         self.gpu_energy_wh = 0.0
         self.cpu_energy_wh = 0.0
 
+        # Lifetime per-category accumulators (all-time attribution, Option A).
+        # These persist in cumulative_energy so all-time attribution survives
+        # a restart (otherwise attribution resets while total_wh survives,
+        # breaking the direct+baseline+other+unattributed == total invariant).
+        self.total_direct_wh = 0.0
+        self.total_baseline_wh = 0.0
+        self.total_other_wh = 0.0
+        self.total_unattributed_wh = 0.0
+
         # Token tracking
         self.total_tokens = 0
         self.prompt_tokens = 0
@@ -71,6 +80,12 @@ class ElectricityCostCalculator:
             self.cpu_energy_wh = cumulative.get("cpu_wh", 0.0)
             self.session_start = cumulative.get("session_start")
             self.last_update = cumulative.get("last_update")
+            # Load lifetime per-category accumulators (fallback to 0 if the
+            # columns don't exist yet on older DBs).
+            self.total_direct_wh = cumulative.get("direct_wh", 0.0) or 0.0
+            self.total_baseline_wh = cumulative.get("baseline_wh", 0.0) or 0.0
+            self.total_other_wh = cumulative.get("other_wh", 0.0) or 0.0
+            self.total_unattributed_wh = cumulative.get("unattributed_wh", 0.0) or 0.0
 
     def _load_today_energy(self) -> None:
         """Load today's energy from database if available.
@@ -105,6 +120,10 @@ class ElectricityCostCalculator:
             gpu_wh=self.gpu_energy_wh,
             cpu_wh=self.cpu_energy_wh,
             session_cost_usd=0.0,
+            direct_wh=self.total_direct_wh,
+            baseline_wh=self.total_baseline_wh,
+            other_wh=self.total_other_wh,
+            unattributed_wh=self.total_unattributed_wh,
         )
 
     def stop_session(self) -> Dict[str, Any]:
@@ -126,6 +145,10 @@ class ElectricityCostCalculator:
             gpu_wh=self.gpu_energy_wh,
             cpu_wh=self.cpu_energy_wh,
             session_cost_usd=session_cost,
+            direct_wh=self.total_direct_wh,
+            baseline_wh=self.total_baseline_wh,
+            other_wh=self.total_other_wh,
+            unattributed_wh=self.total_unattributed_wh,
         )
 
         # Update today's energy in database
@@ -314,6 +337,12 @@ class ElectricityCostCalculator:
         self.today_baseline_wh += baseline_energy
         self.today_other_wh += other_energy
         self.today_unattributed_wh += unattributed_energy
+
+        # Accumulate lifetime per-category counters (all-time attribution).
+        self.total_direct_wh += direct_energy
+        self.total_baseline_wh += baseline_energy
+        self.total_other_wh += other_energy
+        self.total_unattributed_wh += unattributed_energy
 
         # Update timestamp
         self.last_update = datetime.now().isoformat()
@@ -688,6 +717,10 @@ class ElectricityCostCalculator:
         self.today_baseline_wh = 0.0
         self.today_other_wh = 0.0
         self.today_unattributed_wh = 0.0
+        self.total_direct_wh = 0.0
+        self.total_baseline_wh = 0.0
+        self.total_other_wh = 0.0
+        self.total_unattributed_wh = 0.0
 
         # Update database with zeroed values (use empty string for session_start since NOT NULL)
         self.database.update_cumulative_energy(
@@ -696,6 +729,10 @@ class ElectricityCostCalculator:
             gpu_wh=0.0,
             cpu_wh=0.0,
             session_cost_usd=0.0,
+            direct_wh=0.0,
+            baseline_wh=0.0,
+            other_wh=0.0,
+            unattributed_wh=0.0,
         )
         self.database.update_today_energy(
             total_wh=0.0,

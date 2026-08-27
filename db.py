@@ -301,6 +301,34 @@ class Database:
                 """
             )
 
+        # Cumulative-energy attribution columns for all-time attribution
+        # (Option A from m6p). Track whether the cumulative attribution columns
+        # were newly added so the one-time backfill only runs on the migration
+        # that introduces them. Guarded by a table-existence check: a legacy DB
+        # may not yet have the cumulative_energy table (it is created lazily by
+        # the auxiliary-tables schema), in which case it will be created fresh
+        # with the attribution columns later.
+        if 'cumulative_energy' in existing_tables:
+            self._add_column_if_missing(cursor, 'cumulative_energy', 'direct_wh', 'REAL DEFAULT 0')
+            self._add_column_if_missing(cursor, 'cumulative_energy', 'baseline_wh', 'REAL DEFAULT 0')
+            self._add_column_if_missing(cursor, 'cumulative_energy', 'other_wh', 'REAL DEFAULT 0')
+            cumulative_unattributed_added = self._add_column_if_missing(
+                cursor, 'cumulative_energy', 'unattributed_wh', 'REAL DEFAULT 0'
+            )
+
+            # One-time backfill: attribute all pre-hybrid cumulative energy to
+            # unattributed, mirroring the daily_energy precedent. Guarded by the
+            # column-presence check so it does not re-run.
+            if cumulative_unattributed_added:
+                cursor.execute(
+                    """
+                    UPDATE cumulative_energy
+                    SET unattributed_wh = total_wh
+                    WHERE total_wh > 0
+                      AND direct_wh + baseline_wh + other_wh + unattributed_wh = 0
+                    """
+                )
+
     def _add_column_if_missing(
         self, cursor: sqlite3.Cursor, table: str, column: str, definition: str
     ) -> bool:
@@ -561,7 +589,11 @@ class Database:
                 total_wh REAL DEFAULT 0,
                 gpu_wh REAL DEFAULT 0,
                 cpu_wh REAL DEFAULT 0,
-                session_cost_usd REAL DEFAULT 0
+                session_cost_usd REAL DEFAULT 0,
+                direct_wh REAL DEFAULT 0,
+                baseline_wh REAL DEFAULT 0,
+                other_wh REAL DEFAULT 0,
+                unattributed_wh REAL DEFAULT 0
             )
             """
         )
@@ -1048,6 +1080,10 @@ class Database:
         gpu_wh: float,
         cpu_wh: float,
         session_cost_usd: float,
+        direct_wh: float = 0.0,
+        baseline_wh: float = 0.0,
+        other_wh: float = 0.0,
+        unattributed_wh: float = 0.0,
     ) -> None:
         """Update cumulative energy counters.
 
@@ -1057,6 +1093,10 @@ class Database:
             gpu_wh: GPU energy in watt-hours
             cpu_wh: CPU energy in watt-hours
             session_cost_usd: Session cost in USD
+            direct_wh: Llama direct energy in watt-hours
+            baseline_wh: Llama baseline energy in watt-hours
+            other_wh: Other apps energy in watt-hours
+            unattributed_wh: Unattributed energy in watt-hours
         """
         with self._lock:
             cursor = self.conn.cursor()
@@ -1064,11 +1104,15 @@ class Database:
             cursor.execute(
                 """
                 INSERT OR REPLACE INTO cumulative_energy (
-                    id, session_start, last_update, total_wh, gpu_wh, cpu_wh, session_cost_usd
+                    id, session_start, last_update, total_wh, gpu_wh, cpu_wh,
+                    session_cost_usd, direct_wh, baseline_wh, other_wh, unattributed_wh
                 )
-                VALUES (1, ?, datetime('now'), ?, ?, ?, ?)
+                VALUES (1, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_start, total_wh, gpu_wh, cpu_wh, session_cost_usd),
+                (
+                    session_start, total_wh, gpu_wh, cpu_wh, session_cost_usd,
+                    direct_wh, baseline_wh, other_wh, unattributed_wh,
+                ),
             )
             self.conn.commit()
 
@@ -1081,7 +1125,8 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            SELECT session_start, last_update, total_wh, gpu_wh, cpu_wh, session_cost_usd
+            SELECT session_start, last_update, total_wh, gpu_wh, cpu_wh, session_cost_usd,
+                   direct_wh, baseline_wh, other_wh, unattributed_wh
             FROM cumulative_energy
             WHERE id = 1
             """
@@ -1132,6 +1177,31 @@ class Database:
             ORDER BY date ASC
             """,
             (f'-{days} days',),
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    def get_range_energy(self, start: str, end: str) -> List[Dict[str, Any]]:
+        """Get daily energy records between two dates (inclusive).
+
+        Args:
+            start: Start date as 'YYYY-MM-DD' (inclusive)
+            end: End date as 'YYYY-MM-DD' (inclusive)
+
+        Returns:
+            List of daily energy records with date, total_wh, gpu_wh, cpu_wh,
+            and attribution columns.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT date, total_wh, gpu_wh, cpu_wh, last_update,
+                   direct_wh, baseline_wh, other_wh, unattributed_wh
+            FROM daily_energy
+            WHERE date >= ? AND date <= ?
+            ORDER BY date ASC
+            """,
+            (start, end),
         )
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
