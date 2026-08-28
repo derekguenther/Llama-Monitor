@@ -1258,9 +1258,18 @@
                     monthlyCostChart.data.datasets[1].hidden = !vis.llama_baseline;
                     monthlyCostChart.data.datasets[2].hidden = !vis.other;
                     monthlyCostChart.data.datasets[3].hidden = !vis.unattributed;
-                    monthlyCostChart.update();
 
-                    const totalCost = data.data.reduce((sum, entry) => sum + Math.max(0, entry.cost_usd), 0);
+                    // Header total must respect the attribution checkboxes so it
+                    // matches what the stacked bars actually display. Sum only the
+                    // visible category datasets, not entry.cost_usd (which totals
+                    // ALL categories regardless of checkbox state).
+                    let totalCost = 0;
+                    monthlyCostChart.data.datasets.forEach((ds, i) => {
+                        if (ds.hidden) return;
+                        ds.data.forEach(v => { totalCost += Math.max(0, v); });
+                    });
+
+                    monthlyCostChart.update();
                     document.getElementById('monthly-total-cost').textContent = `$${totalCost.toFixed(2)}`;
                 }
             } catch (error) {
