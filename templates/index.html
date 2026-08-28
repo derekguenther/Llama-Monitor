@@ -1459,7 +1459,13 @@
             }
             const hasProcessGpu2 = Object.keys(process_gpu).length > 0;
             const hasProcessCpu2 = Object.keys(rawCpu).length > 0;
-            const filteredGpu = gpuUtil > 0 ? Math.min(llamaGpuUtil, gpuUtil) : 0;
+            // GPU %(ƒ): when per-process NVML data is absent (process_gpu empty),
+            // fall back to raw GPU usage so the filtered line tracks real activity
+            // instead of staying pinned at 0. When per-process data IS present,
+            // attribute llama's share of total GPU utilization.
+            const filteredGpu = hasProcessGpu2
+                ? (gpuUtil > 0 ? Math.min(llamaGpuUtil, gpuUtil) : 0)
+                : gpuUtil;
             const filteredCpu = cpuUtil > 0 ? Math.min(llamaCpuUtil, cpuUtil) : 0;
             // Normalize llama's raw per-process CPU (per-core scale) by core count so it
             // shares the same 0-100 scale as the true total OS CPU; clamp to [0,1].
