@@ -126,30 +126,38 @@ class Aggregator:
             # Fall back to total OS CPU
             cpu_percent = self._safe_float(cpu.get("percent"))
 
+        # System (Total) power is the sum of GPU + CPU power. The raw collector
+        # historically set system_power_w equal to cpu_power_w only, which made
+        # the dashboard's "System (Total)" card match CPU power and ignore the GPU.
+        # Compute the real total here where both values are available.
+        cpu_power_w = self._safe_float(system.get("system", {}).get("cpu_power_w"))
+        gpu_power_w = self._safe_float(gpu.get("power_w"))
+        system_power_w = (cpu_power_w + gpu_power_w) if (cpu_power_w > 0 or gpu_power_w > 0) else 0.0
+
         system_data = {
             # Flat keys for DB storage
             "cpu_percent": cpu_percent,
             "cpu_cores": cpu.get("cores", []),
             "cpu_count": cpu.get("count", 0),
-            "cpu_power_w": self._safe_float(system.get("system", {}).get("cpu_power_w")),
+            "cpu_power_w": cpu_power_w,
             "gpu_usage": self._safe_float(gpu.get("usage")),
             "gpu_memory_used": self._safe_float(gpu.get("memory_used")),
             "gpu_memory_total": self._safe_float(gpu.get("memory_total")),
             "gpu_temperature_c": self._safe_float(gpu.get("temperature_c")),
             "gpu_fan_speed_rpm": self._safe_float(gpu.get("fan_speed_rpm")),
-            "gpu_power_w": self._safe_float(gpu.get("power_w")),
+            "gpu_power_w": gpu_power_w,
             "memory_used": self._safe_float(memory.get("used")),
             "memory_total": self._safe_float(memory.get("total")),
             "memory_percent": self._safe_float(memory.get("percent")),
             "memory_available": self._safe_float(memory.get("available")),
-            "system_power_w": self._safe_float(system.get("system", {}).get("system_power_w")),
+            "system_power_w": system_power_w,
             "timestamp": system.get("timestamp", int(time.time())),
             # Nested keys for frontend display (system.cpu.percent, system.gpu.usage, etc.)
             "cpu": {
                 "percent": cpu_percent,
                 "cores": cpu.get("cores", []),
                 "count": cpu.get("count", 0),
-                "power_w": self._safe_float(system.get("system", {}).get("cpu_power_w")),
+                "power_w": cpu_power_w,
             },
             "gpu": {
                 "usage": self._safe_float(gpu.get("usage")),
@@ -157,7 +165,7 @@ class Aggregator:
                 "memory_total": self._safe_float(gpu.get("memory_total")),
                 "temperature_c": self._safe_float(gpu.get("temperature_c")),
                 "fan_speed_rpm": self._safe_float(gpu.get("fan_speed_rpm")),
-                "power_w": self._safe_float(gpu.get("power_w")),
+                "power_w": gpu_power_w,
             },
             "memory": {
                 "used": self._safe_float(memory.get("used")),

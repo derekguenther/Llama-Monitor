@@ -67,8 +67,8 @@ class TestFullPipeline(unittest.TestCase):
         self.assertEqual(metrics["system"]["gpu_usage"], 80.0)
         # gpu_power_w comes from gpu.power_w
         self.assertEqual(metrics["system"]["gpu_power_w"], 120.0)
-        # system_power_w comes from system.system.system_power_w
-        self.assertEqual(metrics["system"]["system_power_w"], 65.0)
+        # system_power_w is the system total = GPU + CPU power (120 + 45)
+        self.assertEqual(metrics["system"]["system_power_w"], 165.0)
 
         # Step 2: Store raw metrics (simulates DB write)
         agg.store_raw_metrics(metrics)
@@ -179,7 +179,7 @@ class TestFullPipeline(unittest.TestCase):
         self.assertEqual(metrics["system"]["gpu_usage"], 80.0)
         self.assertEqual(metrics["system"]["cpu_power_w"], 45.0)
         self.assertEqual(metrics["system"]["gpu_power_w"], 120.0)
-        self.assertEqual(metrics["system"]["system_power_w"], 65.0)
+        self.assertEqual(metrics["system"]["system_power_w"], 165.0)
 
         # Full pipeline should still work
         agg.store_raw_metrics(metrics)
