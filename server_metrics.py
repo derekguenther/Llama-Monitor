@@ -1,6 +1,7 @@
 """Server metrics collector for llama.cpp server."""
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional
 
 import requests
@@ -92,10 +93,23 @@ class ServerMetricsCollector:
             "metrics_available": True,
         }
 
+        # Fetch /metrics, /slots and /props concurrently. Sequential requests
+        # here were a latency bottleneck: when llama.cpp is busy, /metrics and
+        # /slots can each take ~2s, so collecting them one-after-another delayed
+        # the whole aggregator loop (and thus the dashboard) by 3-4s per update.
+        # Running them in parallel collapses the wall-clock cost to the slowest
+        # single request instead of their sum.
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            metrics_future = executor.submit(self.get_metrics) if self.collect_metrics else None
+            slots_future = executor.submit(self.get_slots)
+            props_future = executor.submit(self.get_props)
+
+            metrics = metrics_future.result() if metrics_future else None
+            slots = slots_future.result()
+            props = props_future.result()
+
         # Check if metrics collection is enabled
         if self.collect_metrics:
-            # Get metrics
-            metrics = self.get_metrics()
             if metrics:
                 result["server"] = self._parse_metrics(metrics)
                 # Calculate instantaneous token rates from cumulative deltas
@@ -108,12 +122,10 @@ class ServerMetricsCollector:
             result["metrics_available"] = True  # Not collecting, so not an issue
 
         # Get slots
-        slots = self.get_slots()
         if slots:
             result["slots"] = self._parse_slots(slots)
 
         # Get props
-        props = self.get_props()
         if props:
             # Strip out the massive chat_template (Jinja2 template) — not used by frontend
             if isinstance(props, dict):

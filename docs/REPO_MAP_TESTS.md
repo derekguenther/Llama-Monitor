@@ -340,6 +340,8 @@ test_server_metrics.py:    def test_collect(self, mock_make_request):  # Test co
 test_server_metrics.py:        def mock_side_effect(endpoint):
 test_server_metrics.py:    def test_collect_partial_failure(self, mock_make_request):  # Test collecting when some endpoints fail.
 test_server_metrics.py:        def mock_side_effect(endpoint):
+test_server_metrics.py:    def test_collect_requests_are_concurrent(self, mock_make_request):  # Test that /metrics, /slots and /props are fetched concurrently.
+test_server_metrics.py:        def slow_side_effect(endpoint):
 test_server_metrics.py:class TestParseMetrics(unittest.TestCase):  # Tests for _parse_metrics method.
 test_server_metrics.py:    def setUp(self):
 test_server_metrics.py:    def test_parse_metrics_dict(self):  # Test parsing dict-format metrics.

@@ -140,6 +140,42 @@ class TestServerMetricsCollector(unittest.TestCase):
         # Slots should be empty list when None
         self.assertEqual(result["slots"], [])
 
+    @patch("server_metrics.ServerMetricsCollector._make_request")
+    def test_collect_requests_are_concurrent(self, mock_make_request):
+        """Test that /metrics, /slots and /props are fetched concurrently.
+
+        The whole point of the fix is to collapse the wall-clock cost of the
+        three sequential requests (each ~2s under load) down to the slowest
+        single request. If each call blocks for 0.3s and they ran
+        sequentially, collect() would take ~0.9s; concurrently it should take
+        ~0.3s.
+        """
+        import time
+
+        def slow_side_effect(endpoint):
+            time.sleep(0.3)  # Simulate a slow llama.cpp endpoint under load
+            if endpoint == "/metrics":
+                return {"prompt_tokens_total": 1000, "requests_processing": 1}
+            elif endpoint == "/slots":
+                return [{"id": 1, "state": "idle"}]
+            elif endpoint == "/props":
+                return {"model": "llama-7b"}
+            return None
+
+        mock_make_request.side_effect = slow_side_effect
+
+        start = time.monotonic()
+        result = self.collector.collect()
+        elapsed = time.monotonic() - start
+
+        # Sequential would be ~0.9s; allow generous margin for thread scheduling.
+        self.assertLess(elapsed, 0.6, f"collect() took {elapsed:.2f}s — requests not concurrent")
+
+        # Data still assembled correctly.
+        self.assertEqual(result["server"]["requests_processing"], 1)
+        self.assertEqual(result["slots"][0]["state"], "idle")
+        self.assertEqual(result["props"]["model"], "llama-7b")
+
 
 class TestParseMetrics(unittest.TestCase):
     """Tests for _parse_metrics method."""
