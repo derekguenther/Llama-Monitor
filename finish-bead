@@ -144,7 +144,26 @@ else
 fi
 
 echo ""
+# Merge the worktree branch into main. Do NOT proceed to clean up the worktree
+# or delete the branch unless the merge actually succeeds. If the merge hits a
+# conflict it returns non-zero, and destroying the worktree at that point would
+# lose the working files needed to resolve the conflict (see llama-monitor-df4g).
 git merge $TASK_NAME --no-edit
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "============================================"
+    echo "MERGE FAILED - Worktree NOT destroyed"
+    echo "============================================"
+    echo ""
+    echo "The merge of '$TASK_NAME' did not complete successfully (likely a"
+    echo "conflict). The worktree at .worktrees/$TASK_NAME has been PRESERVED"
+    echo "and the branch '$TASK_NAME' still exists so you can resolve the"
+    echo "conflict and retry."
+    echo ""
+    echo "To resolve: cd into .worktrees/$TASK_NAME, fix conflicts, commit,"
+    echo "then re-run: finish-bead \"<message>\""
+    exit 1
+fi
 git worktree remove ".worktrees/$TASK_NAME" --force
 git branch -d $TASK_NAME
 echo "SUCCESS: Bead merged, Map updated, and worktree destroyed."
