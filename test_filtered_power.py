@@ -102,6 +102,29 @@ def test_charts_section_normalizes_cpu():
     print("[PASS] updateCharts applies normalized+clamped fractions")
 
 
+def test_cpu_filtered_uses_ratio_not_raw_min():
+    """CPU %(ƒ) must be llama's SHARE of total OS CPU (ratio), not a raw min.
+
+    The bug (bead ujwb): filteredCpu = Math.min(llamaCpuUtil, cpuUtil) returned
+    the unfiltered cpuUtil whenever llama was active, because llamaCpuUtil is
+    per-core scale (can exceed 100) while cpuUtil is normalized 0-100. The
+    corrected formula is (llamaCpuUtilNorm / totalCpuUtil) * 100 clamped to
+    [0,100], mirroring the filtered-power ratio logic.
+    """
+    content = _read_template()
+    update_idx = content.find("function updateCharts")
+    next_func = content.find("function ", update_idx + 20)
+    section = content[update_idx:next_func if next_func != -1 else update_idx + 3000]
+
+    # The old buggy form must NOT be present in updateCharts
+    assert "Math.min(llamaCpuUtil, cpuUtil)" not in section, \
+        "filteredCpu must not use the raw min (returns unfiltered cpuUtil)"
+    # The corrected form: normalized llama / true total * 100, clamped to [0,100]
+    assert "Math.min(llamaCpuUtilNorm / totalCpuUtil, 1) * 100" in section, \
+        "filteredCpu must use llama's share of total OS CPU, scaled to 100"
+    print("[PASS] CPU %(ƒ) uses ratio (llama/total * 100) instead of raw min")
+
+
 if __name__ == "__main__":
     tests = [
         test_cpu_normalizes_per_core_scale,
@@ -109,6 +132,7 @@ if __name__ == "__main__":
         test_gpu_fraction_clamped_to_1,
         test_gpu_requires_process_data,
         test_charts_section_normalizes_cpu,
+        test_cpu_filtered_uses_ratio_not_raw_min,
     ]
     failed = 0
     for t in tests:

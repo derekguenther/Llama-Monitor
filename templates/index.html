@@ -1469,11 +1469,21 @@
             const filteredGpu = hasProcessGpu2
                 ? (gpuUtil > 0 ? Math.min(llamaGpuUtil, gpuUtil) : 0)
                 : gpuUtil;
-            const filteredCpu = cpuUtil > 0 ? Math.min(llamaCpuUtil, cpuUtil) : 0;
             // Normalize llama's raw per-process CPU (per-core scale) by core count so it
             // shares the same 0-100 scale as the true total OS CPU; clamp to [0,1].
             const llamaCpuUtilNorm = cpuCount > 0 ? llamaCpuUtil / cpuCount : llamaCpuUtil;
             const totalCpuUtil = data.system_raw?.cpu?.percent || cpuUtil || 0;
+            // CPU %(ƒ): llama's CPU usage as a SHARE of the TRUE total OS CPU,
+            // scaled to 0-100. Ratio = llamaCpuUtilNorm / totalCpuUtil (fraction
+            // 0..1) -> * 100 for percent, clamped to [0,100]. Reuses the same
+            // ratio logic as the filtered power calc. Previously this used a raw
+            // min of llama's per-core CPU vs. the normalized total, which returned
+            // the unfiltered value whenever llama was active (llama's per-core sum
+            // exceeds 100), so filtered matched unfiltered. Requires per-process
+            // data (process_cpu) and a positive total; otherwise 0.
+            const filteredCpu = hasProcessCpu2 && totalCpuUtil > 0
+                ? Math.min(llamaCpuUtilNorm / totalCpuUtil, 1) * 100
+                : 0;
             const filteredGpuPower = hasProcessGpu2 && gpuUtil > 0 ? Math.min(llamaGpuUtil / gpuUtil, 1) * gpuPower : 0;
             const filteredCpuPower = hasProcessCpu2 && totalCpuUtil > 0 ? Math.min(llamaCpuUtilNorm / totalCpuUtil, 1) * cpuPower : 0;
 
