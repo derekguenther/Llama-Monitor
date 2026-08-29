@@ -231,15 +231,26 @@ class TestWebServerSlotsUpdate(unittest.TestCase):
         self.assertIn("state === 'processing'", html)
 
     def test_javascript_has_slots_reduce_logic(self):
-        """Test that JavaScript has the slots progress reduction logic."""
+        """Test that JavaScript has the slots progress reduction logic.
+
+        NOTE: This test was previously passing only coincidentally — it asserted
+        `.reduce(` appears anywhere in the template, which happened to be true
+        because the monthly-cost total used `.reduce()`. The actual slot-progress
+        logic (in updateSlotCharts) maps slots to progress percentages and does
+        not use `.reduce()`. Update it to assert the real slots-progress behavior
+        so it stays meaningful when unrelated code (e.g. the monthly-cost total)
+        changes.
+        """
         from web_server import app
 
         with app.test_client() as client:
             response = client.get("/")
             html = response.get_data(as_text=True)
 
-        # Check for the slots progress reduction logic
-        self.assertIn(".reduce(", html)
+        # Check for the actual slots progress logic: slots are mapped to
+        # progress percentages (0-100) and applied to the chart dataset.
+        self.assertIn("slotProgress = slots.map", html)
+        self.assertIn("slotProgressChart.data.datasets[0].data = slotProgress", html)
         self.assertIn("progress", html)
 
 
