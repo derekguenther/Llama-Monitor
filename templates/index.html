@@ -1532,10 +1532,14 @@
         function updateSlotCharts(data) {
             const slots = data.server?.slots || [];
 
-            // Calculate compact height based on number of slots
+            // Calculate compact height based on number of slots. Each horizontal
+            // bar row needs ~36px to render its y-axis label ("Slot N") plus the
+            // bar itself. Too-short heights clip the lower slot bars/labels, so
+            // only the first (Slot 0) appeared. Use a larger per-slot height so
+            // every slot's label and bar render.
             const slotCount = slots.length;
-            const baseHeight = 40;
-            const heightPerSlot = 28;
+            const baseHeight = 50;
+            const heightPerSlot = 36;
             const chartHeight = slotCount > 0 ? Math.max(baseHeight, slotCount * heightPerSlot) : 20;
 
             if (!slots || slots.length === 0) {
@@ -1633,7 +1637,8 @@
                         y: {
                             grid: { display: false },
                             ticks: {
-                                color: '#888'
+                                color: '#888',
+                                autoSkip: false
                             }
                         }
                     }
@@ -1684,7 +1689,8 @@
                         y: {
                             grid: { display: false },
                             ticks: {
-                                color: '#888'
+                                color: '#888',
+                                autoSkip: false
                             }
                         }
                     }
