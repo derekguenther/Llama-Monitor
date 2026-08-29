@@ -1532,15 +1532,19 @@
         function updateSlotCharts(data) {
             const slots = data.server?.slots || [];
 
-            // Calculate compact height based on number of slots. Each horizontal
-            // bar row needs ~36px to render its y-axis label ("Slot N") plus the
-            // bar itself. Too-short heights clip the lower slot bars/labels, so
-            // only the first (Slot 0) appeared. Use a larger per-slot height so
-            // every slot's label and bar render.
+            // Calculate height based on number of slots. Each horizontal bar row
+            // needs ~36px (bar + "Slot N" y-label) plus ~22px at the bottom for the
+            // x-axis tick labels. The old formula (baseHeight 40, heightPerSlot 28)
+            // produced canvases too short to render the bars AND the x-axis labels,
+            // so the x-axis ticks were cut off. Use a larger per-slot height plus
+            // a fixed allowance for the x-axis labels.
             const slotCount = slots.length;
-            const baseHeight = 50;
+            const baseHeight = 60;
             const heightPerSlot = 36;
-            const chartHeight = slotCount > 0 ? Math.max(baseHeight, slotCount * heightPerSlot) : 20;
+            const xAxisLabelSpace = 22;
+            const chartHeight = slotCount > 0
+                ? Math.max(baseHeight, slotCount * heightPerSlot + xAxisLabelSpace)
+                : 20;
 
             if (!slots || slots.length === 0) {
                 // No slots — skip update instead of clearing to blank
@@ -1619,7 +1623,7 @@
                         padding: {
                             top: 5,
                             right: 5,
-                            bottom: 5,
+                            bottom: 15,
                             left: 10
                         }
                     },
@@ -1671,7 +1675,7 @@
                         padding: {
                             top: 5,
                             right: 5,
-                            bottom: 5,
+                            bottom: 15,
                             left: 10
                         }
                     },
