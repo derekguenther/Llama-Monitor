@@ -173,6 +173,8 @@ test_database.py:    def test_compression_with_data(self):  # Test compression b
 test_database.py:class TestMonthlyEnergy(unittest.TestCase):  # Tests for monthly energy tracking and cost calculation.
 test_database.py:    def setUp(self):  # Create a temporary database for testing.
 test_database.py:    def tearDown(self):  # Clean up temporary database.
+test_database.py:    def _sqlite_today(self):  # Return today's date as SQLite sees it (date('now'), UTC-based).
+test_database.py:    def _sqlite_date_days_ago(self, days):  # Return the date `days` days before SQLite's date('now').
 test_database.py:    def test_get_monthly_energy_empty_database(self):  # Test getting monthly energy when database has no data.
 test_database.py:    def test_get_monthly_energy_with_data(self):  # Test getting monthly energy with historical data.
 test_database.py:    def test_get_monthly_energy_cost_rate(self):  # Test cost rate retrieval from database.
