@@ -584,6 +584,23 @@ class TestMonthlyEnergy(unittest.TestCase):
         self.db.close()
         os.unlink(self.temp_db.name)
 
+    def _sqlite_today(self):
+        """Return today's date as SQLite sees it (date('now'), UTC-based).
+
+        get_monthly_energy filters against date('now', ?), which is computed
+        by SQLite. Deriving the reference date from the same source keeps the
+        test deterministic and immune to UTC/local month-boundary skew.
+        """
+        cursor = self.db.connect().cursor()
+        cursor.execute("SELECT date('now')")
+        return cursor.fetchone()[0]
+
+    def _sqlite_date_days_ago(self, days):
+        """Return the date `days` days before SQLite's date('now')."""
+        cursor = self.db.connect().cursor()
+        cursor.execute("SELECT date('now', ?)", (f'-{days} days',))
+        return cursor.fetchone()[0]
+
     def test_get_monthly_energy_empty_database(self):
         """Test getting monthly energy when database has no data."""
         with self.db:
@@ -592,17 +609,17 @@ class TestMonthlyEnergy(unittest.TestCase):
 
     def test_get_monthly_energy_with_data(self):
         """Test getting monthly energy with historical data."""
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = self._sqlite_today()
         with self.db:
-            # Insert 35 days of energy data
+            # Insert 35 days of energy data, dates derived from SQLite date('now')
             for i in range(35):
-                date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+                date = self._sqlite_date_days_ago(i)
                 self.db.execute(
                     """
                     INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (date, 100.0 + i, 75.0 + i * 0.5, 25.0 + i * 0.5, datetime.now().isoformat()),
+                    (date, 100.0 + i, 75.0 + i * 0.5, 25.0 + i * 0.5, self._sqlite_today()),
                 )
 
             # Get last 30 days
@@ -662,15 +679,15 @@ class TestMonthlyEnergy(unittest.TestCase):
     def test_get_monthly_energy_different_day_counts(self):
         """Test get_monthly_energy with different day counts."""
         with self.db:
-            # Insert 60 days of data
+            # Insert 60 days of data, dates derived from SQLite date('now')
             for i in range(60):
-                date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+                date = self._sqlite_date_days_ago(i)
                 self.db.execute(
                     """
                     INSERT INTO daily_energy (date, total_wh, gpu_wh, cpu_wh, last_update)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (date, 100.0, 75.0, 25.0, datetime.now().isoformat()),
+                    (date, 100.0, 75.0, 25.0, self._sqlite_today()),
                 )
 
             # SQLite date('now', '-X days') includes today, so results = X + 1
