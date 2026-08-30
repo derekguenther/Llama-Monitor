@@ -19,6 +19,7 @@
 - Check for -1 guard values in any numeric display
 - **Always** verify Chrome functional review completed
 - If unavailable → see [Troubleshoot Chrome](troubleshoot-chrome.md)
+- Use port **8080** for your own Llama Monitor instance (`python3 llamamonitor.py --port 8080`). See [Review Bead](review-bead.md) for the full port allocation scheme (8080 = implementer, 8081 = user, 8082+ = reviewer subagents). When done testing, shut down your instance to free the port.
 
 ### 4. Success Criteria
 - Code is correct and complete
