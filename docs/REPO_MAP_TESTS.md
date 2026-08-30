@@ -284,6 +284,7 @@ test_llama-monitor.py:def discover_test_files():  # Auto-discover pytest-collect
 test_llama-monitor.py:def run_tests():  # Run all test files and summarize results.
 test_overflow.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_overflow.py:def test_overflow_prevention():  # Verify grid items have min-width:0 and overflow prevention.
+test_overflow.py:def test_power_card_has_room_for_items():  # Verify the Power card column is wide enough to hold 3 grid items.
 test_power_graph_autoscale.py:class TestPowerChartAutoScale(unittest.TestCase):  # Tests for power chart auto-scaling in web_server.py.
 test_power_graph_autoscale.py:    def setUp(self):  # Set up test fixtures.
 test_power_graph_autoscale.py:    def test_power_values_calculated_from_power_w(self):  # Test that power values are calculated from gpu_power_w and cpu_power_w.

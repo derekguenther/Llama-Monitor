@@ -72,7 +72,9 @@
         /* Usage-Power Row: Combined Usage graph and Power grid side-by-side */
         .usage-power-row {
             display: grid;
-            grid-template-columns: 1fr 300px;
+            /* Usage graph shrinks a little while the Power card expands to hold
+               its items (3 x 112px + gaps = 356px content + card padding). */
+            grid-template-columns: minmax(0, 1fr) minmax(400px, auto);
             gap: 20px;
             margin-bottom: 20px;
             grid-column: 1 / -1;
@@ -178,7 +180,7 @@
             border-radius: 8px;
             text-align: center;
             width: 100%;
-            min-width: 120px;
+            min-width: 112px;
         }
 
         .power-value {
