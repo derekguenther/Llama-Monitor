@@ -219,6 +219,7 @@ test_filtered_power.py:def test_cpu_fraction_clamped_to_1():  # The llama CPU fr
 test_filtered_power.py:def test_gpu_fraction_clamped_to_1():  # The GPU fraction must be clamped to [0,1].
 test_filtered_power.py:def test_gpu_requires_process_data():  # Filtered GPU power must gate on per-process GPU data (NVML).
 test_filtered_power.py:def test_charts_section_normalizes_cpu():  # updateCharts must apply the same per-core normalization.
+test_filtered_power.py:def test_cpu_filtered_uses_ratio_not_raw_min():  # CPU %(ƒ) must be llama's SHARE of total OS CPU (ratio), not a raw min.
 test_full_pipeline.py:class TestFullPipeline(unittest.TestCase):  # Test the full data pipeline end-to-end.
 test_full_pipeline.py:    def setUp(self):
 test_full_pipeline.py:    def tearDown(self):
