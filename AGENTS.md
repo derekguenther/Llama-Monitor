@@ -41,6 +41,18 @@ Follow the process documents in sequence. Read the current process document befo
 
 - **Always** use an offset when using the "read" command on a file to avoid looping and ensure you're reading the correct section
 
+## Context Compression
+
+The **opencode-context-compress** plugin is installed (project-level config: `.opencode/opencode.json` + `.opencode/compress.jsonc`) to help keep your working context lean across long, multi-step sessions.
+
+- **Why it's there:** It lets you compact your conversation proactively at a natural breakpoint (e.g. after completing a major task) rather than relying on automatic compaction to trigger mid-task. This preserves task context and makes handoffs cleaner.
+- **When to use it:** After finishing a major unit of work — a completed bead, a merged feature, or a verified milestone — and before starting the next unrelated task. Do **not** compact in the middle of a task you are actively working on, as that would discard in-flight context.
+- **Commands to use:**
+  - `/compress` — manually compact the conversation when you reach a good breakpoint.
+  - `/compress manage` — view and manage compression history.
+  - `compress` tool — programmatic compression (the tool itself).
+- Automatic compaction still runs as a safety net via OpenCode's native auto-compaction.
+
 **IMPORTANT: Always check if Llama Monitor is running before attempting to start it**
 **IMPORTANT: Always start the software using llamamonitor.py**
 **Never** run individual Python files (web_server.py, aggregator_daemon.py, etc.) directly. This will result in broken behavior.
