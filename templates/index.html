@@ -945,6 +945,7 @@
                         ctx.textBaseline = 'middle';
 
                         const chartWidth = chart.chartArea.right - chart.chartArea.left;
+                        const leftEdge = chart.chartArea ? chart.chartArea.left + 10 : 50;
 
                         if (bar.x >= chartWidth / 4) {
                             // Bar >= 1/4 full - draw inside with dark text
@@ -955,7 +956,10 @@
                             // Bar < 1/4 full - draw to the right of bar end with light text
                             ctx.fillStyle = '#ccc';
                             ctx.textAlign = 'left';
-                            ctx.fillText(label, bar.x + 8, bar.y);
+                            // Minimum x position to avoid overlapping y-axis labels
+                            const minX = leftEdge;
+                            const labelX = Math.max(bar.x + 8, minX);
+                            ctx.fillText(label, labelX, bar.y);
                         }
 
                         ctx.restore();
