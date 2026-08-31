@@ -908,6 +908,8 @@
         // Chart instances
         let combinedUsageChart, tokensChart, monthlyCostChart;
         let slotProgressChart, contextUsedChart;
+        let sessionMaxProcessed = 0;
+        let sessionMaxGenerated = 0;
 
         // Format number with k-unit (divide by 1024, append k)
         function formatKUnit(value) {
@@ -1546,6 +1548,17 @@
             combinedUsageChart.data.datasets[5].data = historyData.sysPower;
             combinedUsageChart.data.labels = historyData.labels;
             combinedUsageChart.update('none');
+
+            // Track session max for y-axis scaling (never decreases)
+            const currentMaxProcessed = Math.max(...historyData.promptTokens, 0);
+            const currentMaxGenerated = Math.max(...historyData.tokens, 0);
+            sessionMaxProcessed = Math.max(sessionMaxProcessed, currentMaxProcessed);
+            sessionMaxGenerated = Math.max(sessionMaxGenerated, currentMaxGenerated);
+
+            tokensChart.options.scales.y.min = 0;
+            tokensChart.options.scales.y.max = sessionMaxProcessed || 1;
+            tokensChart.options.scales.y1.min = 0;
+            tokensChart.options.scales.y1.max = sessionMaxGenerated || 1;
 
             tokensChart.data.datasets[0].data = historyData.promptTokens;
             tokensChart.data.datasets[1].data = historyData.tokens;
