@@ -1,0 +1,32 @@
+{
+    "$schema": "compress.schema.json",
+    "enabled": true,
+    "debug": false,
+    "notification": "detailed",
+    "notificationType": "chat",
+    "protectedTurns": 3,
+    "commands": {
+        "enabled": true,
+        "protectedTools": ["task", "todowrite", "todoread", "compress", "batch", "plan_enter", "plan_exit"]
+    },
+    "autoCompression": {
+        "enabled": true,
+        "contextWindowRatio": 0.9,
+        "tokenThreshold": 350000,
+        "protectedTurns": 3
+    },
+    "turnProtection": {
+        "enabled": false,
+        "turns": 4
+    },
+    "protectedFilePatterns": [],
+    "tools": {
+        "settings": {
+            "protectedTools": ["task", "todowrite", "todoread", "compress", "batch", "plan_enter", "plan_exit"]
+        },
+        "compress": {
+            "permission": "allow",
+            "showCompression": false
+        }
+    }
+}

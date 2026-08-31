@@ -1,0 +1,5 @@
+{
+  "plugin": [
+    "@skybluejacket/opencode-context-compress"
+  ]
+}
