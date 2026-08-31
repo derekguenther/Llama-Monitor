@@ -898,6 +898,12 @@
         };
         const MAX_HISTORY = 60;
 
+        // Last known-good server metrics. Retained across transient poll
+        // failures so the Server Status / Summary cards do not blank to dashes
+        // when the /api/metrics response intermittently returns an error
+        // (e.g. metrics_endpoint_not_available).
+        let lastGoodServer = null;
+
         // Monthly cost data
         let monthlyCostData = {
             dates: [],
@@ -1287,12 +1293,38 @@
         }
 
         // Fetch metrics
+        // Resolve server metrics with last-known-good fallback. When the
+        // response carries an error (metrics_endpoint_not_available) or omits
+        // server metrics, reuse the last good values so the status cards stay
+        // populated instead of blanking to dashes. Returns {server, serverError}.
+        function resolveServerMetrics(data) {
+            const server = data.server || {};
+            const hasError = server.error != null;
+            const hasMetrics = server.prompt_tokens_total != null ||
+                server.tokens_predicted_total != null ||
+                server.requests_processing != null;
+            if (!hasError && hasMetrics) {
+                lastGoodServer = server;
+                return { server, serverError: false };
+            }
+            if (lastGoodServer != null) {
+                return { server: lastGoodServer, serverError: hasError };
+            }
+            // No good value yet; show dashes (server is empty).
+            return { server: {}, serverError: true };
+        }
+
         async function fetchMetrics() {
             try {
                 const response = await fetch('/api/metrics');
                 if (!response.ok) throw new Error('Failed to fetch metrics');
                 const data = await response.json();
                 console.log('fetchMetrics: received data.cost=', data.cost);
+
+                // Use last-known-good server metrics if the live response is
+                // empty/error, avoiding intermittent blank-to-dashes.
+                const resolved = resolveServerMetrics(data);
+                data.server = resolved.server;
 
                 updateDisplay(data);
                 updateCharts(data);
@@ -1338,7 +1370,10 @@
 
             // Slots
             const slots = server.slots || [];
-            const activeSlots = slots.filter(s => s.state === 'processing').length;
+            // llama.cpp /slots exposes is_processing (bool) rather than a
+            // state string. Count a slot as active when is_processing is true,
+            // falling back to the legacy state === 'processing' check.
+            const activeSlots = slots.filter(s => s.is_processing === true || s.state === 'processing').length;
             document.getElementById('active-slots').textContent = `${activeSlots}/${slots.length}`;
 
             // System metrics
