@@ -78,6 +78,7 @@ class Monitor:
         show_stats: bool = False,
         verbose: bool = False,
         debug: bool = False,
+        log_file: Optional[str] = None,
     ):
         """Initialize the monitor.
 
@@ -89,6 +90,8 @@ class Monitor:
             enable_tui: Enable TUI mode.
             show_stats: Show stats and exit.
             verbose: Enable verbose logging.
+            log_file: Optional path to write log output to a file (in addition
+                to the console). Uses a RotatingFileHandler to bound growth.
         """
         self.server_url = server_url
         self.config_path = config_path
@@ -99,24 +102,45 @@ class Monitor:
         self.show_stats = show_stats
         self.verbose = verbose
         self.debug = debug
+        self.log_file = log_file
 
-        # Configure logging based on verbose flag
+        # Configure logging based on verbose flag. Console output is unchanged;
+        # a RotatingFileHandler is added to the root logger when log_file is set
+        # so warnings from any module (e.g. the CPU clamp warning) are persisted.
+        log_level = logging.INFO if verbose else logging.WARNING
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
         if verbose:
-            logging.basicConfig(
-                level=logging.INFO,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
             logging.getLogger('werkzeug').setLevel(logging.INFO)
             logging.getLogger('socketio').setLevel(logging.INFO)
             logging.getLogger('engineio').setLevel(logging.INFO)
         else:
-            logging.basicConfig(
-                level=logging.WARNING,
-                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            )
             logging.getLogger('werkzeug').setLevel(logging.WARNING)
             logging.getLogger('socketio').setLevel(logging.WARNING)
             logging.getLogger('engineio').setLevel(logging.WARNING)
+
+        # Optional file logging: add a RotatingFileHandler to the root logger.
+        if log_file:
+            from logging.handlers import RotatingFileHandler
+            try:
+                file_handler = RotatingFileHandler(
+                    log_file,
+                    maxBytes=5 * 1024 * 1024,  # 5 MB per file
+                    backupCount=3,              # keep 3 rotated backups
+                    encoding='utf-8',
+                )
+                file_handler.setLevel(log_level)
+                file_handler.setFormatter(
+                    logging.Formatter(
+                        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                    )
+                )
+                # Attach to root logger so all module loggers propagate to file.
+                logging.getLogger().addHandler(file_handler)
+            except Exception as e:
+                print(f"WARNING: Could not enable file logging to {log_file}: {e}")
 
         # Load config first - fall back to find_config if path doesn't exist
         if config_path and not os.path.exists(config_path):
@@ -485,6 +509,14 @@ def parse_args() -> argparse.Namespace:
         help="Enable Flask debug mode (auto-reload on code changes, detailed error pages)",
     )
 
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Optional path to write log output to a file in addition to the "
+        "console (uses a rotating file handler; e.g. llama-monitor.log)",
+    )
+
     return parser.parse_args()
 
 
@@ -620,6 +652,7 @@ def main():
         port=args.port,
         verbose=args.verbose,
         debug=args.debug,
+        log_file=args.log_file,
     )
 
     # Set up signal handlers for graceful shutdown
