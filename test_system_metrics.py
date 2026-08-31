@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Unit tests for system_metrics.py."""
 
+import os
+import csv
 import unittest
 from unittest.mock import Mock, patch, MagicMock
 
@@ -403,6 +405,146 @@ class TestCollect(unittest.TestCase):
         mock_memory.assert_called_once()
         mock_process_gpu.assert_called_once()
         mock_system_power.assert_called_once()
+
+
+class TestTypeperfLifecycle(unittest.TestCase):
+    """Tests for the background typeperf process (CPU power reads)."""
+
+    def _write_csv(self, header_paths, data_rows):
+        """Write a temp typeperf CSV and return its path."""
+        import tempfile
+        fd, path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["(PDH-CSV 4.0) (test)(1)"] + header_paths)
+            for row in data_rows:
+                writer.writerow(["08/16/2026 12:00:00.000"] + row)
+        return path
+
+    def test_init_sets_polling_interval(self):
+        """Polling interval should be stored and floored to 0.1s."""
+        collector = SystemMetricsCollector(polling_interval=2.0)
+        self.assertEqual(collector.polling_interval, 2.0)
+
+    def test_init_default_polling_interval(self):
+        """Default polling interval should be 1.0s."""
+        collector = SystemMetricsCollector()
+        self.assertEqual(collector.polling_interval, 1.0)
+
+    def test_start_typeperf_noop_on_linux(self):
+        """typeperf should not start on non-Windows platforms."""
+        with patch("system_metrics.IS_WINDOWS", False):
+            with patch("system_metrics.subprocess.Popen") as mock_popen:
+                collector = SystemMetricsCollector()
+                self.assertIsNone(collector._typeperf_proc)
+                self.assertIsNone(collector._typeperf_csv)
+                mock_popen.assert_not_called()
+
+    @patch("system_metrics.IS_WINDOWS", True)
+    def test_start_typeperf_launches_process(self):
+        """On Windows, typeperf should be launched once with -cf/-si/-f CSV."""
+        mock_proc = Mock()
+        mock_proc.poll.return_value = None
+        with patch("system_metrics.subprocess.Popen", return_value=mock_proc) as mock_popen:
+            with patch.object(
+                SystemMetricsCollector, "_discover_energy_meter_power_counter",
+                return_value=r"\Energy Meter(RAPL_Package0_PKG)\Power",
+            ):
+                collector = SystemMetricsCollector()
+                self.assertIsNotNone(collector._typeperf_proc)
+                self.assertIsNotNone(collector._typeperf_csv)
+                # typeperf invoked with a CSV output and 1s interval
+                cmd = mock_popen.call_args.args[0]
+                self.assertEqual(cmd[0], "typeperf")
+                self.assertIn("-si", cmd)
+                self.assertIn("1", cmd)  # rounded polling_interval
+                self.assertIn("-f", cmd)
+                self.assertIn("CSV", cmd)
+                # cleanup
+                collector.close()
+
+    @patch("system_metrics.IS_WINDOWS", True)
+    def test_start_typeperf_failure_falls_back(self):
+        """If typeperf launch fails, collector should fall back to PowerShell."""
+        with patch("system_metrics.subprocess.Popen", side_effect=OSError("no typeperf")):
+            with patch.object(
+                SystemMetricsCollector, "_discover_energy_meter_power_counter",
+                return_value=r"\Energy Meter(RAPL_Package0_PKG)\Power",
+            ):
+                collector = SystemMetricsCollector()
+                self.assertIsNone(collector._typeperf_proc)
+                self.assertIsNone(collector._typeperf_csv)
+
+    @patch("system_metrics.IS_WINDOWS", True)
+    def test_discover_counter_returns_pkg(self):
+        """Counter discovery should prefer the *pkg* Energy Meter Power path."""
+        qx_output = (
+            "\\\\DESKTOP\\Energy Meter(RAPL_Package0_DRAM)\\Power\n"
+            "\\\\DESKTOP\\Energy Meter(RAPL_Package0_PKG)\\Power\n"
+            "\\\\DESKTOP\\Energy Meter(_Total)\\Power\n"
+        )
+        with patch("system_metrics.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout=qx_output)
+            result = SystemMetricsCollector._discover_energy_meter_power_counter()
+        self.assertEqual(
+            result, r"\\DESKTOP\Energy Meter(RAPL_Package0_PKG)\Power"
+        )
+
+    def test_read_pkg_power_watts(self):
+        """Should parse the PKG Power column and convert milliwatts to watts."""
+        collector = SystemMetricsCollector()
+        pkg_idx = 1
+        header = [r"\Energy Meter(RAPL_Package0_PKG)\Power", r"\Energy Meter(_Total)\Power"]
+        # Data row: col0=timestamp, col1=PKG(mW), col2=_Total. Last row wins.
+        # milliwatts: 160000 mW -> 160 W
+        path = self._write_csv(header, [["150000", ""], ["160000", ""]])
+        collector._typeperf_csv = path
+        self.assertAlmostEqual(collector._read_typeperf_power(), 160.0)
+
+    def test_read_power_no_file(self):
+        """If the typeperf CSV doesn't exist, should return 0.0."""
+        collector = SystemMetricsCollector()
+        collector._typeperf_csv = "/nonexistent.csv"
+        self.assertEqual(collector._read_typeperf_power(), 0.0)
+
+    def test_read_power_no_pkg_column(self):
+        """If no PKG Power column exists, should return 0.0."""
+        collector = SystemMetricsCollector()
+        header = [r"\Memory\Available Bytes"]
+        path = self._write_csv(header, [["12345"]])
+        collector._typeperf_csv = path
+        self.assertEqual(collector._read_typeperf_power(), 0.0)
+
+    def test_get_cpu_power_uses_typeperf_when_available(self):
+        """_get_cpu_power_w should read from the typeperf CSV when available."""
+        collector = SystemMetricsCollector()
+        collector._typeperf_csv = "/nonexistent.csv"
+        collector._typeperf_proc = Mock()
+        collector._typeperf_proc.poll.return_value = None
+        with patch.object(collector, "_read_typeperf_power", return_value=99.5):
+            self.assertEqual(collector._get_cpu_power_w(), 99.5)
+
+    def test_get_cpu_power_falls_back_when_no_typeperf(self):
+        """_get_cpu_power_w should fall back to PowerShell when typeperf absent."""
+        collector = SystemMetricsCollector()
+        collector._typeperf_csv = None
+        collector._typeperf_proc = None
+        # PowerShell returns 0 -> fallback yields 0.0
+        with patch("system_metrics.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=1, stdout="")
+            result = collector._get_cpu_power_w()
+        self.assertEqual(result, 0.0)
+
+    def test_get_cpu_power_powershell_returns_watts(self):
+        """The PowerShell fallback should convert milliwatts to watts."""
+        collector = SystemMetricsCollector()
+        collector._typeperf_csv = None
+        collector._typeperf_proc = None
+        with patch("system_metrics.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="140000\n")
+            result = collector._get_cpu_power_w()
+        self.assertAlmostEqual(result, 140.0)
 
 
 if __name__ == "__main__":

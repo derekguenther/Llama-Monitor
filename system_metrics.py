@@ -7,8 +7,14 @@ Linux: Uses RAPL (/sys/class/powercap/intel-rapl:*) for CPU power when available
 
 import time
 import os
+import sys
+import csv
 import subprocess
+import tempfile
+import threading
 from typing import Any, Dict, List, Optional
+
+IS_WINDOWS = sys.platform == "win32"
 
 try:
     import psutil
@@ -32,13 +38,28 @@ except ImportError:
 class SystemMetricsCollector:
     """Collects system metrics (CPU, GPU, memory) on Windows and Linux."""
 
-    def __init__(self, tracked_processes: Optional[List[str]] = None):
+    def __init__(
+        self,
+        tracked_processes: Optional[List[str]] = None,
+        polling_interval: float = 1.0,
+    ):
         """Initialize the collector.
 
         Args:
             tracked_processes: List of process names to track specifically
+            polling_interval: How often (seconds) the aggregator polls metrics.
+                On Windows this drives the background typeperf sampling cadence
+                so CPU power is captured at the same rate as the rest of the
+                software (e.g. 1s by default) without spawning a PowerShell
+                subprocess on every read.
         """
         self.tracked_processes = tracked_processes or ["llama-server.exe"]
+        self.polling_interval = max(0.1, float(polling_interval))
+
+        # Background typeperf process (Windows only) for CPU power reads.
+        self._typeperf_proc: Optional[subprocess.Popen] = None
+        self._typeperf_csv: Optional[str] = None
+        self._typeperf_lock = threading.RLock()
 
         # Initialize NVML if available
         self.nvml_init = False
@@ -52,6 +73,9 @@ class SystemMetricsCollector:
                 self.wmi = wmi.WMI()
             except Exception:
                 pass
+
+        # Start the background typeperf logger (best-effort; no-op on Linux).
+        self._start_typeperf()
 
     def _init_nvml(self) -> bool:
         """Initialize NVML library.
@@ -73,6 +97,18 @@ class SystemMetricsCollector:
 
     def close(self) -> None:
         """Cleanup resources."""
+        # Terminate the background typeperf process if running.
+        if self._typeperf_proc is not None:
+            with self._typeperf_lock:
+                try:
+                    self._typeperf_proc.terminate()
+                except Exception:
+                    pass
+                try:
+                    self._typeperf_proc.wait(timeout=5)
+                except Exception:
+                    self._typeperf_proc.kill()
+                self._typeperf_proc = None
         if self.nvml_init and self.nvml:
             try:
                 self.nvml.nvmlShutdown()
@@ -379,15 +415,165 @@ class SystemMetricsCollector:
 
         return result
 
-    def _get_cpu_power_w(self) -> float:
-        """Get CPU package power from Energy Meter performance counter.
+    def _start_typeperf(self) -> None:
+        """Start a long-running background typeperf process (Windows only).
 
-        Uses PowerShell's Get-Counter to query the Energy Meter counter set.
-        Returns power in watts, or 0.0 if not available.
+        typeperf writes the Energy Meter performance counter to a CSV file at
+        ``polling_interval`` cadence, avoiding a per-read PowerShell spawn.
+        The process is launched once and kept alive until ``close()``.
+
+        The counter path is discovered at runtime (instance name varies, e.g.
+        ``RAPL_Package0_PKG``), matching the ``*pkg*`` filter the old
+        PowerShell Get-Counter command used. Best-effort: any failure leaves
+        ``_typeperf_proc``/``_typeperf_csv`` unset so the reader falls back to
+        the original PowerShell path.
+        """
+        if not IS_WINDOWS:
+            return
+        try:
+            counter = self._discover_energy_meter_power_counter()
+            if not counter:
+                return
+
+            fd, counters_path = tempfile.mkstemp(
+                prefix="llama-monitor-counters-", suffix=".txt"
+            )
+            with os.fdopen(fd, "w") as f:
+                f.write(counter + "\n")
+
+            fd2, csv_path = tempfile.mkstemp(
+                prefix="llama-monitor-typeperf-", suffix=".csv"
+            )
+            os.close(fd2)
+
+            cmd = [
+                "typeperf",
+                "-cf",
+                counters_path,
+                "-si",
+                str(int(round(self.polling_interval))),
+                "-f",
+                "CSV",
+                "-o",
+                csv_path,
+                "-y",
+            ]
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            self._typeperf_proc = proc
+            self._typeperf_csv = csv_path
+        except Exception:
+            # Fall back to the PowerShell path if typeperf cannot be launched.
+            self._typeperf_proc = None
+            self._typeperf_csv = None
+
+    @staticmethod
+    def _discover_energy_meter_power_counter() -> Optional[str]:
+        r"""Discover the ``Energy Meter(*)\Power`` counter path at runtime.
+
+        Runs ``typeperf -qx "Energy Meter"`` (a one-time startup cost) and
+        returns a counter path whose instance matches ``pkg`` (the CPU package
+        power), preferring ``_Total`` as a fallback. Returns None if discovery
+        fails so the caller can fall back to the PowerShell read.
+        """
+        try:
+            result = subprocess.run(
+                ["typeperf", "-qx", "Energy Meter"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                return None
+            pkg_candidate = None
+            total_candidate = None
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line.startswith("\\") or not line.endswith("\\Power"):
+                    continue
+                low = line.lower()
+                if "energy meter" in low and "pkg" in low:
+                    pkg_candidate = line
+                if "energy meter" in low and "(_total)" in low:
+                    total_candidate = line
+            return pkg_candidate or total_candidate
+        except Exception:
+            return None
+
+    def _read_typeperf_power(self) -> float:
+        """Read the latest CPU package power (watts) from the typeperf CSV.
+
+        Parses the counter-path header line (line 1) to locate the Energy Meter
+        PKG Power column, then returns the value from the most recent data row.
+        Energy Meter reports power in milliwatts, so it is converted to watts.
+        Returns 0.0 on any failure so the caller can fall back.
+        """
+        if not self._typeperf_csv or not os.path.exists(self._typeperf_csv):
+            return 0.0
+        try:
+            with open(
+                self._typeperf_csv, "r", encoding="utf-8", errors="replace", newline=""
+            ) as f:
+                reader = csv.reader(f)
+                # Row 0 is the PDH-CSV marker in column 0 plus the counter-path
+                # header in columns 1+. It doubles as the header line.
+                try:
+                    header = next(reader)
+                except StopIteration:
+                    return 0.0
+
+                pkg_col = None
+                for i, name in enumerate(header):
+                    low = name.lower()
+                    if (
+                        "energy meter" in low
+                        and "pkg" in low
+                        and low.rstrip().endswith("\\power")
+                    ):
+                        pkg_col = i
+                        break
+                if pkg_col is None:
+                    return 0.0
+
+                # Walk to the last data row and grab the PKG Power column.
+                last_value = 0.0
+                for row in reader:
+                    if len(row) > pkg_col:
+                        raw = row[pkg_col].strip()
+                        if raw:
+                            try:
+                                last_value = float(raw)
+                            except ValueError:
+                                continue
+                # Energy Meter reports milliwatts -> convert to watts.
+                return last_value / 1000.0 if last_value else 0.0
+        except Exception:
+            return 0.0
+
+    def _get_cpu_power_w(self) -> float:
+        """Get CPU package power from the Energy Meter performance counter.
+
+        Preferred: read the latest value from the long-running background
+        typeperf CSV, which samples at ``polling_interval`` cadence without a
+        per-read PowerShell spawn. If the typeperf logger is not available
+        (non-Windows, startup failure, or process died), fall back to a direct
+        PowerShell Get-Counter query.
 
         Returns:
-            CPU package power in watts
+            CPU package power in watts, or 0.0 if not available.
         """
+        # Fast path: read from the background typeperf CSV (no subprocess spawn).
+        with self._typeperf_lock:
+            if self._typeperf_csv is not None and self._typeperf_proc is not None:
+                # Restart the typeperf process if it died unexpectedly.
+                if self._typeperf_proc.poll() is not None:
+                    self.close()
+                    self._start_typeperf()
+                if self._typeperf_csv is not None:
+                    return self._read_typeperf_power()
+
+        # Fallback: direct PowerShell Get-Counter (one-off / non-Windows).
         try:
             import subprocess
             import re
