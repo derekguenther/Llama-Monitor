@@ -1,5 +1,4 @@
 {
-  "plugin": [
-    "@skybluejacket/opencode-context-compress"
-  ]
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": []
 }
