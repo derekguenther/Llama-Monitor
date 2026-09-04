@@ -431,6 +431,20 @@ test_system_metrics.py:    def test_collect_system_power_battery(self, mock_wmi)
 test_system_metrics.py:    def test_collect_system_power_no_battery(self, mock_wmi):  # Test system power collection without battery data.
 test_system_metrics.py:class TestCollect(unittest.TestCase):  # Tests for main collect method.
 test_system_metrics.py:    def test_collect_full(self, mock_system_power, mock_process_gpu, mock_memory, mock_gpu, mock_cpu):  # Test full metrics collection.
+test_system_metrics.py:class TestTypeperfLifecycle(unittest.TestCase):  # Tests for the background typeperf process (CPU power reads).
+test_system_metrics.py:    def _write_csv(self, header_paths, data_rows):  # Write a temp typeperf CSV and return its path.
+test_system_metrics.py:    def test_init_sets_polling_interval(self):  # Polling interval should be stored and floored to 0.1s.
+test_system_metrics.py:    def test_init_default_polling_interval(self):  # Default polling interval should be 1.0s.
+test_system_metrics.py:    def test_start_typeperf_noop_on_linux(self):  # typeperf should not start on non-Windows platforms.
+test_system_metrics.py:    def test_start_typeperf_launches_process(self):  # On Windows, typeperf should be launched once with -cf/-si/-f CSV.
+test_system_metrics.py:    def test_start_typeperf_failure_falls_back(self):  # If typeperf launch fails, collector should fall back to PowerShell.
+test_system_metrics.py:    def test_discover_counter_returns_pkg(self):  # Counter discovery should prefer the *pkg* Energy Meter Power path.
+test_system_metrics.py:    def test_read_pkg_power_watts(self):  # Should parse the PKG Power column and convert milliwatts to watts.
+test_system_metrics.py:    def test_read_power_no_file(self):  # If the typeperf CSV doesn't exist, should return 0.0.
+test_system_metrics.py:    def test_read_power_no_pkg_column(self):  # If no PKG Power column exists, should return 0.0.
+test_system_metrics.py:    def test_get_cpu_power_uses_typeperf_when_available(self):  # _get_cpu_power_w should read from the typeperf CSV when available.
+test_system_metrics.py:    def test_get_cpu_power_falls_back_when_no_typeperf(self):  # _get_cpu_power_w should fall back to PowerShell when typeperf absent.
+test_system_metrics.py:    def test_get_cpu_power_powershell_returns_watts(self):  # The PowerShell fallback should convert milliwatts to watts.
 test_test_runner_discovery.py:_RUNNER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 test_test_runner_discovery.py:def discovered():  # Discover test files once per module (lazily, not at import).
 test_test_runner_discovery.py:def test_discovers_known_unit_test_files(discovered):  # The runner must discover genuine pytest unit test files.

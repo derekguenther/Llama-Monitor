@@ -160,8 +160,9 @@ server_metrics.py:    def _parse_slots(self, slots: Any) -> list:  # Parse slot 
 server_metrics.py:            def _v(key, default=0):
 server_metrics.py:    def _compute_instant_rates(self, server: Dict[str, Any]) -> None:  # Calculate instantaneous token rates from cumulative delta.
 server_metrics.py:def format_metrics_display(metrics: Dict[str, Any]) -> str:  # Format metrics for display.
+system_metrics.py:IS_WINDOWS = sys.platform == "win32"
 system_metrics.py:class SystemMetricsCollector:  # Collects system metrics (CPU, GPU, memory) on Windows and Linux.
-system_metrics.py:    def __init__(self, tracked_processes: Optional[List[str]] = None):  # Initialize the collector.
+system_metrics.py:    def __init__(
 system_metrics.py:    def _init_nvml(self) -> bool:  # Initialize NVML library.
 system_metrics.py:    def close(self) -> None:  # Cleanup resources.
 system_metrics.py:    def __enter__(self) -> "SystemMetricsCollector":  # Context manager entry.
@@ -174,7 +175,10 @@ system_metrics.py:    def _collect_gpu_nvml(self) -> Dict[str, Any]:  # Collect 
 system_metrics.py:    def _collect_gpu_wmi(self) -> Dict[str, Any]:  # Collect GPU metrics using WMI.
 system_metrics.py:    def _collect_memory(self) -> Dict[str, Any]:  # Collect memory metrics.
 system_metrics.py:    def _collect_process_gpu(self) -> Dict[str, Any]:  # Collect per-process GPU utilization.
-system_metrics.py:    def _get_cpu_power_w(self) -> float:  # Get CPU package power from Energy Meter performance counter.
+system_metrics.py:    def _start_typeperf(self) -> None:  # Start a long-running background typeperf process (Windows only).
+system_metrics.py:    def _discover_energy_meter_power_counter() -> Optional[str]:
+system_metrics.py:    def _read_typeperf_power(self) -> float:  # Read the latest CPU package power (watts) from the typeperf CSV.
+system_metrics.py:    def _get_cpu_power_w(self) -> float:  # Get CPU package power from the Energy Meter performance counter.
 system_metrics.py:    def _get_linux_cpu_power_w(self) -> float:  # Get CPU package power from RAPL on Linux.
 system_metrics.py:    def _collect_system_power(self) -> Dict[str, Any]:  # Collect system power consumption.
 tui.py:def format_significant_digits(value: float, digits: int = 4) -> str:  # Format a value with the specified number of significant digits.
