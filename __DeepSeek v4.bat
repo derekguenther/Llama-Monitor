@@ -31,7 +31,7 @@ rem start /affinity FFFF /b /wait ""
     --reasoning-format deepseek ^
     --metrics ^
     --ctx-size 185000 ^
-    --parallel 2 ^
+    --parallel 5 ^
     --cache-prompt ^
     --cache-reuse 256 ^
     --kv-unified ^
