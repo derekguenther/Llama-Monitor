@@ -27,7 +27,7 @@ from flask import Flask, jsonify, request, send_from_directory, render_template,
 from flask_socketio import SocketIO, emit
 
 # Local imports
-from config import load_config, find_config
+from config import get_config as _shared_get_config
 
 # Try to import database
 try:
@@ -47,9 +47,13 @@ _metrics_cache: Optional[Any] = None
 
 
 def get_config() -> Any:
-    """Get configuration."""
-    config_path = find_config()
-    return load_config(config_path)
+    """Get configuration.
+
+    Returns the shared config.py singleton so that the web server observes the
+    same database.path that llamamonitor.py resolves (e.g. a per-worktree DB
+    selected via --db-path / LLAMA_MONITOR_DB).
+    """
+    return _shared_get_config()
 
 
 # Shared Database instance for read-only access. Centralizing to a single

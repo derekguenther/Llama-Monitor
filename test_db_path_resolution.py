@@ -90,6 +90,26 @@ class TestDbPathResolution(unittest.TestCase):
         finally:
             monitor.db.close()
 
+    def test_web_server_resolves_db_path_from_shared_config(self):
+        """web_server.get_config() must return the shared config singleton so the
+        dashboard reads the same resolved DB path, not a fresh config from disk."""
+        target = os.path.join(self.tmpdir, "web-shared.db")
+        monitor = self._make_monitor(db_path=target)
+        monitor.initialize()
+        try:
+            from web_server import get_config as web_get_config
+            cfg = web_get_config()
+            self.assertIs(
+                cfg, monitor.config,
+                "web_server.get_config() must return the shared config singleton",
+            )
+            self.assertEqual(
+                cfg.get("database.path"), target,
+                "web server must read the identical resolved path",
+            )
+        finally:
+            monitor.db.close()
+
     def test_cli_arg_present(self):
         """parse_args exposes --db-path."""
         old_argv = sys.argv
