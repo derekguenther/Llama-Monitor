@@ -19,6 +19,8 @@ CLAUDE.md.bak
 .beads/interactions.jsonl
 llama-monitor.db-shm
 llama-monitor.db-wal
+# Corrupt SQLite dump artifacts created during review/DB contention (never commit)
+llama-monitor.db.corrupt-*
 
 # Chrome browser profile created with a literal ~ name (see ~/ contents)
 ~/
