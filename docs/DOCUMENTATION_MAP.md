@@ -22,6 +22,7 @@ Index of notable documentation files in this project. Load the one you need.
 | `processes/review-bead.md` | Reviewing completed work | Scope review, code review, functional review (Chrome) |
 | `processes/finish-bead.md` | Merging and closing | Merge squash, cleanup worktree, close bead |
 | `processes/troubleshoot-chrome.md` | Chrome issues | Troubleshooting stale lock files, zombie processes, port conflicts |
+| `processes/subagent-resume.md` | Subagent interruptions | Resume protocol, checkpoint format, pre-flight guard, self-healing (bead 19q6) |
 
 ## Memory / Notes
 

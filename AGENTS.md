@@ -11,6 +11,8 @@ Follow the process documents in sequence. Read the current process document befo
 3. **[Review Bead](processes/review-bead.md)** → Different agent: scope review, code review, functional review
 4. **[Finish Bead](processes/finish-bead.md)** → Different agent: merge, cleanup, close issue
 
+**Subagent interruptions** — before dispatching review subagents (or when a subagent appears stalled), read [Subagent Session Resume](processes/subagent-resume.md): resume via `task_id`, structured checkpoints, pre-flight guard (serial reviews + `/slots` poll), self-healing dependencies.
+
 ## Critical Guardrails
 
 - **Always** read the current process document before proceeding
