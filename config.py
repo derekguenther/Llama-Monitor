@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Configuration loader for llama-monitor."""
 
+import copy
 import os
 import yaml
 from typing import Any, Dict, Optional
@@ -49,7 +50,11 @@ class Config:
             config_path: Path to YAML config file. If None, uses default config.
         """
         self.config_path = config_path
-        self._config: Dict[str, Any] = self.DEFAULT_CONFIG.copy()
+        # Deep copy so per-instance mutations (e.g. Config.set) never leak back
+        # into the shared DEFAULT_CONFIG or into other Config instances. A
+        # shallow copy would alias nested dicts (e.g. database.path) and
+        # permanently pollute the class-level defaults.
+        self._config: Dict[str, Any] = copy.deepcopy(self.DEFAULT_CONFIG)
 
         if config_path and os.path.exists(config_path):
             self._load_config(config_path)
@@ -76,7 +81,7 @@ class Config:
         Returns:
             Merged dictionary.
         """
-        result = base.copy()
+        result = copy.deepcopy(base)
         for key, value in update.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                 result[key] = self._deep_merge(result[key], value)

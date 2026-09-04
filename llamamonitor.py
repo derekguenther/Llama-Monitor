@@ -79,6 +79,7 @@ class Monitor:
         verbose: bool = False,
         debug: bool = False,
         log_file: Optional[str] = None,
+        db_path: Optional[str] = None,
     ):
         """Initialize the monitor.
 
@@ -92,10 +93,14 @@ class Monitor:
             verbose: Enable verbose logging.
             log_file: Optional path to write log output to a file (in addition
                 to the console). Uses a RotatingFileHandler to bound growth.
+            db_path: Optional explicit SQLite database path. Overrides the
+                configured database.path. Relative paths resolve against the
+                current working directory. Enables per-worktree DB isolation.
         """
         self.server_url = server_url
         self.config_path = config_path
         self.polling_interval = polling_interval
+        self.db_path = db_path
         self.enable_web = enable_web
         self.enable_tui = enable_tui
         self.port = port
@@ -168,12 +173,25 @@ class Monitor:
 
     def initialize(self):
         """Initialize the monitor components."""
-        # Initialize database - use absolute path
-        db_path = self.config.get("database.path", "llama-monitor.db")
+        # Initialize database - resolve to an absolute path.
+        # Priority: explicit db_path (--db-path / LLAMA_MONITOR_DB) over the
+        # configured database.path value.
+        db_path = self.db_path or self.config.get("database.path", "llama-monitor.db")
         if not os.path.isabs(db_path):
-            # Resolve relative paths relative to the script directory
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            db_path = os.path.join(script_dir, db_path)
+            if self.db_path:
+                # CLI/env override: resolve relative to the current working
+                # directory, so `--db-path .worktrees/<name>/llama-monitor.db`
+                # yields a per-worktree database for review isolation.
+                db_path = os.path.abspath(db_path)
+            else:
+                # Config value: resolve relative to the script directory
+                # (historical behavior).
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                db_path = os.path.join(script_dir, db_path)
+        # Publish the resolved absolute path back into the shared config so the
+        # web server (running in the same process, reading database.path from the
+        # global config) reads the identical database file.
+        self.config.set("database.path", db_path)
         self.db = Database(db_path)
         self.db.connect()
 
@@ -461,6 +479,14 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
+        "--db-path",
+        type=str,
+        default=None,
+        help="Override the SQLite database path (absolute, or relative to the "
+        "current directory). Useful for per-worktree isolation during reviews.",
+    )
+
+    parser.add_argument(
         "--port",
         type=int,
         default=8080,
@@ -615,6 +641,9 @@ def main():
 
     args = parse_args()
 
+    # Resolve DB path override: --db-path takes precedence over LLAMA_MONITOR_DB
+    db_path = args.db_path or os.environ.get("LLAMA_MONITOR_DB")
+
     if args.version:
         print("llama-monitor 1.0.0")
         sys.exit(0)
@@ -653,6 +682,7 @@ def main():
         verbose=args.verbose,
         debug=args.debug,
         log_file=args.log_file,
+        db_path=db_path,
     )
 
     # Set up signal handlers for graceful shutdown
