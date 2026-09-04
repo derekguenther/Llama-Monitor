@@ -194,6 +194,17 @@ test_database.py:    def test_date_formatting_logic(self):  # Test the date form
 test_database.py:        def format_date_js(date_str):  # Format date as MM/dd/yyyy following JavaScript logic.
 test_database.py:    def test_date_padding_logic(self):  # Test that day/month padding works correctly.
 test_database.py:        def format_date_with_padding(date_str):  # Format date with proper padding like JavaScript.
+test_db_path_resolution.py:class TestDbPathResolution(unittest.TestCase):  # Tests for database path resolution in Monitor.initialize().
+test_db_path_resolution.py:    def setUp(self):  # Create a Monitor pointing at a temp config with no explicit db_path.
+test_db_path_resolution.py:    def _make_monitor(self, db_path=None):
+test_db_path_resolution.py:    def test_default_resolves_relative_config_to_script_dir(self):  # With no override, a relative config path resolves against the script dir.
+test_db_path_resolution.py:    def test_absolute_db_path_override(self):  # An absolute db_path override is used verbatim.
+test_db_path_resolution.py:    def test_relative_db_path_override_resolves_to_cwd(self):  # A relative db_path override resolves against the current working directory.
+test_db_path_resolution.py:    def test_db_path_published_to_shared_config(self):  # The resolved path is written to config so web_server reads the same DB.
+test_db_path_resolution.py:    def test_web_server_resolves_db_path_from_shared_config(self):  # web_server.get_config() must return the shared config singleton so the
+test_db_path_resolution.py:    def test_cli_arg_present(self):  # parse_args exposes --db-path.
+test_db_path_resolution.py:def _rm(p):
+test_db_path_resolution.py:def _rmtree(p):
 test_db_purge.py:def _system_metrics(ts, cpu_percent=50.0, cpu_power_w=65.0, gpu_power_w=220.0,
 test_db_purge.py:def _server_metrics(ts):
 test_db_purge.py:class TestCompressionPurge(unittest.TestCase):  # Verify compression purges source rows so the DB does not grow unbounded.
