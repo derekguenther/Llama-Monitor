@@ -1097,6 +1097,7 @@
                 }
             });
             combinedUsageChart.options.scales.y1.display = false;
+            combinedUsageChart.resize();
 
             tokensChart = new Chart(tokensCtx, {
                 type: 'line',
@@ -1582,6 +1583,7 @@
             combinedUsageChart.data.datasets[4].data = historyData.filteredSysPower;
             combinedUsageChart.data.datasets[5].data = historyData.sysPower;
             combinedUsageChart.data.labels = historyData.labels;
+            combinedUsageChart.resize();
             combinedUsageChart.update('none');
 
             // Track session max for y-axis scaling (never decreases)
