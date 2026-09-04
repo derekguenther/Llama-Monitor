@@ -35,6 +35,12 @@ Follow the process documents in sequence. Read the current process document befo
 - If you notice that a file has been deleted or is missing, **do NOT recreate-delete or guess** — flag it to the user immediately.
 - **If you accidentally delete or damage a user file, STOP and inform the user immediately** — do not try to silently fix or hide it.
 
+### SAFE TO COMMIT / SPECIAL-CASE FILES
+
+- **`.beads/interactions.jsonl` is always safe to commit from main.** It is the beads interaction log and is expected to be committed along with bead state changes. Commit it from **main only** — do not commit it from a worktree (the bead's work should not carry the global interactions log).
+- **Batch files (`.bat`) and launcher scripts are always safe to CREATE or UPDATE with a commit**, but **NEVER to delete**. Adding or editing them is fine; removing them is prohibited.
+- **A batch file must NEVER be modified by an agent without explicit user permission for a specific task.** The user's launcher scripts (e.g. `__DeepSeek v4.bat`) are user-owned; only change them when the user explicitly asks for that specific change.
+
 **Remember:** Your job is to build and improve the user's project. Deleting the user's untracked infrastructure is the opposite of that. When in doubt about ANY file operation, **STOP and ASK.**
 
 ## File Reading Rules
