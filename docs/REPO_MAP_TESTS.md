@@ -214,6 +214,13 @@ test_energy_deltas.py:    def tearDown(self):
 test_energy_deltas.py:    def test_update_power_readings_returns_deltas(self):  # update_power_readings must return per-interval deltas.
 test_energy_deltas.py:    def test_combined_metrics_store_delta_fields(self):  # Each combined_metrics row must store per-interval delta values.
 test_energy_deltas.py:    def test_delta_and_cumulative_both_present(self):  # cost data must include both per-interval deltas and cumulative totals.
+test_file_logging.py:class TestFileLogging(unittest.TestCase):  # Tests that Monitor adds a rotating file handler to the root logger.
+test_file_logging.py:    def setUp(self):
+test_file_logging.py:    def tearDown(self):
+test_file_logging.py:    def _monitor(self, log_file):  # Create a Monitor instance pointing at a temp config with a log file.
+test_file_logging.py:    def test_file_handler_added_to_root_logger(self):  # A RotatingFileHandler is attached to the root logger when log_file is set.
+test_file_logging.py:    def test_no_file_handler_when_log_file_not_set(self):  # No RotatingFileHandler is added when log_file is None.
+test_file_logging.py:    def test_warning_written_to_file(self):  # A warning emitted through the root logger appears in the log file.
 test_filtered_power.py:TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "index.html")
 test_filtered_power.py:def _read_template():
 test_filtered_power.py:def test_cpu_normalizes_per_core_scale():  # llama's per-process CPU must be normalized by core count.
