@@ -6,11 +6,11 @@
 
 ## Steps
 
-1. **Find a Needs_Review bead**
+1. **Find a needs-review bead**
    ```bash
-   bd ready
+   bd list --label needs_review
    ```
-   Look for beads with status `Needs_Review`
+   Look for beads labeled `needs_review` (bd has no review status; the label is the handoff signal)
 
 2. **Scope review**
    - Did work stay within bounds?

@@ -30,7 +30,7 @@
 ## What to Do
 
 **If successful:**
-- Set bead to `Needs_Review`
+- Mark for review: `bd update <id> --add-label needs_review` (bd has no review status; the label is the handoff signal)
 - Pick next available bead from `bd ready`
 - Continue implementation cycle
 
