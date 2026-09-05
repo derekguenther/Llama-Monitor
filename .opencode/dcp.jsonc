@@ -2,9 +2,9 @@
   "$schema": "https://raw.githubusercontent.com/Opencode-DCP/opencode-dynamic-context-pruning/master/dcp.schema.json",
   "enabled": true,
   "autoUpdate": true,
-  "debug": true,
-  "pruneNotification": "detailed",
-  "pruneNotificationType": "chat",
+  "debug": false,
+  "pruneNotification": "minimal",
+  "pruneNotificationType": "toast",
   "manualMode": {
     "enabled": false,
     "automaticStrategies": true
