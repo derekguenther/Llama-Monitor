@@ -56,7 +56,7 @@ Activate when the user says **"work autonomously"** (or close variants, e.g. "wo
 ### While active
 
 - **Never end a turn waiting on the user.** No questions, no "would you like me to..." — the user may be asleep or away.
-- **Do NOT end a turn with planning prose instead of acting.** Every turn must finish with either a tool call or the terminal Human Input Summary. Narrating what you intend to do is NOT progress: observed live, an agent printed its own plan ("Let's start: claim X... Proceeding.") and stopped, ending the turn and stalling all forward progress. If you catch yourself writing a plan instead of running it, delete the prose and make the tool call.
+- **Do NOT end a turn with planning prose instead of acting.** Every turn must finish with either a tool call or the terminal Human Input Summary. Narrating what you intend to do is NOT progress: observed live, an agent printed its own plan ("Let's start: claim X... Proceeding.") and stopped, ending the turn and stalling all forward progress. If you catch yourself writing a plan instead of running it, delete the prose and make the tool call. Keep inter-tool narration minimal — just make the calls.
 - **Blockers do not stop progress.** When a bead is blocked, document it and move on:
   ```bash
   bd update <id> --status blocked --add-label needs-human-input \
