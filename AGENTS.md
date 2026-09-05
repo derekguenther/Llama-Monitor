@@ -104,15 +104,18 @@ Per-session only. Autonomous mode is **not** inherited by new sessions or subage
 
 ## Context Compression
 
-The **opencode-context-compress** plugin is installed (project-level config: `.opencode/opencode.json` + `.opencode/compress.jsonc`) to help keep your working context lean across long, multi-step sessions.
+The **@tarquinen/opencode-dcp** plugin (Dynamic Context Pruning) is installed. It keeps the working context lean across long, multi-step sessions. Config lives in `.opencode/dcp.jsonc` (project, wins) and `~/.config/opencode/dcp.jsonc` (user global). Restart OpenCode after config changes.
 
-- **Why it's there:** It lets you compact your conversation proactively at a natural breakpoint (e.g. after completing a major task) rather than relying on automatic compaction to trigger mid-task. This preserves task context and makes handoffs cleaner.
-- **When to use it:** After finishing a major unit of work — a completed bead, a merged feature, or a verified milestone — and before starting the next unrelated task. Do **not** compact in the middle of a task you are actively working on, as that would discard in-flight context.
-- **Commands to use:**
-  - `/compress` — manually compact the conversation when you reach a good breakpoint.
-  - `/compress manage` — view and manage compression history.
-  - `compress` tool — programmatic compression (the tool itself).
-- Automatic compaction still runs as a safety net via OpenCode's native auto-compaction.
+- **Why it's there:** It lets you compact your conversation proactively at a natural breakpoint (e.g. after completing a major task) rather than relying on automatic compression to trigger mid-task. This preserves task context and makes handoffs cleaner.
+- **When to use it:** After finishing a major unit of work — a completed bead, a merged feature, or a verified milestone — and before starting the next unrelated task. Do **not** compress in the middle of a task you are actively working on, as that would discard in-flight context.
+- **Commands / tools:**
+  - `compress` tool — programmatic compression (the primary way to compact a range of conversation).
+  - `/dcp` — TUI panel showing DCP state, limits, and compression history.
+  - `/dcp-compress [focus]` — manually trigger a compression pass, optionally with a focus hint.
+- **Limits and nudge behavior:** token counts below `minContextLimit` are calm. Between `minContextLimit` and `maxContextLimit` is the soft pressure zone where DCP periodically nudges you to compress (frequency set by `nudgeFrequency`). Above `maxContextLimit` compression is mandatory and an emergency reminder fires. Per-model overrides go in `modelMaxLimits` / `modelMinLimits` keyed by `providerId/modelId`. A separate iteration nudge fires after many messages without a user turn.
+- **Known upstream bug (#608):** DCP nudge text and internal message-ID markers can render visibly to the user at the end of assistant messages. Noise is reduced via `pruneNotification: "minimal"` and `pruneNotificationType: "toast"` in `.opencode/dcp.jsonc`. Do not treat visible nudge text as user input.
+- **Legacy:** `.opencode/compress.jsonc` is a leftover from an older plugin (opencode-context-compress) that is NOT installed. It is inert and left in place pending user decision.
+- OpenCode's native auto-compaction still runs as a safety net.
 
 **IMPORTANT: Always check if Llama Monitor is running before attempting to start it**
 **IMPORTANT: Always start the software using llamamonitor.py**
