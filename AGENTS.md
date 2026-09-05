@@ -79,7 +79,7 @@ Resume normal (interactive) operation when ANY of these happens — the user nev
 
 - The user responds to the Human Input Summary
 - The user explicitly says they are back / to interact normally
-- **Short check-in messages do NOT count as returning:** if the user pops in with advice or a status question mid-run, incorporate it and continue autonomously. The agent may ask once, "are you back?" — absence of a clear answer means stay autonomous.
+- **Short check-in messages do NOT count as returning:** if the user pops in with advice or a status question mid-run, incorporate it and continue autonomously. The agent may ask once, inline, "are you back?" and keep working without waiting for an answer — absence of a clear answer means stay autonomous.
 
 ### Scope
 
