@@ -8,7 +8,7 @@
 - Work ONLY in worktree directory
 - Changes must stay within bead scope
 - If work identified outside scope → create new bead (set to Open, do not claim)
-- If complications arise → set Needs_human_input with questions in description
+- If complications arise → mark needs-human-input: `bd update <id> --status blocked --add-label needs-human-input --append-notes "NEEDS HUMAN INPUT: <questions>"`
 
 ### 2. Testing
 - Create appropriate tests for changes
@@ -36,7 +36,7 @@
 
 **If issues arise:**
 - Update bead description with findings
-- Set appropriate status (Open or Needs_human_input)
+- Set appropriate status: `open` (resubmit for work) or blocked + `needs-human-input` label (see Autonomous Work Mode in AGENTS.md)
 - Pick next available bead from `bd ready`
 
 

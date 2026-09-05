@@ -75,4 +75,4 @@ When in doubt, run the Chrome functional review — do not skip it.
 - Never skip test verification
 - **Never silently skip Chrome functional review** (only skip for logging/config changes with no visible component, and note the skip reason)
 - Always check for -1 values in numeric displays
-- If uncertain → set Needs_human_input, don't guess
+- If uncertain → mark needs-human-input (`bd update <id> --status blocked --add-label needs-human-input --append-notes "NEEDS HUMAN INPUT: ..."`) , don't guess

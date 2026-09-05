@@ -23,8 +23,8 @@
 
 - Always use the `finish-bead` script from inside the worktree — do NOT merge manually
 - If verification fails → fix issues and retry, or set `SKIP_VERIFICATION=1` to bypass
-- If merge fails → set bead to `Needs_human_input` with merge details and questions
-- If tests fail after merge → set bead to `Needs_human_input`
+- If merge fails → mark needs-human-input (`--status blocked --add-label needs-human-input`) with merge details and questions
+- If tests fail after merge → mark needs-human-input (`--status blocked --add-label needs-human-input`)
 - User is responsible for all remote pushes (agents only perform local commits)
 
 ## About REPO_MAP.md
