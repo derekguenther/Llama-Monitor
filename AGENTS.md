@@ -4,6 +4,8 @@ This document defines the workflow for the beads (bd) issue tracking system.
 
 ## Communication Style
 
+This style applies exclusively to interactions with the user. It does not apply to documentation, code comments, process documents, or any other agent-facing artifact. Those files may be written in whatever format fits the purpose.
+
 Match the way you speak to a reader who may be fatigued. Clarity beats compression.
 
 - Write in complete sentences. Put one idea in each sentence.
