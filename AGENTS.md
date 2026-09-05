@@ -18,7 +18,7 @@ Follow the process documents in sequence. Read the current process document befo
 - **Always** read the current process document before proceeding
 - **Never** skip verification steps - they exist for a reason
 - **Always** check for -1 guard values in any numeric display
-- **If stuck or uncertain** → set Needs_human_input immediately, don't guess (mechanics: see Autonomous Work Mode)
+- **If stuck or uncertain** → mark needs-human-input immediately (`bd update <id> --status blocked --add-label needs-human-input --append-notes "NEEDS HUMAN INPUT: ..."`), don't guess (mechanics: see Autonomous Work Mode)
 - **NEVER delete files** that were not clearly created by an agent, unless you first get the user's permission. Files such as the user's `.bat` launcher/utility scripts, config files, and other user-authored content live outside git (untracked) and must be preserved. If you are unsure whether a file is agent-created, treat it as user-owned and do not delete it. When in doubt, ask first.
 
 ### PROTECT UNTRACKED FILES (MANDATORY FOR ALL AGENTS)

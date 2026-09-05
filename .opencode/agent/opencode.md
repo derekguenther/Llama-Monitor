@@ -11,7 +11,7 @@ When working on beads, you MUST follow CLAUDE.md's Implementation Process:
    `git worktree add .worktrees/<bead-name> -b <bead-name>`
 3. **Work inside the worktree.** Changes only in `.worktrees/<bead-name>/`.
 4. **If work identified outside scope** → create new bead, do not stray.
-5. **Before marking a bead Needs_Review**, all tests must pass.
+5. **Before adding the `needs_review` label to a bead**, all tests must pass.
 6. **Review process:**
    - Scope review → Code review → Functional review with Chrome
    - Pass → merge, delete worktree, close bead
