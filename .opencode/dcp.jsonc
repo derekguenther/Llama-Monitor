@@ -6,7 +6,7 @@
   "pruneNotification": "detailed",
   "pruneNotificationType": "chat",
   "manualMode": {
-    "enabled": true,
+    "enabled": false,
     "automaticStrategies": true
   },
   "compress": {
@@ -24,11 +24,13 @@
     "protectUserMessages": false,
     "modelMaxLimits": {
       "llamacpp/deepseek-v4": 110000,
-      "llamacpp/gemma4coding": 50000
+      "llamacpp/gemma4coding": 50000,
+      "llamacpp/qwen3.8-flash-next": 200000
     },
     "modelMinLimits": {
       "llamacpp/deepseek-v4": 60000,
-      "llamacpp/gemma4coding": 30000
+      "llamacpp/gemma4coding": 30000,
+      "llamacpp/qwen3.8-flash-next": 120000
     }
   },
   "turnProtection": {
