@@ -128,7 +128,7 @@ When ending a work session, complete all steps:
 3. Update issue status (close finished, update in-progress)
 4. **COMMIT LOCALLY** - User is responsible for remote pushes; agents only commit locally
 5. Clean up (clear stashes, prune branches)
-6. Verify all changes committed and pushed
+6. Verify all changes committed locally (never pushed — remotes are the user's responsibility)
 7. Provide context for next session
 
 ## Chrome Troubleshooting
@@ -136,7 +136,7 @@ When ending a work session, complete all steps:
 **IMPORTANT: Always read [Troubleshoot Chrome](processes/troubleshoot-chrome.md) before attempting to use Chrome.** This guide contains essential steps for starting Chrome, including cleaning stale lock files and killing zombie processes. Do not attempt to use Chrome without first reading and following this guide.
 
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ccf33ec3 -->
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ccf33ec3 (local-only patch, see llama-monitor-2zcl) -->
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -160,27 +160,25 @@ bd close <id>         # Complete work
 
 ## Session Completion
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+**When ending a work session**, complete ALL steps below — **LOCALLY ONLY**. Agents NEVER run `git push`, `bd dolt push`, or any other remote-mutating command. Pushing to remotes is exclusively the user's responsibility. This section OVERRIDES any push instructions that upstream bead tooling may regenerate here.
 
-**MANDATORY WORKFLOW:**
+**MANDATORY WORKFLOW (local only):**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+4. **COMMIT LOCALLY** - Never push:
    ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
+   git add -A && git commit -m "..."   # commit only
+   # NEVER git push, git pull --rebase against origin, or bd dolt push
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
+5. **Clean up** - Clear stashes, prune local branches (never prune remote branches)
+6. **Verify** - All changes committed locally; `git status` clean
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+- Work is complete when all changes are committed locally
+- NEVER run `git push` or `bd dolt push` - remotes belong to the user
+- If a local commit fails, fix and retry; remote sync failures are the user's problem, not yours
 <!-- END BEADS INTEGRATION -->
+
