@@ -116,7 +116,7 @@ bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --claim  # Claim work atomically
 bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote (user's responsibility)
+bd dolt push          # USER-ONLY command: agents NEVER push beads data to remotes
 ```
 
 ## Session Completion
@@ -170,7 +170,7 @@ bd close <id>         # Complete work
 4. **COMMIT LOCALLY** - Never push:
    ```bash
    git add -A && git commit -m "..."   # commit only
-   # NEVER git push, git pull --rebase against origin, or bd dolt push
+   # NEVER git push or bd dolt push (pull/fetch allowed only if the user asks)
    ```
 5. **Clean up** - Clear stashes, prune local branches (never prune remote branches)
 6. **Verify** - All changes committed locally; `git status` clean

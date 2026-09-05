@@ -32,7 +32,7 @@ bd close <id>         # Complete work
 4. **COMMIT LOCALLY** - Never push:
    ```bash
    git add -A && git commit -m "..."   # commit only
-   # NEVER git push, git pull --rebase against origin, or bd dolt push
+   # NEVER git push or bd dolt push (pull/fetch allowed only if the user asks)
    ```
 5. **Clean up** - Clear stashes, prune local branches (never prune remote branches)
 6. **Verify** - All changes committed locally; `git status` clean
