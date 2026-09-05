@@ -18,7 +18,7 @@ Follow the process documents in sequence. Read the current process document befo
 - **Always** read the current process document before proceeding
 - **Never** skip verification steps - they exist for a reason
 - **Always** check for -1 guard values in any numeric display
-- **If stuck or uncertain** → set Needs_human_input immediately, don't guess
+- **If stuck or uncertain** → set Needs_human_input immediately, don't guess (mechanics: see Autonomous Work Mode)
 - **NEVER delete files** that were not clearly created by an agent, unless you first get the user's permission. Files such as the user's `.bat` launcher/utility scripts, config files, and other user-authored content live outside git (untracked) and must be preserved. If you are unsure whether a file is agent-created, treat it as user-owned and do not delete it. When in doubt, ask first.
 
 ### PROTECT UNTRACKED FILES (MANDATORY FOR ALL AGENTS)
@@ -44,6 +44,46 @@ Follow the process documents in sequence. Read the current process document befo
 - **A batch file must NEVER be modified by an agent without explicit user permission for a specific task.** The user's launcher scripts (e.g. `__DeepSeek v4.bat`) are user-owned; only change them when the user explicitly asks for that specific change.
 
 **Remember:** Your job is to build and improve the user's project. Deleting the user's untracked infrastructure is the opposite of that. When in doubt about ANY file operation, **STOP and ASK.**
+
+## Autonomous Work Mode
+
+A user-invoked operating mode for maximum unattended progress. **Default is interactive**; this mode is only active when the user explicitly invokes it.
+
+### Entering
+
+Activate when the user says **"work autonomously"** (or close variants, e.g. "work as autonomously as possible"). Announce activation in one line so it is on the record.
+
+### While active
+
+- **Never end a turn waiting on the user.** No questions, no "would you like me to..." — the user may be asleep or away.
+- **Blockers do not stop progress.** When a bead is blocked, document it and move on:
+  ```bash
+  bd update <id> --status blocked --add-label needs-human-input \
+    --append-notes "NEEDS HUMAN INPUT: <exactly what is needed and why>"
+  ```
+- **Keep pulling work.** Run `bd ready`, work the next bead, repeat until every remaining task is done or blocked on human input.
+- **Pre-authorized without asking:** dispatching review subagents, running tests/quality gates, creating follow-up beads, committing locally (never pushing).
+- **Ambiguity:** make the best judgment call on technical decisions and record the choice (and alternatives) in the bead notes so the user can review later.
+- **Safety is never relaxed.** Autonomous mode does NOT loosen any guardrail above — file protection and other "STOP and ASK" rules are exactly what routes work into the needs-human-input path. Missing credentials/API keys, destructive-op doubts, unclear requirements → block the bead with a precise note; never guess.
+
+### Terminal state: Human Input Summary
+
+When no further work is actionable, print a summary ending with:
+
+- **Done:** one line per bead completed this session
+- **Blocked:** per bead, the exact decision / credential / action the user must supply (these are the `needs-human-input` beads — `bd list --label needs-human-input` reproduces the list)
+
+### Returning to interactive
+
+Resume normal (interactive) operation when ANY of these happens — the user never needs to announce their return:
+
+- The user responds to the Human Input Summary
+- The user explicitly says they are back / to interact normally
+- **Short check-in messages do NOT count as returning:** if the user pops in with advice or a status question mid-run, incorporate it and continue autonomously. The agent may ask once, "are you back?" — absence of a clear answer means stay autonomous.
+
+### Scope
+
+Per-session only. Autonomous mode is **not** inherited by new sessions or subagents.
 
 ## File Reading Rules
 
