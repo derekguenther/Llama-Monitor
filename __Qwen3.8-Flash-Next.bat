@@ -27,25 +27,31 @@ start /affinity FFFF /b /wait "" "%SERVER_BIN%" ^
     --host 0.0.0.0 ^
     --port 8000 ^
     --jinja ^
-    --ctx-size 131072 ^
-    --parallel 2 ^
+    --ctx-size 262144 ^
+    --parallel 5 ^
+    --kv-unified ^
     --cache-type-k q8_0 ^
     --cache-type-v q8_0 ^
-    --load-mode mlock ^
+    --load-mode none ^
     --cont-batching ^
     --flash-attn on ^
     --n-gpu-layers all ^
-    --n-cpu-moe 99 ^
-    --override-tensor per_layer_token_embd=CPU ^
-    --spec-type draft-mtp ^
-    --spec-draft-n-max 4 ^
+    --n-cpu-moe 999 ^
+    --override-tensor per_layer_token_embd.weight=CPU ^
     --threads 16 ^
     --threads-batch 16 ^
     --batch-size 4096 ^
-    --ubatch-size 1024
+    --ubatch-size 1024 ^
+    --image-min-tokens 1024
 
 if %ERRORLEVEL% NEQ 0 pause
 
 rem    --load-mode mlock ^
 rem    --cache-ram 0
 rem 131072 262144
+rem    --mmproj "%MMPROJ_PATH%" ^
+rem    --override-tensor per_layer_token_embd=CPU ^
+rem    --spec-type draft-mtp ^
+rem    --spec-draft-n-max 4 ^
+rem    --override-tensor per_layer_token_embd.weight=CPU,token_embd.weight=CPU,output.weight=CPU ^
+rem    --no-mmproj-offload ^

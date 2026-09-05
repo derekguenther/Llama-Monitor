@@ -30,8 +30,8 @@ rem start /affinity FFFF /b /wait ""
     --reasoning on ^
     --reasoning-format deepseek ^
     --metrics ^
-    --ctx-size 185000 ^
-    --parallel 5 ^
+    --ctx-size 175000 ^
+    --parallel 3 ^
     --cache-prompt ^
     --cache-reuse 256 ^
     --kv-unified ^
