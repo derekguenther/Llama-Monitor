@@ -15,20 +15,20 @@
 2. **Scope review**
    - Did work stay within bounds?
    - Check bead description against actual changes
-   - If scope violated → set bead to `Open` with findings
+   - If scope violated → set bead to `open` with findings
 
 3. **Code review**
    - Review `git diff --stat main...<bead-name>` for compact file change summary
    - Show diffs only for changed files
    - Diff against version of main the worktree was based off (not current main)
    - Check for correctness and completeness
-   - If issues found → set bead to `Open` with findings
+   - If issues found → set bead to `open` with findings
 
 4. **Functional review**
    - Start main.py from within worktree
    - Test with Chrome superpower
    - If Chrome unavailable → see [Troubleshoot Chrome](troubleshoot-chrome.md)
-   - If issues found → set bead to `Open` with findings
+   - If issues found → set bead to `open` with findings
 
 ### When Chrome functional review is required
 
@@ -63,7 +63,7 @@ When in doubt, run the Chrome functional review — do not skip it.
 ## Outcomes
 
 **If review fails:**
-- Set bead to `Open` with detailed findings in description
+- Set bead to `open` with detailed findings in description
 - Implementer will fix and resubmit
 
 **If review passes:**

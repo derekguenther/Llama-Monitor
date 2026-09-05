@@ -7,7 +7,7 @@
 ### 1. Code Changes
 - Work ONLY in worktree directory
 - Changes must stay within bead scope
-- If work identified outside scope → create new bead (set to Open, do not claim)
+- If work identified outside scope → create new bead (set to `open`, do not claim)
 - If complications arise → mark needs-human-input: `bd update <id> --status blocked --add-label needs-human-input --append-notes "NEEDS HUMAN INPUT: <questions>"`
 
 ### 2. Testing

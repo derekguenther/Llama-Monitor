@@ -14,7 +14,7 @@
    bd show <id>
    ```
    Check for completeness. If gaps exist:
-    - Mark needs-human-input: `bd update <id> --status blocked --add-label needs-human-input --append-notes "NEEDS HUMAN INPUT: <what/why>"`
+   - Mark needs-human-input: `bd update <id> --status blocked --add-label needs-human-input --append-notes "NEEDS HUMAN INPUT: <what/why>"`
    - Consolidate questions in description
    - Pick next available bead
 
