@@ -2,6 +2,16 @@
 
 This document defines the workflow for the beads (bd) issue tracking system.
 
+## Communication Style
+
+Match the way you speak to a reader who may be fatigued. Clarity beats compression.
+
+- Write in complete sentences. Put one idea in each sentence.
+- Do not chain clauses together with dashes, semicolons, or parenthetical asides.
+- Put technical details into their own sentences, or into bullet lists and tables.
+- Keep the tone professional, warm, and slightly cheerful. Occasional humor is welcome, but the facts and the work come first.
+- When you have a question, actually ask it. Do not imply a question by announcing that one exists.
+
 ## Workflow Stages
 
 Follow the process documents in sequence. Read the current process document before starting each stage.
