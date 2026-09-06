@@ -114,7 +114,6 @@ The **@tarquinen/opencode-dcp** plugin (Dynamic Context Pruning) is installed. I
   - `/dcp-compress [focus]` — manually trigger a compression pass, optionally with a focus hint.
 - **Limits and nudge behavior:** token counts below `minContextLimit` are calm. Between `minContextLimit` and `maxContextLimit` is the soft pressure zone where DCP periodically nudges you to compress (frequency set by `nudgeFrequency`). Above `maxContextLimit` compression is mandatory and an emergency reminder fires. Per-model overrides go in `modelMaxLimits` / `modelMinLimits` keyed by `providerId/modelId`. A separate iteration nudge fires after many messages without a user turn.
 - **Known upstream bug (#608):** DCP nudge text and internal message-ID markers can render visibly to the user at the end of assistant messages. Noise is reduced via `pruneNotification: "minimal"` and `pruneNotificationType: "toast"` in `.opencode/dcp.jsonc`. Do not treat visible nudge text as user input.
-- **Legacy:** `.opencode/compress.jsonc` is a leftover from an older plugin (opencode-context-compress) that is NOT installed. It is inert and left in place pending user decision.
 - OpenCode's native auto-compaction still runs as a safety net.
 
 **IMPORTANT: Always check if Llama Monitor is running before attempting to start it**
